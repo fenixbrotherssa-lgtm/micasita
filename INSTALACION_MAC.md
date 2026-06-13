@@ -169,14 +169,25 @@ Solo se hace una vez. Si el sistema no usa WhatsApp, omitir este paso.
 sudo bash /Library/AmetraOS/backend/escanear-whatsapp.sh
 ```
 
-El script:
-1. Para el servicio
-2. Muestra el QR en pantalla
-3. El cliente escanea desde el teléfono (WhatsApp → Dispositivos vinculados → Vincular dispositivo)
-4. Al completar el escaneo, presionar `Ctrl+C`
-5. El script reinicia el servicio solo
+El script hace todo automáticamente:
+1. Detiene el servicio y mata cualquier proceso Chrome o Node residual
+2. Espera que el puerto 8000 quede completamente libre
+3. Arranca el servidor en modo QR
+4. Esperar ~60 segundos hasta que aparezca el código QR en pantalla (Chrome tarda en cargar)
+5. El cliente escanea desde el teléfono: **WhatsApp → Dispositivos vinculados → Vincular dispositivo**
+6. Esperar hasta ver en pantalla: `✅ Sistema Medicina Ecuador Pro: WhatsApp Web Conectado`
+7. **Solo después de ese mensaje**, presionar `Ctrl+C`
+8. El script reinicia el servicio automáticamente
 
-La sesión queda guardada. No se vuelve a pedir el QR a menos que el cliente cierre sesión de WhatsApp desde el teléfono.
+Verificar que el servicio reconectó:
+```bash
+grep "Conectado" /Library/Logs/AmetraOS/backend.log | tail -3
+```
+Debe mostrar `✅ Sistema Medicina Ecuador Pro: WhatsApp Web Conectado`.
+
+La sesión queda guardada. **No se vuelve a pedir el QR** a menos que el cliente cierre sesión de WhatsApp desde el teléfono (Dispositivos vinculados → cerrar sesión en el Mac).
+
+> **Actualizaciones futuras:** Al instalar una nueva versión del `.pkg`, la sesión de WhatsApp se preserva automáticamente — no es necesario escanear de nuevo.
 
 ---
 
@@ -196,6 +207,9 @@ Debe responder algo (aunque sea un error de método) — eso confirma que el ser
 # Ver logs del backend en tiempo real
 tail -f /Library/Logs/AmetraOS/backend.log
 
+# Verificar que WhatsApp está conectado
+grep "Conectado" /Library/Logs/AmetraOS/backend.log | tail -3
+
 # Reiniciar el backend
 sudo launchctl stop com.casrodsoft.ametraos.backend
 sudo launchctl start com.casrodsoft.ametraos.backend
@@ -209,6 +223,20 @@ docker restart ametra-db
 # Ver logs de SQL Server
 docker logs ametra-db
 ```
+
+## Actualizar AmetraOS a una nueva versión
+
+1. Descargar `AmetraOS-Backend-Mac` desde GitHub Actions (workflow verde más reciente)
+2. Descomprimir el `.zip` y doble clic en el `.pkg`
+3. Instalar normalmente — la sesión de WhatsApp y los datos se preservan
+4. Verificar que el bot sigue conectado:
+   ```bash
+   grep "Conectado" /Library/Logs/AmetraOS/backend.log | tail -3
+   ```
+   Si no aparece "Conectado" después de 60 segundos, ejecutar:
+   ```bash
+   sudo bash /Library/AmetraOS/backend/escanear-whatsapp.sh
+   ```
 
 ---
 
