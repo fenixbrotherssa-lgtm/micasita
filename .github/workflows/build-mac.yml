@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-mac:
     runs-on: macos-latest
@@ -21,15 +24,19 @@ jobs:
       # ─────────────────────────────────────────
       # BACKEND: instalar deps + ofuscar
       # ─────────────────────────────────────────
-      - name: Instalar dependencias del backend (solo producción)
+      - name: Instalar dependencias del backend (todas, para tener javascript-obfuscator)
         working-directory: Backend_NodeJS
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
-        run: npm ci --omit=dev
+        run: npm ci
 
       - name: Ofuscar backend
         working-directory: Backend_NodeJS
         run: npm run build:obfuscate
+
+      - name: Eliminar devDependencies antes de empaquetar
+        working-directory: Backend_NodeJS
+        run: npm prune --omit=dev
 
       # ─────────────────────────────────────────
       # FRONTEND: instalar deps + compilar DMG
