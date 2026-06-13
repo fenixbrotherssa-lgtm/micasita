@@ -81,6 +81,7 @@ const client = new Client({
     puppeteer: {
         handleSIGINT: false,
         executablePath: RUTA_CHROME,
+        headless: true,
         args: [
             '--disable-dev-shm-usage',
             '--disable-extensions',
@@ -93,7 +94,10 @@ const client = new Client({
                 '--disable-setuid-sandbox',
                 '--no-zygote',
                 '--disable-gpu'
-            ] : [])
+            ] : [
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--disable-site-isolation-trials'
+            ])
         ]
     }
 });
