@@ -1,0 +1,87 @@
+<div class="pago-container">
+    <div class="nav-header">
+        <div class="nav-left" onclick="router.load('historia_clinica')" style="cursor:pointer">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            <span>Volver al Expediente</span>
+        </div>
+        <div class="nav-title">Gestión de Pagos y Abonos</div>
+    </div>
+
+    <div class="pago-grid">
+        <div class="pago-card">
+            <div class="card-header">Registrar Nuevo Pago</div>
+            <form id="formRegistroPago" onsubmit="window.procesarPagoElectron(event)">
+                <div class="input-group">
+                    <label>Tratamiento a abonar</label>
+                    <select id="select_plan" required>
+                        <option value="">Seleccione un plan pendiente...</option>
+                    </select>
+                </div>
+                
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>Monto a Pagar ($)</label>
+                        <input type="number" id="pago_monto" step="0.01" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Método</label>
+                        <select id="pago_metodo">
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Tarjeta">Tarjeta</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Referencia / Nota</label>
+                    <input type="text" id="pago_ref" placeholder="Ej: Transf. #1234">
+                </div>
+
+                <div class="input-group">
+                    <label>Voucher / Comprobante (Opcional)</label>
+                    <input type="file" id="pago_voucher" accept="image/*">
+                </div>
+
+                <button type="submit" class="btn-confirmar">Confirmar Pago</button>
+            </form>
+        </div>
+
+        <div class="pago-card">
+            <div class="card-header">Historial de Transacciones</div>
+            <table class="pago-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Tratamiento</th>
+                        <th>Monto</th>
+                        <th>Método</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyHistorialPagos">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .pago-container { padding: 20px; background: #f8fafc; min-height: 100vh; }
+    .nav-header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+    .nav-left { display: flex; align-items: center; gap: 8px; color: #64748b; font-weight: 600; }
+    .nav-left:hover { color: #1e293b; }
+    .nav-title { font-size: 1.25rem; font-weight: 800; color: #1e293b; }
+    .pago-grid { display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
+    .pago-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .card-header { font-weight: 700; margin-bottom: 20px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
+    .input-group { margin-bottom: 15px; }
+    .input-group label { display: block; font-size: 0.85rem; font-weight: 600; color: #64748b; margin-bottom: 5px; }
+    .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn-confirmar { width: 100%; background: #059669; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    .pago-table { width: 100%; border-collapse: collapse; }
+    .pago-table th { text-align: left; padding: 12px; background: #f1f5f9; font-size: 0.8rem; }
+    .pago-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+</style>

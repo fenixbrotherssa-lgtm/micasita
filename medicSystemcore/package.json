@@ -1,0 +1,60 @@
+{
+  "name": "ametra-os",
+  "version": "4.5.1",
+  "description": "Sistema de Gestión Médica y Odontológica - V4.5",
+  "main": "main.js",
+  "author": "CASRODSOFT",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "build:dir": "electron-builder --win --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.medicinaecuador.pro",
+    "productName": "ametra-os",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "dir",
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.healthcare-fitness"
+    },
+    "files": [
+      "**/*",
+      "!dist/*",
+      "!node_modules/*",
+      "!config.json",
+      "!MedicinaEcuador_Pro_Installer.iss",
+      "!README.md",
+      "!.gitignore"
+    ],
+    "extraResources": [
+      {
+        "from": "config.json",
+        "to": "config.json"
+      }
+    ],
+    "asar": true
+  },
+  "dependencies": {
+    "node-cron": "^4.2.1",
+    "signature_pad": "^5.1.3",
+    "three": "^0.183.2"
+  },
+  "devDependencies": {
+    "electron": "^31.0.2",
+    "electron-builder": "^24.13.3",
+    "javascript-obfuscator": "^5.4.2"
+  }
+}

@@ -1,0 +1,68 @@
+USE [SistemaOdonto_Pro];
+GO
+
+SET NOCOUNT ON;
+
+BEGIN TRANSACTION;
+BEGIN TRY
+    -- 1. DESACTIVAR TODO
+    EXEC sp_MSforeachtable "ALTER TABLE ? NOCHECK CONSTRAINT ALL";
+
+    -- 2. BORRADO DINÁMICO
+    DECLARE @TableName NVARCHAR(255);
+    DECLARE @Sql NVARCHAR(MAX);
+
+    -- Cursor con soporte para nombres largos de tablas MSP
+    DECLARE TableCursor CURSOR FOR 
+    SELECT name FROM sys.tables 
+    WHERE name IN (
+        'MSP_033_Examen_Estomatognatico', 'MSP_033_Signos_Vitales', 
+        'Odontograma', 'Recetas', 'Tratamientos_Plan', 
+        'Presupuestos', 'Antecedentes_Medicos', 'Archivos_Multimedia', 
+        'Recordatorios_Citas', 'Citas', 'Facturacion_Documentos', 
+        'Pagos', 'Caja', 'Cierres_Financieros', 'Gastos', 
+        'Inventario_Movimientos', 'Inventario', 'Facturacion_Certificados', 
+        'Disponibilidad_Doctores', 'Pacientes'
+    ) OR name LIKE 'MSP_024_Consentimiento_Informa%';
+
+    OPEN TableCursor;
+    FETCH NEXT FROM TableCursor INTO @TableName;
+
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        SET @Sql = 'DELETE FROM [dbo].[' + @TableName + ']';
+        EXEC sp_executesql @Sql;
+        
+        -- Resetear el ID
+        IF OBJECTPROPERTY(OBJECT_ID(@TableName), 'TableHasIdentity') = 1
+        BEGIN
+            SET @Sql = 'DBCC CHECKIDENT (''[dbo].[' + @TableName + ']'', RESEED, 0)';
+            EXEC sp_executesql @Sql;
+        END
+
+        FETCH NEXT FROM TableCursor INTO @TableName;
+    END
+
+    CLOSE TableCursor;
+    DEALLOCATE TableCursor;
+
+    -- 3. EL ESCUDO CASRODSOFT (PROTECCIÓN TOTAL)
+    IF OBJECT_ID('[dbo].[Usuarios]', 'U') IS NOT NULL
+        DELETE FROM [dbo].[Usuarios] WHERE ID_Usuario <> 2;
+
+    IF OBJECT_ID('[dbo].[Clinicas]', 'U') IS NOT NULL
+        DELETE FROM [dbo].[Clinicas] WHERE ID_Clinica <> 1;
+
+    -- 4. RE-ACTIVAR CONSTRAINTS VALIDANDO LA INTEGRIDAD
+    EXEC sp_MSforeachtable "ALTER TABLE ? WITH CHECK CHECK CONSTRAINT ALL";
+
+    COMMIT TRANSACTION;
+    PRINT '=====================================================';
+    PRINT '?? LIMPIEZA QUIRÚRGICA COMPLETADA CON INTEGRIDAD';
+    PRINT '??? USUARIO 2 Y CLÍNICA 1 SIGUEN VIVOS';
+    PRINT '=====================================================';
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    PRINT '? ERROR: ' + ERROR_MESSAGE();
+END CATCH

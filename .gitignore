@@ -1,0 +1,44 @@
+# ─── Node.js ────────────────────────────────────────────────
+**/node_modules/
+**/npm-debug.log*
+
+# ─── SECRETOS — NUNCA subir al repositorio ──────────────────
+**/.env
+**/.env.local
+**/.env.production
+# (si quieres subir un ejemplo sin datos reales, crea .env.example)
+
+# ─── Outputs de compilación ─────────────────────────────────
+Backend_NodeJS/dist/
+medicSystemcore/dist/
+
+# ─── Chrome de Puppeteer (se descarga al correr el servidor) ─
+Backend_NodeJS/.cache/
+
+# ─── Datos de usuarios y sesiones WhatsApp ──────────────────
+Backend_NodeJS/uploads/
+Backend_NodeJS/sessions/
+Backend_NodeJS/.wwebjs_cache/
+Backend_NodeJS/.wwebjs_auth/
+
+# ─── JDK Java bundleado (binarios >200 MB, no van a Git) ────
+# Para instalar en Mac: brew install openjdk@11
+# Para Windows: los binarios quedan en la máquina de desarrollo
+Backend_NodeJS/services/firmadormedico/jdk-*/
+
+# ─── Base de datos nacional (CSV grande) ────────────────────
+Backend_NodeJS/BASE_MAESTRA_NACIONAL.csv
+
+# ─── Binarios del instalador Windows ────────────────────────
+*.msi
+*.exe
+!medicSystemcore/dist/**/*.exe
+
+# ─── OS ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+**/._*
+
+# ─── Logs ───────────────────────────────────────────────────
+*.log

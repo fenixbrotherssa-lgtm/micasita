@@ -1,0 +1,232 @@
+<!-- 
+    CASRODSOFT DEVELOPMENT - MÓDULO SUCURSALES 
+    Versión Actualizada con Campos SRI y Geolocalización 
+-->
+
+<div class="view-header">
+    <div class="header-content">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <button onclick="window.router.load('dashboard')" 
+                style="background: #4f46e5; color: white; border: none; width: 50px; height: 50px; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);"
+                onmouseover="this.style.transform='translateY(-2px)';" 
+                onmouseout="this.style.transform='translateY(0)';"
+                title="Regresar al Dashboard">
+                <i class="fas fa-arrow-left" style="font-size: 1.2rem;"></i>
+            </button>
+            <div>
+                <h1>Gestión de Sucursales</h1>
+                <p>Configuración de sedes y clínicas activas</p>
+            </div>
+        </div>
+    </div>
+    <button class="btn-primary" onclick="window.mostrarModalSucursal()">
+        <i class="fas fa-plus"></i> Nueva Sucursal
+    </button>
+</div>
+
+<div class="main-container-fluid">
+    <div class="content-card shadow-sm">
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Identidad</th>
+                        <th>Nombre de la Clínica</th>
+                        <th>RUC / ID</th>
+                        <th>Ubicación</th>
+                        <th>Estado</th>
+                        <th style="text-align: center;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-sucursales-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE CONFIGURACIÓN -->
+<div id="modal-sucursal" class="modal-overlay" style="display:none">
+    <div class="modal-content animate__animated animate__fadeInDown">
+        <input type="hidden" id="s_id_clinica" value="">
+        <input type="hidden" id="s_latitud" value="">
+        <input type="hidden" id="s_longitud" value="">
+        
+        <div class="modal-header">
+            <div class="header-title">
+                <div class="icon-box"><i class="fas fa-clinic-medical"></i></div>
+                <div>
+                    <h3 id="modal-titulo">Configurar Sucursal</h3>
+                    <p>Complete los datos legales y tributarios de la sede</p>
+                </div>
+            </div>
+            <button class="close-btn" onclick="window.cerrarModal()">&times;</button>
+        </div>
+        
+        <div class="modal-body">
+            <div class="form-grid">
+                <!-- Datos Básicos -->
+                <div class="form-group full-width">
+                    <label><i class="fas fa-signature"></i> Nombre Comercial</label>
+                    <input type="text" id="s_nombre" placeholder="Ej. Estetik Sonrisas - Sede Norte">
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-id-card"></i> RUC / Identificación</label>
+                    <input type="text" id="s_ruc" placeholder="17XXXXXXXX001">
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-map-marker-alt"></i> Ciudad</label>
+                    <input type="text" id="s_ciudad" placeholder="Ej. Quito">
+                </div>
+
+                <!-- Campos Tributarios SRI Actualizados -->
+                <div class="form-group">
+                    <label><i class="fas fa-file-invoice-dollar"></i> Contribuyente Especial</label>
+                    <input type="text" id="s_contribuyente_especial" placeholder="Nro. de Resolución">
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-calculator"></i> Obligado Contabilidad</label>
+                    <select id="s_obligado_contabilidad" class="form-control-select">
+                        <option value="NO">NO</option>
+                        <option value="SI">SI</option>
+                    </select>
+                </div>
+
+                <div class="form-group full-width">
+                    <label><i class="fas fa-tag"></i> Régimen Impositivo (RIMPE)</label>
+                    <input type="text" id="s_regimen_rimpe" placeholder="Ej. CONTRIBUYENTE RÉGIMEN RIMPE">
+                </div>
+
+                <div class="form-group full-width">
+                    <label><i class="fas fa-phone"></i> Teléfono de Contacto</label>
+                    <input type="text" id="s_telefono" placeholder="Ej. 0999999999">
+                </div>
+                
+                <div class="form-group full-width">
+                    <label><i class="fas fa-directions"></i> Dirección Exacta</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="s_direccion" placeholder="Calle principal y secundaria..." style="flex: 1;">
+                        <button type="button" class="btn-gps" onclick="window.obtenerCoordenadasGPS()" title="Capturar ubicación actual">
+                            <i class="fas fa-crosshairs"></i>
+                        </button>
+                    </div>
+                    <small id="status-gps" class="status-text">
+                        <i class="fas fa-info-circle"></i> Usa la mira para capturar el GPS para envíos por WhatsApp.
+                    </small>
+                </div>
+                
+                <div class="form-group full-width">
+                    <label><i class="fas fa-image"></i> Identidad Visual (Logo)</label>
+                    <div class="upload-zone" onclick="document.getElementById('input-logo').click()">
+                        <img id="logo-preview" src="assets/icon.png">
+                        <div>
+                            <span>Haz clic para cambiar el logo</span>
+                            <small id="path-text">Archivo actual: predeterminado.png</small>
+                        </div>
+                        <input type="file" id="input-logo" style="display:none" accept="image/*" onchange="window.previewImagen(this)">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-secondary-outline" onclick="window.cerrarModal()">Cancelar</button>
+            <button class="btn-save" id="btnGuardarClinica" onclick="window.guardarClinicaActualizada()">
+                <span class="btn-text">Guardar Clínica</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .main-container-fluid { padding: 25px; animation: fadeIn 0.4s ease; }
+    .view-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 30px; background: white; border-bottom: 1px solid #e2e8f0; }
+    
+    /* MODAL STYLES */
+    .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.6); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter: blur(4px); }
+    .modal-content { width: 100%; max-width: 580px; border-radius: 16px; background: white; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden; max-height: 90vh; overflow-y: auto; }
+    .modal-header { padding: 25px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+    .icon-box { width: 45px; height: 45px; background: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 1.2rem; }
+    
+    /* FORM STYLES */
+    .modal-body { padding: 25px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .full-width { grid-column: span 2; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #334155; font-size: 0.85rem; }
+    .form-group input, .form-control-select { width: 100%; padding: 11px 15px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; transition: all 0.2s; background: white; }
+    .form-group input:focus, .form-control-select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+    
+    /* GPS BUTTON */
+    .btn-gps { background: #f1f5f9; border: 1.5px solid #e2e8f0; border-radius: 10px; width: 48px; cursor: pointer; color: #4f46e5; transition: all 0.2s; }
+    .btn-gps:hover { background: #eef2ff; border-color: #4f46e5; }
+    .btn-gps.active { background: #22c55e !important; color: white !important; border-color: #16a34a !important; }
+    .status-text { display:block; margin-top:6px; color:#64748b; font-size: 11px; }
+
+    /* LOGO UPLOAD */
+    .upload-zone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 15px; cursor: pointer; background: #f8fafc; }
+    .upload-zone:hover { border-color: #4f46e5; background: #f1f5f9; }
+    #logo-preview { width: 50px; height: 50px; object-fit: contain; background: white; border-radius: 8px; border: 1px solid #e2e8f0; }
+    
+    .modal-footer { padding: 20px 25px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; }
+    
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+</style>
+
+<script>
+    // Vista Previa de Imagen
+    window.previewImagen = function(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('logo-preview').src = e.target.result;
+                const pathText = document.getElementById('path-text');
+                if(pathText) pathText.innerText = "Archivo: " + input.files[0].name;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    };
+
+    // Lógica GPS Nativa
+    window.obtenerCoordenadasGPS = function() {
+        const btn = document.querySelector('.btn-gps');
+        const status = document.getElementById('status-gps');
+        
+        if (!navigator.geolocation) {
+            return Swal.fire("No soportado", "Tu navegador o equipo no permite geolocalización.", "warning");
+        }
+
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        status.innerHTML = '<i class="fas fa-sync fa-spin"></i> Obteniendo ubicación...';
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                
+                document.getElementById('s_latitud').value = lat;
+                document.getElementById('s_longitud').value = lng;
+                
+                btn.innerHTML = '<i class="fas fa-check"></i>';
+                btn.classList.add('active');
+                status.innerHTML = `<i class="fas fa-check-circle" style="color:#22c55e"></i> Ubicación vinculada (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+                
+                console.log("📍 GPS CasRodsoft Fijado:", lat, lng);
+            },
+            (err) => {
+                btn.innerHTML = '<i class="fas fa-crosshairs"></i>';
+                btn.classList.remove('active');
+                status.innerHTML = '<i class="fas fa-times-circle" style="color:#ef4444"></i> Permiso denegado o error de señal.';
+                Swal.fire("Acceso denegado", "Habilita los permisos de ubicación para vincular la sede.", "error");
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+    };
+
+    // Inicialización automática del módulo si existe
+    if (window.sucursalesModule && typeof window.sucursalesModule.init === 'function') {
+        window.sucursalesModule.init();
+    }
+</script>

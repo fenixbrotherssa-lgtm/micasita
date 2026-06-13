@@ -1,0 +1,316 @@
+<div class="main-layout">
+    <div class="nav-header">
+        <button onclick="window.router.load('dashboard')" 
+    style="background: #4f46e5; color: white; border: none; width: 50px; height: 50px; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);"
+    onmouseover="this.style.transform='translateY(-2px)';" 
+    onmouseout="this.style.transform='translateY(0)';"
+    title="Regresar al Dashboard">
+    <i class="fas fa-arrow-left" style="font-size: 1.2rem;"></i>
+</button>
+        <div class="nav-title">Gestión de Pacientes</div>
+        <button class="btn-new" onclick="nuevoPaciente()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Nuevo Paciente
+        </button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px; margin-bottom: 20px;">
+        <div style="background:white; padding:15px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+            <input type="text" id="searchPacientes" oninput="listarPacientes()" placeholder="Buscar por nombre, apellido o DNI..." 
+                   style="width:100%; padding:12px 16px; border:1px solid #e2e8f0; border-radius:8px; font-size:1rem; box-sizing: border-box;">
+        </div>
+        
+        <div style="background:white; padding:15px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+            <select id="filterClinica" onchange="listarPacientes()" 
+                    style="width:100%; padding:12px 16px; border:1px solid #e2e8f0; border-radius:8px; font-size:1rem; color: #64748b; background-color: white; box-sizing: border-box;">
+                <option value="">Todas las sedes</option>
+            </select>
+        </div>
+    </div>
+<!-- SECCIÓN DE AUDITORÍA DE PRESTACIONES -->
+<div id="seccion_auditoria" style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05); margin-bottom:20px; border-left: 5px solid #4f46e5;">
+    <div style="margin-bottom: 15px; font-weight: 800; color: #1e293b; font-size: 0.9rem; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-file-invoice-dollar"></i> REPORTE DE AUDITORÍA
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 12px; align-items: flex-end;">
+        <div class="input-block">
+            <label style="font-size: 10px; font-weight: 800; color: #64748b; margin-bottom: 5px;">DESDE</label>
+            <input type="date" id="audit_desde" class="form-input">
+        </div>
+        <div class="input-block">
+            <label style="font-size: 10px; font-weight: 800; color: #64748b; margin-bottom: 5px;">HASTA</label>
+            <input type="date" id="audit_hasta" class="form-input">
+        </div>
+        <div class="input-block">
+            <label style="font-size: 10px; font-weight: 800; color: #64748b; margin-bottom: 5px;">PRESTACIÓN</label>
+            <select id="audit_prestacion" class="form-input" style="cursor: pointer; font-weight: 600;">
+                <option value="ALL">Todas las prestaciones</option>
+            </select>
+        </div>
+        <button onclick="obtenerReporteAuditado()" 
+                style="background: #1e1b4b; color: white; border: none; padding: 0 25px; border-radius: 8px; font-weight: 700; cursor: pointer; height: 38px; transition: 0.3s;">
+            CONSULTAR
+        </button>
+    </div>
+
+    <div id="audit_results" style="display: none; margin-top: 15px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
+        <div style="max-height: 250px; overflow-y: auto;">
+            <table style="width:100%; font-size: 0.85rem; border-collapse: collapse;">
+                <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">
+                    <tr style="text-align:left; color: #64748b; border-bottom: 2px solid #e2e8f0;">
+                        <th style="padding: 10px;">Fecha</th>
+                        <th style="padding: 10px;">Paciente</th>
+                        <th style="padding: 10px;">Servicio</th>
+                        <th style="padding: 10px;">Doctor</th>
+                        <th style="padding: 10px; text-align:right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="audit_tbody"></tbody>
+            </table>
+        </div>
+        <div style="text-align: right; margin-top: 10px;">
+            <button onclick="document.getElementById('audit_results').style.display='none'" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size: 11px; font-weight: 700;">CERRAR REPORTE</button>
+        </div>
+    </div>
+</div>
+    <div class="table-container">
+        <table id="tablaPacientes">
+            <thead>
+                <tr>
+                    <th>DNI</th>
+                    <th>Paciente</th>
+                    <th>Teléfono</th>
+                    <th>Sede / Clínica</th> 
+                    <th style="text-align:right">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyPacientes"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modalPaciente" class="modal-overlay">
+    <div class="modal-content-card">
+        <div class="modal-header">
+            <h2 id="modalTitle">Nuevo Paciente</h2>
+            <span class="close-btn" onclick="cerrarModal()">&times;</span>
+        </div>
+        
+        <div class="modal-body">
+            <input type="hidden" id="paciente_id">
+            
+            <div class="form-grid-2">
+                <div class="input-block"><label>Nombres</label><input type="text" id="paciente_nombres" class="form-input"></div>
+                <div class="input-block"><label>Apellidos</label><input type="text" id="paciente_apellidos" class="form-input"></div>
+            </div>
+
+            <div class="form-grid-3">
+                <div class="input-block"><label>DNI</label><input type="text" id="paciente_dni" class="form-input"></div>
+                <div class="input-block"><label>Teléfono</label><input type="text" id="paciente_telefono" class="form-input"></div>
+                <div class="input-block"><label>Género</label>
+                    <select id="paciente_genero" class="form-input">
+                        <option value="Masculino">Masculino</option>
+                        <option value="Femenino">Femenino</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-grid-2">
+                <div class="input-block"><label>Etnia</label><input type="text" id="paciente_etnia" class="form-input"></div>
+                <div class="input-block"><label>Instrucción (Último Año)</label><input type="text" id="paciente_instruccion" class="form-input"></div>
+            </div>
+
+            <div class="form-grid-3">
+                <div class="input-block"><label>Provincia</label><input type="text" id="paciente_provincia" class="form-input"></div>
+                <div class="input-block"><label>Cantón</label><input type="text" id="paciente_canton" class="form-input"></div>
+                <div class="input-block"><label>Parroquia</label><input type="text" id="paciente_parroquia" class="form-input"></div>
+            </div>
+
+            <div class="form-grid-3">
+                <div class="input-block"><label>Tipo Sanguíneo</label><input type="text" id="paciente_sangre" class="form-input"></div>
+                <div class="input-block"><label>Estado Civil</label><input type="text" id="paciente_estado_civil" class="form-input"></div>
+                <div class="input-block"><label>Ocupación</label><input type="text" id="paciente_ocupacion" class="form-input"></div>
+            </div>
+
+            <div class="form-grid-2">
+                <div class="input-block"><label>Lugar de Nacimiento</label><input type="text" id="paciente_lugar_nac" class="form-input"></div>
+                <div class="input-block"><label>F. Nacimiento</label><input type="date" id="paciente_fecha_nac" class="form-input"></div>
+            </div>
+
+            <div class="form-grid-3">
+                <div class="input-block"><label>Contacto Emergencia</label><input type="text" id="paciente_em_nom" class="form-input"></div>
+                <div class="input-block"><label>Tel. Emergencia</label><input type="text" id="paciente_em_tel" class="form-input"></div>
+                <div class="input-block"><label>Parentesco</label><input type="text" id="paciente_em_par" class="form-input"></div>
+            </div>
+
+            <div class="form-grid-2">
+                <div class="input-block"><label>Email</label><input type="email" id="paciente_email" class="form-input"></div>
+                <div class="input-block"><label>Clínica Asignada</label><select id="paciente_clinica" class="form-input"></select></div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button onclick="cerrarModal()" class="btn-cancelar">Cancelar</button>
+            <button onclick="ejecutarGuardado()" class="btn-guardar">Guardar Paciente</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .main-layout { padding: 30px; background: #f8fafc; min-height: 100vh; font-family: 'Inter', sans-serif; }
+    .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; background: white; padding: 15px 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .nav-title { font-size: 1.4rem; font-weight: 800; color: #1e293b; }
+    .btn-new { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.3s; }
+    .btn-new:hover { background: #2563eb; transform: translateY(-1px); }
+    .table-container { background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f1f5f9; padding: 15px; text-align: left; color: #64748b; font-size: 0.85rem; text-transform: uppercase; }
+    td { padding: 18px 15px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    tr:hover { background: #f8fafc; }
+    
+    .modal-overlay { display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); align-items:center; justify-content:center; }
+    .modal-content-card { background:white; width:750px; border-radius:16px; overflow:hidden; display: flex; flex-direction: column; max-height: 95vh; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+    .modal-header { padding: 20px 30px; border-bottom: 1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center; }
+    .modal-header h2 { margin:0; color:#1e293b; font-size: 1.25rem; font-weight: 700; }
+    .close-btn { cursor:pointer; font-size:1.5rem; color:#94a3b8; font-weight: bold; }
+    .modal-body { padding: 25px 30px; overflow-y: auto; flex-grow: 1; }
+    .modal-footer { padding: 20px 30px; border-top: 1px solid #f1f5f9; display:flex; justify-content:flex-end; gap:12px; background: #fff; }
+
+    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px; }
+    .form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px; margin-bottom:15px; }
+    .input-block { display:flex; flex-direction:column; }
+    .input-block label { font-weight:600; color:#64748b; margin-bottom:6px; font-size: 0.75rem; text-transform: uppercase; }
+    .form-input { padding: 10px; border: 1.5px solid #e2e8f0; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 0.9rem; }
+    
+    .btn-cancelar { background:#f1f5f9; color: #475569; padding:10px 20px; border-radius:8px; cursor:pointer; border:none; font-weight:600; }
+    .btn-guardar { background:#3b82f6; color:white; padding:10px 20px; border-radius:8px; cursor:pointer; font-weight:700; border:none; }
+    .btn-action { border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin-left: 5px; font-weight: 700; font-size: 0.75rem; }
+    .btn-edit { background: #eff6ff; color: #2563eb; }
+    .btn-delete { background: #fef2f2; color: #dc2626; }
+    .badge-sede { background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
+</style>
+
+<script>
+    let cachePacientes = [];
+
+    (async function init() {
+        await cargarClinicas();
+        await listarPacientes();
+    })();
+
+    async function cargarClinicas() {
+        try {
+            const clinicas = await window.api.getClinicas();
+            const fS = document.getElementById('filterClinica');
+            const mS = document.getElementById('paciente_clinica');
+            let html = clinicas.map(c => `<option value="${c.ID_Clinica}">${c.Nombre_Clinica}</option>`).join('');
+            fS.innerHTML = '<option value="">Todas las sedes</option>' + html;
+            mS.innerHTML = '<option value="">Seleccione clínica...</option>' + html;
+        } catch (e) { console.error(e); }
+    }
+
+    async function listarPacientes() {
+        try {
+            const busqueda = document.getElementById('searchPacientes').value;
+            const clinica = document.getElementById('filterClinica').value;
+            const data = await window.api.getPacientes(busqueda, clinica);
+            cachePacientes = data;
+            const tbody = document.getElementById('tbodyPacientes');
+            tbody.innerHTML = data.map(p => `
+                <tr onclick="router.load('historia', ${p.ID_Paciente})" style="cursor:pointer">
+                    <td style="font-weight:700;">${p.DNI}</td>
+                    <td><div style="font-weight:700">${p.Nombres} ${p.Apellidos}</div></td>
+                    <td>${p.Telefono || '---'}</td>
+                    <td><span class="badge-sede">${p.Nombre_Clinica}</span></td>
+                    <td style="text-align:right" onclick="event.stopPropagation()">
+                        <button class="btn-action btn-edit" onclick="editarPaciente(${p.ID_Paciente})">EDITAR</button>
+                        <button class="btn-action btn-delete" onclick="eliminarPaciente(${p.ID_Paciente})">BORRAR</button>
+                    </td>
+                </tr>`).join('');
+        } catch (e) { console.error(e); }
+    }
+
+    window.nuevoPaciente = () => {
+        document.getElementById('modalTitle').innerText = "Registrar Nuevo Paciente";
+        document.getElementById('paciente_id').value = "";
+        const inputs = document.querySelectorAll('#modalPaciente .form-input');
+        inputs.forEach(i => i.value = "");
+        document.getElementById('paciente_genero').value = "Masculino";
+        document.getElementById('modalPaciente').style.display = 'flex';
+    };
+
+    window.editarPaciente = (id) => {
+        const p = cachePacientes.find(item => item.ID_Paciente == id);
+        if (p) {
+            document.getElementById('modalTitle').innerText = "Modificar Paciente";
+            document.getElementById('paciente_id').value = p.ID_Paciente;
+            document.getElementById('paciente_nombres').value = p.Nombres || '';
+            document.getElementById('paciente_apellidos').value = p.Apellidos || '';
+            document.getElementById('paciente_dni').value = p.DNI || '';
+            document.getElementById('paciente_telefono').value = p.Telefono || '';
+            document.getElementById('paciente_email').value = p.Email || '';
+            document.getElementById('paciente_genero').value = p.Genero || 'Masculino';
+            document.getElementById('paciente_clinica').value = p.ID_Clinica || '';
+            document.getElementById('paciente_etnia').value = p.Etnia || '';
+            document.getElementById('paciente_instruccion').value = p.Instruccion_Ultimo_Anio || '';
+            document.getElementById('paciente_provincia').value = p.Provincia_Residencia || '';
+            document.getElementById('paciente_canton').value = p.Canton_Residencia || '';
+            document.getElementById('paciente_parroquia').value = p.Parroquia_Residencia || '';
+            document.getElementById('paciente_sangre').value = p.Tipo_Sanguineo || '';
+            document.getElementById('paciente_estado_civil').value = p.Estado_Civil || '';
+            document.getElementById('paciente_ocupacion').value = p.Ocupacion || '';
+            document.getElementById('paciente_lugar_nac').value = p.Lugar_Nacimiento || '';
+            document.getElementById('paciente_em_nom').value = p.Contacto_Emergencia_Nombre || '';
+            document.getElementById('paciente_em_tel').value = p.Contacto_Emergencia_Telefono || '';
+            document.getElementById('paciente_em_par').value = p.Parentesco_Contacto || '';
+            
+            if(p.Fecha_Nacimiento) document.getElementById('paciente_fecha_nac').value = p.Fecha_Nacimiento.split('T')[0];
+            document.getElementById('modalPaciente').style.display = 'flex';
+        }
+    };
+
+    async function ejecutarGuardado() {
+        const id = document.getElementById('paciente_id').value;
+        const data = {
+            id_paciente: id || null,
+            nombres: document.getElementById('paciente_nombres').value.trim(),
+            apellidos: document.getElementById('paciente_apellidos').value.trim(),
+            dni: document.getElementById('paciente_dni').value.trim(),
+            telefono: document.getElementById('paciente_telefono').value.trim(),
+            email: document.getElementById('paciente_email').value.trim(),
+            fecha_nac: document.getElementById('paciente_fecha_nac').value,
+            genero: document.getElementById('paciente_genero').value,
+            etnia: document.getElementById('paciente_etnia').value.trim(),
+            instruccion: document.getElementById('paciente_instruccion').value.trim(),
+            provincia: document.getElementById('paciente_provincia').value.trim(),
+            canton: document.getElementById('paciente_canton').value.trim(),
+            parroquia: document.getElementById('paciente_parroquia').value.trim(),
+            tipo_sanguineo: document.getElementById('paciente_sangre').value.trim(),
+            estado_civil: document.getElementById('paciente_estado_civil').value.trim(),
+            ocupacion: document.getElementById('paciente_ocupacion').value.trim(),
+            lugar_nacimiento: document.getElementById('paciente_lugar_nac').value.trim(),
+            contacto_emergencia_nombre: document.getElementById('paciente_em_nom').value.trim(),
+            contacto_emergencia_telefono: document.getElementById('paciente_em_tel').value.trim(),
+            parentesco_contacto: document.getElementById('paciente_em_par').value.trim(),
+            id_clinica: document.getElementById('paciente_clinica').value
+        };
+
+        if(!data.nombres || !data.dni || !data.id_clinica) return Swal.fire("Error", "Nombres, DNI y Clínica son obligatorios", "warning");
+
+        try {
+            const res = await window.api.guardarPaciente(data);
+            if (res.status === "Success") {
+                cerrarModal();
+                listarPacientes();
+                Swal.fire("Éxito", res.message, "success");
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    window.cerrarModal = () => document.getElementById('modalPaciente').style.display = 'none';
+</script>

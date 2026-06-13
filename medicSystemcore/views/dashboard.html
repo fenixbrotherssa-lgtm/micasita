@@ -1,0 +1,355 @@
+﻿<div class="dashboard-container">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <img src="assets/icon.png" id="clinica-logo-side" class="side-logo" onerror="this.src='assets/muela.png'">
+            <div class="brand-text">
+                <h1 id="display-clinica-side">CLÍNICA <span class="badge">PRO</span></h1>
+                <p>Medical Management System</p>
+            </div>
+        </div>
+        
+        <nav class="side-nav">
+            <div class="nav-group">
+                <span>PRINCIPAL</span>
+                <a href="#" class="active"><i class="fas fa-th-large"></i> Dashboard</a>
+                <a onclick="window.router.load('citas')"><i class="fas fa-calendar-check"></i> Agenda Hoy</a>
+            </div>
+            <div class="nav-group">
+                <span>IA & SOPORTE</span>
+                <a onclick="toggleChat()"><i class="fas fa-robot"></i> Asistente IA</a>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="mini-profile">
+                <div class="user-avatar" id="user-initial-side">U</div>
+                <div class="user-info">
+                    <span id="display-usuario-side">Cargando...</span>
+                    <small id="display-rol-side">Administrador</small>
+                </div>
+            </div>
+            <button class="btn-logout-icon" onclick="cerrarSesion()" title="Cerrar Sesión">
+                <i class="fas fa-power-off"></i>
+            </button>
+        </div>
+    </aside>
+
+    <main class="main-viewport">
+
+        <!-- MARCA DE AGUA AMETRA (reemplaza muela.png) -->
+        <div class="floating-ametra" aria-hidden="true">
+            <img src="assets/muela.png" class="ametra-watermark-img" alt="">
+        </div>
+
+        <header class="content-header">
+            <div class="welcome-text">
+                <h2 id="greeting">Bienvenido, <span id="user-name-welcome">...</span></h2>
+                <p>Resumen operativo de tu clínica.</p>
+            </div>
+            <div class="header-widgets">
+                <div class="mini-stat">
+                    <div class="stat-icon-bg blue"><i class="fas fa-users"></i></div>
+                    <div><span id="count-pacientes">0</span><small>Pacientes</small></div>
+                </div>
+                <div class="mini-stat">
+                    <div class="stat-icon-bg purple"><i class="fas fa-clock"></i></div>
+                    <div><span id="count-pendientes">0</span><small>Pendientes</small></div>
+                </div>
+            </div>
+        </header>
+
+        <div class="dashboard-scrollable">
+            <section class="module-section">
+                <h3 class="section-title">Operaciones Clínicas</h3>
+                <div class="grid-layout">
+                    <div class="premium-card border-blue" onclick="window.router.load('pacientes')">
+                        <div class="card-icon-box blue"><i class="fas fa-user-injured"></i></div>
+                        <div class="card-content">
+                            <h4>Pacientes</h4>
+                            <p>Historias clínicas y 3D</p>
+                        </div>
+                        <div class="card-arrow"><i class="fas fa-arrow-right"></i></div>
+                    </div>
+
+                    <div class="premium-card border-purple" onclick="window.router.load('citas')">
+                        <div class="card-icon-box purple"><i class="fas fa-calendar-alt"></i></div>
+                        <div class="card-content">
+                            <h4>Citas Médicas</h4>
+                            <p>Agenda y recordatorios</p>
+                        </div>
+                        <div class="card-arrow"><i class="fas fa-arrow-right"></i></div>
+                    </div>
+
+                    <div class="premium-card border-cyan" onclick="window.router.load('inventario')">
+                        <div class="card-icon-box cyan"><i class="fas fa-box-open"></i></div>
+                        <div class="card-content">
+                            <h4>Inventario</h4>
+                            <p>Stock e insumos</p>
+                        </div>
+                        <div class="card-arrow"><i class="fas fa-arrow-right"></i></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-section">
+                <h3 class="section-title">Gestión Financiera</h3>
+                <div class="grid-layout">
+                    <div class="premium-card border-green" onclick="window.router.load('caja')">
+                        <div class="card-icon-box green"><i class="fas fa-cash-register"></i></div>
+                        <div class="card-content">
+                            <h4>Caja y Cierres</h4>
+                            <p>Flujo de caja diario</p>
+                        </div>
+                    </div>
+
+                    <div class="premium-card border-indigo" onclick="window.router.load('facturacion')">
+                        <div class="card-icon-box indigo"><i class="fas fa-file-invoice-dollar"></i></div>
+                        <div class="card-content">
+                            <h4>Facturación</h4>
+                            <p>Cobros y Recibos rápidos</p>
+                        </div>
+                        <div class="card-arrow"><i class="fas fa-arrow-right"></i></div>
+                    </div>
+
+                    <div class="premium-card border-red" data-role="1" onclick="window.router.load('gastos')">
+                        <div class="card-icon-box red"><i class="fas fa-file-invoice-dollar"></i></div>
+                        <div class="card-content">
+                            <h4>Ingresos y Gastos</h4>
+                            <p>Egresos y proveedores</p>
+                        </div>
+                    </div>
+
+                    <div class="premium-card border-orange" data-role="1" onclick="window.router.load('reportes')">
+                        <div class="card-icon-box orange"><i class="fas fa-chart-line"></i></div>
+                        <div class="card-content">
+                            <h4>Reportes KPI</h4>
+                            <p>Estadísticas en vivo</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-section" data-role="1">
+                <h3 class="section-title">Configuración de Sistema</h3>
+                <div class="grid-layout compact">
+                    <div class="premium-card admin-mini" onclick="window.router.load('usuarios')">
+                        <i class="fas fa-user-md"></i>
+                        <span>Personal</span>
+                    </div>
+                    <div class="premium-card admin-mini" onclick="window.router.load('sucursales')">
+                        <i class="fas fa-clinic-medical"></i>
+                        <span>Sucursales</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CO-BRANDING AMETRA -->
+            <div class="ametra-cobranding">
+                <img src="assets/muela.png" class="ametra-cobranding-logo" alt="Ametra OS">
+                <div class="ametra-cobranding-text">
+                    <span class="ametra-name">ametra <strong>os</strong></span>
+                    <span class="ametra-sub">by Dentalmart · Elige. Ahorra. Sonríe.</span>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<style>
+    :root {
+        --side-bg: #0f172a;
+        --main-bg: #f1f5f9;
+        --accent: #2563eb;
+    }
+
+    /* CSS CRÍTICO: OCULTAR POR DEFECTO TODO LO QUE TENGA data-role="1" */
+    [data-role="1"] { display: none !important; }
+    [data-user-role="1"] [data-role="1"] { display: flex !important; }
+    section[data-role="1"] { display: none !important; }
+    [data-user-role="1"] section[data-role="1"] { display: block !important; }
+
+    /* Layout */
+    .dashboard-container { display: flex; height: 100vh; width: 100vw; background: var(--main-bg); overflow: hidden; font-family: 'Inter', sans-serif; }
+    .sidebar { width: 280px; background: var(--side-bg); display: flex; flex-direction: column; color: white; padding: 25px; z-index: 100; flex-shrink: 0; }
+    .sidebar-header { display: flex; align-items: center; gap: 15px; margin-bottom: 40px; }
+    .side-logo { width: 45px; height: 45px; object-fit: contain; border-radius: 12px; background: white; padding: 5px; }
+    .brand-text h1 { font-size: 1.1rem; margin: 0; font-weight: 800; letter-spacing: -0.5px; }
+    .brand-text p { font-size: 0.7rem; opacity: 0.5; margin: 0; }
+
+    .side-nav { flex: 1; }
+    .nav-group { margin-bottom: 25px; }
+    .nav-group span { font-size: 0.65rem; letter-spacing: 1.5px; color: #64748b; display: block; margin-bottom: 12px; font-weight: 700; }
+    .side-nav a {
+        display: flex; align-items: center; gap: 12px; color: #94a3b8;
+        text-decoration: none; padding: 12px 15px; border-radius: 12px;
+        font-size: 0.9rem; transition: all 0.3s ease; cursor: pointer;
+    }
+    .side-nav a:hover, .side-nav a.active { background: #1e293b; color: #fff; transform: translateX(5px); }
+
+    /* MAIN con marca de agua Ametra */
+    .main-viewport { flex: 1; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Contenedor de la marca de agua Ametra — ocupa el mismo espacio que la muela */
+    .floating-ametra {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+    }
+
+    /* La imagen muela.png ahora actúa como marca de agua Ametra */
+    .ametra-watermark-img {
+        width: 520px;
+        opacity: 0.77;
+        display: block;
+        filter: grayscale(100%);
+    }
+
+    .content-header { padding: 35px 50px; display: flex; justify-content: space-between; align-items: center; z-index: 10; position: relative; }
+    .header-widgets { display: flex; gap: 15px; }
+    .mini-stat { background: white; padding: 15px 20px; border-radius: 18px; display: flex; align-items: center; gap: 15px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .stat-icon-bg { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+    .stat-icon-bg.blue { background: #eff6ff; color: #2563eb; }
+    .stat-icon-bg.purple { background: #f5f3ff; color: #7c3aed; }
+
+    .dashboard-scrollable { padding: 0 50px 50px; overflow-y: auto; flex: 1; z-index: 10; position: relative; }
+    .section-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; color: #64748b; margin: 30px 0 20px; font-weight: 800; }
+
+    .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    .premium-card { background: white; border-radius: 22px; padding: 24px; display: flex; align-items: center; gap: 18px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; }
+    .premium-card:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border-color: var(--accent); }
+
+    .card-icon-box { width: 55px; height: 55px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+    .blue   { background: #ebf2ff; color: #2563eb; }
+    .purple { background: #f3f0ff; color: #7c3aed; }
+    .cyan   { background: #e6fbff; color: #0891b2; }
+    .green  { background: #f0fdf4; color: #16a34a; }
+    .red    { background: #fff1f2; color: #dc2626; }
+    .orange { background: #fff7ed; color: #ea580c; }
+    .indigo { background: #e0e7ff; color: #4338ca; }
+
+    .border-blue   { border-left: 5px solid #2563eb !important; }
+    .border-purple { border-left: 5px solid #7c3aed !important; }
+    .border-cyan   { border-left: 5px solid #0891b2 !important; }
+    .border-green  { border-left: 5px solid #16a34a !important; }
+    .border-red    { border-left: 5px solid #dc2626 !important; }
+    .border-orange { border-left: 5px solid #ea580c !important; }
+    .border-indigo { border-left: 5px solid #4338ca !important; }
+
+    .card-content h4 { margin: 0; font-size: 1.15rem; color: #1e293b; }
+    .card-content p  { margin: 3px 0 0; font-size: 0.85rem; color: #64748b; }
+    .card-arrow { margin-left: auto; color: #cbd5e1; }
+
+    .grid-layout.compact { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .admin-mini { padding: 18px; flex-direction: column; text-align: center; gap: 10px; }
+
+    .sidebar-footer { margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between; }
+    .mini-profile { display: flex; align-items: center; gap: 10px; }
+    .user-info { display: flex; flex-direction: column; }
+    .user-info span { font-size: 0.85rem; font-weight: 600; }
+    .user-info small { font-size: 0.7rem; opacity: 0.5; }
+    .user-avatar { width: 35px; height: 35px; background: var(--accent); color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+    .btn-logout-icon { background: rgba(239,68,68,0.1); color: #ef4444; border: none; width: 35px; height: 35px; border-radius: 10px; cursor: pointer; }
+    .badge { background: var(--accent); color: white; font-size: 0.55rem; padding: 2px 6px; border-radius: 5px; }
+
+    /* CO-BRANDING AMETRA — barra inferior discreta */
+    .ametra-cobranding {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 30px;
+        padding: 12px 20px;
+        background: white;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        border-left: 4px solid #FFE600;
+    }
+    .ametra-cobranding-logo {
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+        filter: grayscale(0%);
+        opacity: 1;
+    }
+    .ametra-cobranding-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.3;
+    }
+    .ametra-name {
+        font-size: 0.9rem;
+        color: #1e293b;
+        letter-spacing: 0.5px;
+    }
+    .ametra-name strong {
+        font-weight: 800;
+    }
+    .ametra-sub {
+        font-size: 0.72rem;
+        color: #94a3b8;
+    }
+</style>
+
+<script>
+    (async function initModernDashboard() {
+        const sessionData = localStorage.getItem('usuario_sesion');
+        if (!sessionData) { window.router.load('login'); return; }
+
+        const user = JSON.parse(sessionData);
+        const idRol = String(user.ID_Rol || user.id_rol || '2');
+
+        document.body.setAttribute('data-user-role', idRol);
+
+        if (idRol !== '1') {
+            document.querySelectorAll('[data-role="1"]').forEach(el => el.remove());
+            console.log("🔒 Seguridad MedicinaEcuador: Módulos administrativos eliminados del DOM.");
+        }
+
+        const nombreCompleto = (user.Nombres || user.nombre || 'USUARIO');
+        const primerNombre = nombreCompleto.split(' ')[0].toUpperCase();
+        const clinica = (user.Nombre_Clinica || user.clinica_nombre || 'SISTEMA').toUpperCase();
+
+        document.getElementById('user-name-welcome').innerText = primerNombre;
+        document.getElementById('display-usuario-side').innerText = primerNombre;
+        document.getElementById('display-clinica-side').innerHTML = `${clinica} <span class="badge">PRO</span>`;
+        document.getElementById('user-initial-side').innerText = primerNombre.charAt(0);
+        document.getElementById('display-rol-side').innerText = idRol === '1' ? 'Administrador' : 'Doctor/a';
+
+        if (user.logo_ruta || user.Logo_Ruta) {
+            document.getElementById('clinica-logo-side').src = user.logo_ruta || user.Logo_Ruta;
+        }
+
+        const hora = new Date().getHours();
+        const greetingEl = document.getElementById('greeting');
+        let txt = hora < 12 ? "Buenos días" : (hora < 19 ? "Buenas tardes" : "Buenas noches");
+        greetingEl.innerHTML = `${txt}, <span id="user-name-welcome">${primerNombre}</span>`;
+
+        try {
+            const stats = await window.api.get(`/reportes/stats-inicio?id_clinica=${user.id_clinica || user.ID_Clinica}`);
+            if (stats && stats.status !== "Error") {
+                document.getElementById('count-pacientes').innerText = stats.total_pacientes || "0";
+                document.getElementById('count-pendientes').innerText = stats.citas_hoy || "0";
+            }
+        } catch (e) { console.warn("Error stats:", e); }
+    })();
+
+    function cerrarSesion() {
+        const salir = () => { localStorage.removeItem('usuario_sesion'); window.router.load('login'); };
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: '¿Cerrar sesión?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb',
+                confirmButtonText: 'Sí, salir'
+            }).then((res) => { if (res.isConfirmed) salir(); });
+        } else { if (confirm("¿Salir?")) salir(); }
+    }
+</script>

@@ -1,0 +1,190 @@
+﻿<div class="view-container" style="padding: 20px; display: grid; grid-template-columns: 1fr 380px; gap: 20px; height: calc(100vh - 40px); animation: fadeIn 0.3s ease-in-out; overflow: hidden; box-sizing: border-box;">
+
+    <!-- Contenedor Principal con Scroll -->
+    <div class="patient-plan" style="display: flex; flex-direction: column; gap: 20px; overflow-y: auto; height: 100%; padding-right: 15px; box-sizing: border-box;">
+        
+        <div class="header-card" style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #4f46e5; flex-shrink: 0;">
+            <div>
+                <h2 id="paciente_nombre_tra" style="margin: 0; color: #1e293b; font-size: 1.6rem; letter-spacing: -0.025em; font-weight: 800;">Cargando paciente...</h2>
+                <div style="margin-top: 8px; color: #64748b; display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 0.9rem;"><i class="fas fa-file-invoice-dollar" style="color:#4f46e5;"></i> Seguimiento Financiero</span>
+                    <span id="totalDeudaPaciente" style="background: #fee2e2; color: #b91c1c; padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 0.95rem; border: 1px solid #fca5a5;">Saldo: $0.00</span>
+                </div>
+            </div>
+            <button onclick="window.modalNuevoTratamiento()" class="btn-main" style="background: #4f46e5; color: white; border: none; padding: 14px 28px; border-radius: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3); transition: all 0.2s;">
+                <i class="fas fa-plus-circle"></i> PLANIFICAR TRATAMIENTOS
+            </button>
+        </div>
+
+        <!-- Card de Tabla -->
+        <div class="table-card" style="background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid #e2e8f0; flex-shrink: 0;">
+            <div style="padding: 18px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-weight: 800; color: #334155; display: flex; justify-content: space-between; align-items: center;">
+                <span style="letter-spacing: 0.05em; font-size: 0.85rem;">HISTORIAL DE PROCEDIMIENTOS</span>
+                <i class="fas fa-history" style="color: #94a3b8;"></i>
+            </div>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="background: #ffffff; border-bottom: 2px solid #f1f5f9;">
+                            <th style="padding: 15px; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700;">Fecha</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700;">Procedimiento</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; text-align: center;">Pieza</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700;">Costo Total</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700;">Saldo Pend.</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700;">Estado</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; text-align: center;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyTratamientos">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 40px; color: #94a3b8;">
+                                <i class="fas fa-spinner fa-spin" style="margin-bottom: 10px; font-size: 1.2rem;"></i><br>
+                                Cargando historial del paciente...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Botón Volver (Más visible) -->
+        <div style="padding-bottom: 20px; flex-shrink: 0;">
+            <button onclick="window.router.load('pacientes')" class="btn-back" style="background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; transition: all 0.2s;">
+                <i class="fas fa-arrow-left"></i> VOLVER A LA LISTA DE PACIENTES
+            </button>
+        </div>
+    </div>
+
+    <!-- Panel Lateral de Catálogo -->
+    <div class="catalog-panel" style="background: #f1f5f9; border-radius: 12px; display: flex; flex-direction: column; height: 100%; overflow: hidden; gap: 15px;">
+        
+        <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; max-height: 45%; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0; background: #fff;">
+                <h3 style="margin: 0; color: #1e293b; font-size: 1rem; display: flex; align-items: center; gap: 10px; font-weight: 800;">
+                    <i class="fas fa-file-signature" style="color: #4f46e5;"></i> Presupuestos Pendientes
+                </h3>
+            </div>
+            <div id="lista-presupuestos-paciente" style="padding: 15px; overflow-y: auto; flex-grow: 1;">
+                <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 0.8rem;">
+                    Buscando presupuestos...
+                </div>
+            </div>
+        </div>
+
+        <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                <h3 style="margin: 0; color: #1e293b; font-size: 1rem; display: flex; align-items: center; gap: 10px; font-weight: 800;">
+                    <i class="fas fa-bookmark" style="color: #10b981;"></i> Catálogo de Servicios
+                </h3>
+                <button onclick="window.modalGestionarCatalogo()" style="width: 100%; margin-top: 12px; padding: 10px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 0.8rem;">
+                    <i class="fas fa-plus"></i> NUEVO SERVICIO
+                </button>
+            </div>
+
+            <div id="listaCatalogo" style="padding: 15px; overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column; gap: 10px;">
+                <div style="text-align: center; color: #94a3b8; padding: 20px;">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                </div>
+            </div>
+            
+            <div style="padding: 12px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                <div style="background: #eff6ff; padding: 10px; border-radius: 6px; font-size: 0.7rem; color: #1e40af; border: 1px solid #bfdbfe; line-height: 1.4; display: flex; gap: 8px;">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Configura aquí los precios base de la clínica.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Animaciones */
+    @keyframes fadeIn { 
+        from { opacity: 0; transform: translateY(5px); } 
+        to { opacity: 1; transform: translateY(0); } 
+    }
+
+    /* Estilos de la Tabla Principal */
+    #tbodyTratamientos tr { 
+        border-bottom: 1px solid #f1f5f9; 
+        transition: all 0.2s ease; 
+    }
+    #tbodyTratamientos tr:hover { 
+        background: #f8fafc; 
+    }
+    #tbodyTratamientos td { 
+        padding: 16px 15px; 
+        font-size: 0.9rem; 
+        color: #334155; 
+        vertical-align: middle; 
+    }
+
+    /* Badges de Estado */
+    .badge-estado {
+        padding: 5px 12px;
+        border-radius: 50px;
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        display: inline-block;
+        letter-spacing: 0.02em;
+    }
+    
+    .estado-pendiente { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .estado-proceso { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .estado-completado { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+
+    /* Estilo de las Cards del Catálogo Lateral */
+    .catalogo-card {
+        background: white;
+        padding: 12px 14px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s ease;
+    }
+    .catalogo-card:hover { 
+        transform: translateX(4px); 
+        border-color: #10b981; 
+    }
+
+    /* Estilo Botón Volver */
+    .btn-back:hover {
+        background: #e2e8f0 !important;
+        color: #1e293b !important;
+        border-color: #94a3b8 !important;
+    }
+
+    /* Personalización de Scrollbars */
+    .patient-plan::-webkit-scrollbar,
+    #listaCatalogo::-webkit-scrollbar,
+    #lista-presupuestos-paciente::-webkit-scrollbar { 
+        width: 8px; 
+    }
+    
+    .patient-plan::-webkit-scrollbar-thumb,
+    #listaCatalogo::-webkit-scrollbar-thumb { 
+        background: #cbd5e1; 
+        border-radius: 10px; 
+    }
+
+    .patient-plan::-webkit-scrollbar-track,
+    #listaCatalogo::-webkit-scrollbar-track,
+    #lista-presupuestos-paciente::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 10px;
+    }
+
+    /* Hover Botón Principal */
+    .btn-main:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(79, 70, 229, 0.4);
+    }
+    .btn-main:active {
+        transform: translateY(0);
+    }
+</style>
+<!-- Librería para que funcione la firma (Pegar al final del archivo) -->
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>

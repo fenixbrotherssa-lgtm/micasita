@@ -1,0 +1,610 @@
+comando para validar estructuras:
+
+Get-ChildItem -Recurse | Where-Object { $_.FullName -notmatch "node_modules" } | ForEach-Object {
+    $depth = ($_.FullName.Replace((Get-Location).Path, "").Split('\').Count - 1)
+    $prefix = if ($_.PSIsContainer) { "[DIR] " } else { "|-- " }
+    "  " * $depth + $prefix + $_.Name
+}
+
+
+estructura:
+  [DIR] assets
+  [DIR] js
+  [DIR] views
+  |-- index.html
+  |-- main.js
+  |-- package-lock.json
+  |-- package.json
+  |-- preload.js
+    |-- avatar-doctor.png
+    |-- icon.png
+    |-- muela.png
+    [DIR] uimodules
+    |-- api.js
+    |-- app.js
+    |-- viewer.min.js
+      |-- caja.js
+      |-- citas.js
+      |-- dashboard.js
+      |-- gastos.js
+      |-- historia.js
+      |-- inventario.js
+      |-- kpi.js
+      |-- login.js
+      |-- odontograma.js
+      |-- pacientes.js
+      |-- sucursales.js
+      |-- tratamientos.js
+      |-- usuarios.js
+    |-- caja.html
+    |-- citas.html
+    |-- dashboard.html
+    |-- gastos.html
+    |-- historiaclinica.html
+    |-- inventario.html
+    |-- kpi.html
+    |-- login.html
+    |-- odontograma.html
+    |-- pacientes.html
+    |-- pagos.html
+    |-- sucursales.html
+    |-- tratamientos.html
+    |-- usuarios.html
+PS C:\MedicinaEcuador_Project\App_Escritorio>
+
+
+backend:
+PS C:\MedicinaEcuador_Project\App_Escritorio>
+ [DIR] .wwebjs_cache
+  [DIR] config
+  [DIR] controllers
+  [DIR] middlewares
+  [DIR] routes
+  [DIR] services
+  [DIR] sessions
+  [DIR] uploads
+  |-- .env
+  |-- basededatos.txt
+  |-- estructuracarpetas.txt
+  |-- package-lock.json
+  |-- package.json
+  |-- server.js
+  |-- test-doctor.js
+    |-- 2.3000.1035684835.html
+    |-- 2.3000.1035687054.html
+    |-- 2.3000.1035687776.html
+    |-- 2.3000.1035702547.html
+    |-- 2.3000.1035703553.html
+    |-- 2.3000.1035705586.html
+    |-- 2.3000.1035707561.html
+    |-- 2.3000.1035708903.html
+    |-- 2.3000.1035709447.html
+    |-- 2.3000.1035713792.html
+    |-- 2.3000.1035715252.html
+    |-- 2.3000.1035717349.html
+    |-- 2.3000.1035718650.html
+    |-- db.js
+    |-- authController.js
+    |-- cajaController.js
+    |-- citasController.js
+    |-- clinicaController.js
+    |-- gastosController.js
+    |-- iaController.js
+    |-- inventarioController.js
+    |-- kpiController.js
+    |-- odontogramaController.js
+    |-- pacienteController.js
+    |-- pagoController.js
+    |-- presupuestoController.js
+    |-- recetaController.js
+    |-- tratamientoController.js
+    |-- usuarioController.js
+    |-- authRoutes.js
+    |-- cajaRoutes.js
+    |-- citasRoutes.js
+    |-- clinicaRoutes.js
+    |-- gastosRoutes.js
+    |-- iaRoutes.js
+    |-- inventarioRoutes.js
+    |-- kpiRoutes.js
+    |-- odontogramaRoutes.js
+    |-- pacienteRoutes.js
+    |-- pagoRoutes.js
+    |-- presupuestos.js
+    |-- recetaRoutes.js
+    |-- routestratamientoRoutes.js
+    |-- usuarioRoutes.js
+    |-- whatsappService.js
+    [DIR] session
+      [DIR] ActorSafetyLists
+      [DIR] AmountExtractionHeuristicRegexes
+      [DIR] CaptchaProviders
+      [DIR] CertificateRevocation
+      [DIR] component_crx_cache
+      [DIR] Crashpad
+      [DIR] Crowd Deny
+      [DIR] Default
+      [DIR] extensions_crx_cache
+      [DIR] FileTypePolicies
+      [DIR] FirstPartySetsPreloaded
+      [DIR] GPUPersistentCache
+      [DIR] HistorySearch
+      [DIR] hyphen-data
+      [DIR] MEIPreload
+      [DIR] OnDeviceHeadSuggestModel
+      [DIR] OriginTrials
+      [DIR] PKIMetadata
+      [DIR] PKIMetadataFastpush
+      [DIR] PlusAddressBlocklist
+      [DIR] PrivacySandboxAttestationsPreloaded
+      [DIR] Safe Browsing
+      [DIR] SafetyTips
+      [DIR] segmentation_platform
+      [DIR] SSLErrorAssistant
+      [DIR] Subresource Filter
+      [DIR] TranslateKit
+      [DIR] TrustTokenKeyCommitments
+      [DIR] WasmTtsEngine
+      [DIR] WidevineCdm
+      [DIR] ZxcvbnData
+      |-- BrowserMetrics-spare.pma
+      |-- DevToolsActivePort
+      |-- first_party_sets.db
+      |-- first_party_sets.db-journal
+      |-- Last Browser
+      |-- Last Version
+      |-- Local State
+      |-- Variations
+        [DIR] 10420
+          [DIR] _metadata
+          |-- crl-set
+          |-- LICENSE
+          |-- manifest.json
+            |-- verified_contents.json
+        |-- 0e2ed32dfbfae3f036a081e4e7291187dcc2c00e75ddb8beb1bb96b9af4316c9
+        |-- 777adca19ccaca03f3922fa618833704d1a2cf1a06cd4ec1e257d4494afb2b95
+        |-- metadata.json
+        [DIR] attachments
+        [DIR] reports
+        |-- metadata
+        |-- settings.dat
+        [DIR] AutofillAiModelCache
+        [DIR] AutofillStrikeDatabase
+        [DIR] blob_storage
+        [DIR] BudgetDatabase
+        [DIR] Cache
+        [DIR] chrome_cart_db
+        [DIR] ClientCertificates
+        [DIR] Code Cache
+        [DIR] Collaboration
+        [DIR] commerce_subscription_db
+        [DIR] DataSharing
+        [DIR] DawnGraphiteCache
+        [DIR] DawnWebGPUCache
+        [DIR] discounts_db
+        [DIR] discount_infos_db
+        [DIR] Extension Rules
+        [DIR] Extension Scripts
+        [DIR] Extension State
+        [DIR] Feature Engagement Tracker
+        [DIR] GCM Store
+        [DIR] GPUCache
+        [DIR] IndexedDB
+        [DIR] Local Storage
+        [DIR] Network
+        [DIR] parcel_tracking_db
+        [DIR] PersistentOriginTrials
+        [DIR] Safe Browsing Network
+        [DIR] Segmentation Platform
+        [DIR] Service Worker
+        [DIR] Session Storage
+        [DIR] Sessions
+        [DIR] Shared Dictionary
+        [DIR] shared_proto_db
+        [DIR] Site Characteristics Database
+        [DIR] Sync Data
+        [DIR] VideoDecodeStats
+        [DIR] WebStorage
+        |-- Account Web Data
+        |-- Account Web Data-journal
+        |-- Affiliation Database
+        |-- Affiliation Database-journal
+        |-- BookmarkMergedSurfaceOrdering
+        |-- DIPS
+        |-- DIPS-wal
+        |-- Favicons
+        |-- Favicons-journal
+        |-- heavy_ad_intervention_opt_out.db
+        |-- heavy_ad_intervention_opt_out.db-journal
+        |-- History
+        |-- History-journal
+        |-- LOCK
+        |-- LOG
+        |-- LOG.old
+        |-- Login Data
+        |-- Login Data For Account
+        |-- Login Data For Account-journal
+        |-- Login Data-journal
+        |-- Network Action Predictor
+        |-- Network Action Predictor-journal
+        |-- passkey_enclave_state
+        |-- Preferences
+        |-- PreferredApps
+        |-- README
+        |-- Secure Preferences
+        |-- ServerCertificate
+        |-- ServerCertificate-journal
+        |-- SharedStorage
+        |-- SharedStorage-wal
+        |-- Shortcuts
+        |-- Shortcuts-journal
+        |-- Top Sites
+        |-- Top Sites-journal
+        |-- trusted_vault.pb
+        |-- Web Data
+        |-- Web Data-journal
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          [DIR] 0472ae96-5860-4c9e-9855-5fc86cb8e660
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          [DIR] Cache_Data
+          [DIR] No_Vary_Search
+            |-- index
+            |-- sqldb0
+            |-- sqldb0-wal
+            |-- sqldb1
+            |-- sqldb1-wal
+            |-- sqldb2
+            |-- sqldb2-wal
+            |-- journal.baj
+            |-- snapshot.baf
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          [DIR] pc
+            |-- 5bb[a`6`2`2e2.ue5-ba-[[u0@;`2.db
+            |-- 5bb[a`6`2`2e2.ue5-ba-[[u0@;`2.journal
+            |-- 5bb[a`6`2`2e5-ba-[[u0@;`2.db
+            |-- 5bb[a`6`2`2e5-ba-[[u0@;`2.journal
+          |-- MessageDB
+          |-- MessageDB-journal
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- DataSharingDB
+          |-- DataSharingDB-journal
+          |-- data_0
+          |-- data_1
+          |-- data_2
+          |-- data_3
+          |-- index
+          |-- data_0
+          |-- data_1
+          |-- data_2
+          |-- data_3
+          |-- index
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- 000003.log
+          |-- CURRENT
+          |-- LOCK
+          |-- LOG
+          |-- MANIFEST-000001
+          |-- 000003.log
+          |-- CURRENT
+          |-- LOCK
+          |-- LOG
+          |-- MANIFEST-000001
+          |-- 000003.log
+          |-- CURRENT
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- MANIFEST-000001
+          [DIR] AvailabilityDB
+          [DIR] EventDB
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+          |-- 000003.log
+          |-- CURRENT
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- MANIFEST-000001
+          |-- data_0
+          |-- data_1
+          |-- data_2
+          |-- data_3
+          |-- index
+          [DIR] https_web.whatsapp.com_0.indexeddb.blob
+          [DIR] https_web.whatsapp.com_0.indexeddb.leveldb
+            [DIR] 23
+              [DIR] 00
+                |-- 2
+            |-- 003083.ldb
+            |-- 003084.ldb
+            |-- 003085.ldb
+            |-- 003116.ldb
+            |-- 003135.ldb
+            |-- 003170.ldb
+            |-- 003195.ldb
+            |-- 003243.ldb
+            |-- 003257.ldb
+            |-- 003423.ldb
+            |-- 003424.ldb
+            |-- 003425.ldb
+            |-- 003426.ldb
+            |-- 003427.ldb
+            |-- 003428.ldb
+            |-- 003487.log
+            |-- 003492.ldb
+            |-- 003493.ldb
+            |-- 003494.ldb
+            |-- 003495.ldb
+            |-- 003496.ldb
+            |-- 003497.ldb
+            |-- 003498.ldb
+            |-- 003499.ldb
+            |-- 003500.ldb
+            |-- 003501.ldb
+            |-- 003502.ldb
+            |-- 003503.ldb
+            |-- 003504.ldb
+            |-- 003505.ldb
+            |-- 003507.ldb
+            |-- 003508.ldb
+            |-- 003509.ldb
+            |-- 003510.ldb
+            |-- 003511.ldb
+            |-- CURRENT
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- MANIFEST-000001
+          [DIR] leveldb
+            |-- 000005.ldb
+            |-- 000057.ldb
+            |-- 000060.ldb
+            |-- 000062.log
+            |-- 000063.ldb
+            |-- CURRENT
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- MANIFEST-000001
+          |-- 48e9df12-9308-47d2-b1aa-f31e96a13258.tmp
+          |-- 935a1b5e-257b-4f0d-a3a0-c1fcaeca137f.tmp
+          |-- Cookies
+          |-- Cookies-journal
+          |-- Device Bound Sessions
+          |-- Device Bound Sessions-journal
+          |-- Network Persistent State
+          |-- NetworkDataMigrated
+          |-- Reporting and NEL
+          |-- Reporting and NEL-journal
+          |-- SCT Auditing Pending Reports
+          |-- TransportSecurity
+          |-- Trust Tokens
+          |-- Trust Tokens-journal
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- NetworkDataMigrated
+          |-- Safe Browsing Cookies
+          |-- Safe Browsing Cookies-journal
+          [DIR] SegmentInfoDB
+          [DIR] SignalDB
+          [DIR] SignalStorageConfigDB
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+          [DIR] CacheStorage
+          [DIR] Database
+          [DIR] ScriptCache
+            [DIR] 0bf6ab7f94a21cdc9c1649f884333ec20f40a544
+              [DIR] 1c527d56-0d64-4a55-be04-e1ae547ce3e9
+              [DIR] 3fafb17d-0e96-4215-b1d3-cd71ae8b57f1
+              [DIR] 9cbd4657-f6b2-48f4-92fc-b50b75dd69ab
+              |-- index.txt
+                [DIR] index-dir
+                |-- 5f6b8fe0688a4e11_0
+                |-- index
+                  |-- the-real-index
+                [DIR] index-dir
+                |-- 2a2b7cbbc61290b4_0
+                |-- 6ea66fa5b36b4157_0
+                |-- 92172a9e586cee2a_0
+                |-- e6039a61e4d2a504_0
+                |-- index
+                  |-- the-real-index
+                [DIR] index-dir
+                |-- 050f3c1ca88b7e39_0
+                |-- 086e2be1fa685564_0
+                |-- 096f5c2364cca1bb_0
+                |-- 0cadb5fcf798c20e_0
+                |-- 1467b176fa68b904_0
+                |-- 1b988fe56225145d_0
+                |-- 1e3d4c96be9f5e1f_0
+                |-- 2d1ff6faa298c48d_0
+                |-- 34d40368081e739d_0
+                |-- 37dcb76416b52b06_0
+                |-- 470ee6529a8b61f5_0
+                |-- 50c0104039c7e387_0
+                |-- 56acdfe6d40f956c_0
+                |-- 5b431e4070eea62a_0
+                |-- 62a395c63ad15148_0
+                |-- 63a03693d41340b8_0
+                |-- 6fac798883560960_0
+                |-- 7da5518af63d8f29_0
+                |-- 80a9afa7ec68f3d3_0
+                |-- 899159744b870c2c_0
+                |-- 9cb7b5b9fed60322_0
+                |-- 9fd71ae088ddd2da_0
+                |-- a1b214ca1fdb196e_0
+                |-- a2a2160e058dda54_0
+                |-- c794a3be40fc9c71_0
+                |-- c7a99b06574a480b_0
+                |-- c8209d2856e3985b_0
+                |-- d5f2b4b230f8af82_0
+                |-- db0b90ba1c0af5a5_0
+                |-- ec992d109f3bc981_0
+                |-- f7e8ba4bfcac8249_0
+                |-- f9c4e297c94fbc4f_0
+                |-- index
+                  |-- the-real-index
+            |-- 000003.log
+            |-- CURRENT
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- MANIFEST-000001
+            [DIR] index-dir
+            |-- 4798da83b46af1a6_0
+            |-- 4798da83b46af1a6_1
+            |-- 9b8b5b8f024626ac_0
+            |-- 9b8b5b8f024626ac_1
+            |-- index
+              |-- the-real-index
+          |-- 000003.log
+          |-- CURRENT
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- MANIFEST-000001
+          |-- Session_13418579545088913
+          |-- Tabs_13418731337898625
+          |-- Tabs_13418731832466644
+          [DIR] cache
+          |-- db
+          |-- db-journal
+            [DIR] index-dir
+            |-- index
+              |-- the-real-index
+          [DIR] metadata
+          |-- 000004.log
+          |-- 000005.ldb
+          |-- CURRENT
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- MANIFEST-000001
+            |-- 000003.log
+            |-- CURRENT
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- MANIFEST-000001
+          |-- 000003.log
+          |-- CURRENT
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- MANIFEST-000001
+          [DIR] LevelDB
+            |-- 000003.log
+            |-- CURRENT
+            |-- LOCK
+            |-- LOG
+            |-- LOG.old
+            |-- MANIFEST-000001
+          |-- LOCK
+          |-- LOG
+          |-- LOG.old
+          |-- QuotaManager
+          |-- QuotaManager-journal
+        |-- metadata.json
+        [DIR] DawnGraphiteCache
+        [DIR] GPUCache
+          [DIR] F64RCFYRS4FDMI2CJPKG3TSA5VMDN53F
+            |-- cache.db
+            |-- cache.db-wal
+            |-- cache.journal
+          [DIR] BQF4FFPHIIOPMBYL4EZVC45KV5AGJCZ6
+            |-- cache.db
+            |-- cache.db-wal
+            |-- cache.journal
+        |-- ukm_db
+        |-- ukm_db-wal
+        [DIR] Indexed Rules
+        [DIR] Unindexed Rules
+          [DIR] 37
+            [DIR] 9.65.0
+              |-- Ruleset Data
+          [DIR] 9.65.0
+            [DIR] _metadata
+            |-- Filtering Rules
+            |-- LICENSE.txt
+            |-- manifest.json
+              |-- verified_contents.json
+        [DIR] models
+          [DIR] en_es
+    [DIR] clinico
+    [DIR] inventario
+    [DIR] logos
+    [DIR] recetas
+    [DIR] vouchers
+      |-- PAC-1773972611424-390866986.png
+      |-- PAC-9-1773972998884-742284120.png
+      |-- PAC-9-1773973445947-794496892.png
+      |-- PAC-9-1773977261795-351077649.png
+      |-- PAC-9-1773977352431-240493354.png
+      |-- PAC-9-1774134014605-670538479.jpg
+      |-- PAC-9-1774134014795-200397999.JPG
+      |-- PAC-9-1774134015094-180069532.jpg
+      |-- PAC-9-1774134015236-798482158.jpg
+      |-- PAC-9-1774134015362-399906697.jpg
+      |-- PAC-9-1774134170293-119695032.JPG
+      |-- PAC-9-1774134170687-738370153.JPG
+      |-- PAC-9-1774134170814-76091968.JPG
+      |-- PAC-9-1774134170868-625244863.jpg
+      |-- PAC-9-1774134170983-870677045.jpg
+      |-- PAC-9-1774134171099-40174181.JPG
+      |-- clinica-0925484032001-1773992632353.png
+      |-- clinica-0925484032001-1773992649511.png
+      |-- finanza-1774092975243-668083500.png
+      |-- finanza-1774098637198-919108541.png
+      |-- finanza-1774103316497-432729535.png
+      |-- finanza-1774110868883-230313893.jpg
+      |-- VOUCHER-1773833986093-792472929.png
+      |-- VOUCHER-1773834841107-745453291.png
+      |-- VOUCHER-1773835011143-910411525.png
+      |-- VOUCHER-1773837728550-929641214.png
+      |-- VOUCHER-1773880926874-329882200.png
+      |-- VOUCHER-1773881566882-895530098.png
+      |-- VOUCHER-1773923418390-326916119.png
+      |-- VOUCHER-1773929259370-314821441.png
+      |-- VOUCHER-1773929966051-45042455.png
+      |-- VOUCHER-1773934180981-418278379.png
+      |-- VOUCHER-1773934710744-144418271.png
+      |-- VOUCHER-1774053388819-24614786.png
+      |-- VOUCHER-1774056216320-683919068.png
+      |-- VOUCHER-1774071718785-263548416.jpg
+      |-- VOUCHER-1774076639375-517679454.jpg
+      |-- VOUCHER-1774110568320-412990965.jpg
+PS C:\MedicinaEcuador_Project\Backend_NodeJS>

@@ -1,0 +1,135 @@
+name: Build macOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # ─────────────────────────────────────────
+      # BACKEND: instalar deps + ofuscar
+      # ─────────────────────────────────────────
+      - name: Instalar dependencias del backend (solo producción)
+        working-directory: Backend_NodeJS
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: npm ci --omit=dev
+
+      - name: Ofuscar backend
+        working-directory: Backend_NodeJS
+        run: npm run build:obfuscate
+
+      # ─────────────────────────────────────────
+      # FRONTEND: instalar deps + compilar DMG
+      # ─────────────────────────────────────────
+      - name: Instalar dependencias del frontend
+        working-directory: medicSystemcore
+        run: npm ci
+
+      - name: Convertir icon.ico → icon.icns (si no existe .icns)
+        working-directory: medicSystemcore/assets
+        run: |
+          if [ ! -f icon.icns ]; then
+            if [ -f icon.png ]; then
+              mkdir -p icon.iconset
+              sips -z 16   16   icon.png --out icon.iconset/icon_16x16.png
+              sips -z 32   32   icon.png --out icon.iconset/icon_16x16@2x.png
+              sips -z 32   32   icon.png --out icon.iconset/icon_32x32.png
+              sips -z 64   64   icon.png --out icon.iconset/icon_32x32@2x.png
+              sips -z 128  128  icon.png --out icon.iconset/icon_128x128.png
+              sips -z 256  256  icon.png --out icon.iconset/icon_128x128@2x.png
+              sips -z 256  256  icon.png --out icon.iconset/icon_256x256.png
+              sips -z 512  512  icon.png --out icon.iconset/icon_256x256@2x.png
+              sips -z 512  512  icon.png --out icon.iconset/icon_512x512.png
+              sips -z 1024 1024 icon.png --out icon.iconset/icon_512x512@2x.png
+              iconutil -c icns icon.iconset -o icon.icns
+              rm -rf icon.iconset
+              echo "icon.icns generado desde icon.png"
+            else
+              echo "AVISO: No se encontró icon.png ni icon.icns. El build usará el ícono por defecto de Electron."
+              sed -i '' '/"icon": "assets\/icon.icns"/d' ../package.json
+            fi
+          else
+            echo "icon.icns ya existe, se usa directamente."
+          fi
+
+      - name: Compilar DMG (x64 + arm64)
+        working-directory: medicSystemcore
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─────────────────────────────────────────
+      # BACKEND PKG: empaquetar instalador Mac
+      # ─────────────────────────────────────────
+      - name: Preparar estructura del PKG
+        run: |
+          mkdir -p pkg-root/Library/AmetraOS/backend
+          mkdir -p pkg-root/Library/Logs/AmetraOS
+
+          # Código ofuscado
+          cp -r Backend_NodeJS/dist/* pkg-root/Library/AmetraOS/backend/
+
+          # Dependencias de producción (compiladas para Mac en este runner)
+          cp -r Backend_NodeJS/node_modules pkg-root/Library/AmetraOS/backend/
+
+          # package.json lo necesita Node para resolver módulos
+          cp Backend_NodeJS/package.json pkg-root/Library/AmetraOS/backend/
+
+          # firmadormedico (sri.jar + JDK Mac si existe)
+          if [ -d "pkg-root/Library/AmetraOS/backend/services/firmadormedico" ]; then
+            echo "firmadormedico copiado por el ofuscador"
+          fi
+
+          # Estructura vacía de uploads (el servidor la crea si no existe, pero la dejamos)
+          mkdir -p pkg-root/Library/AmetraOS/backend/uploads
+
+      - name: Preparar scripts del PKG
+        run: |
+          mkdir -p pkg-scripts
+          cp Backend_NodeJS/installer/mac/preinstall.sh  pkg-scripts/preinstall
+          cp Backend_NodeJS/installer/mac/postinstall.sh pkg-scripts/postinstall
+          chmod +x pkg-scripts/preinstall pkg-scripts/postinstall
+
+      - name: Construir PKG del backend
+        run: |
+          pkgbuild \
+            --root pkg-root \
+            --scripts pkg-scripts \
+            --identifier com.casrodsoft.ametraos.backend \
+            --version 3.0.0 \
+            --install-location / \
+            AmetraOS-Backend-3.0.0.pkg
+
+      # ─────────────────────────────────────────
+      # ARTEFACTOS
+      # ─────────────────────────────────────────
+      - name: Subir DMG (app de escritorio)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmetraOS-Desktop-Mac
+          path: medicSystemcore/dist/*.dmg
+
+      - name: Subir PKG (instalador del backend)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmetraOS-Backend-Mac
+          path: AmetraOS-Backend-3.0.0.pkg
+
+      - name: Subir script de desinstalación
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmetraOS-Uninstall-Mac
+          path: Backend_NodeJS/installer/mac/uninstall.sh

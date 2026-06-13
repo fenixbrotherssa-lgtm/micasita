@@ -1,0 +1,158 @@
+<div class="facturacion-container-wrapper" style="animation: fadeIn 0.5s ease; padding: 25px; background: #f1f5f9; min-height: 100vh; font-family: 'Inter', sans-serif;">
+    
+    <!-- HEADER CON BOTÓN DE RETORNO GLOBAL -->
+    <header class="module-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <button onclick="window.router.load('dashboard')" 
+                style="background: #4f46e5; color: white; border: none; width: 50px; height: 50px; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);"
+                onmouseover="this.style.transform='translateY(-2px)';" 
+                onmouseout="this.style.transform='translateY(0)';"
+                title="Regresar al Dashboard">
+                <i class="fas fa-arrow-left" style="font-size: 1.2rem;"></i>
+            </button>
+            <div>
+                <h1 style="font-size: 24px; font-weight: 800; color: #1e293b; margin: 0;">Facturación y Comprobantes</h1>
+                <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Gestión de firmas electrónicas y documentos legales SRI</p>
+            </div>
+        </div>
+        
+        <div class="header-actions">
+            <button class="btn-action" onclick="facturacionModule.abrirFacturaManual()" 
+                style="background: #059669; color: white; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; transition: 0.3s; margin-right: 10px;">
+                <i class="fas fa-file-invoice-dollar"></i> Factura Manual
+            </button>
+            <button class="btn-action" onclick="facturacionModule.abrirModalCertificado()" 
+                style="background: #4f46e5; color: white; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; transition: 0.3s;">
+                <i class="fas fa-key"></i> Gestionar Firmas .p12
+            </button>
+        </div>
+    </header>
+
+    <div class="facturacion-grid" style="display: grid; grid-template-columns: 350px 1fr; gap: 25px;">
+        
+        <!-- PANEL IZQUIERDO: ESTADOS -->
+        <aside class="panel-info">
+            <div class="card-glass" style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+                <h3 style="font-size: 16px; font-weight: 700; color: #334155; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-shield-alt" style="color: #10b981;"></i> Firma Activa
+                </h3>
+                <div id="firma-activa-status" class="status-box" style="padding: 20px; border-radius: 15px; background: #f8fafc; border-left: 5px solid #10b981;">
+                    <!-- Renderizado dinámico desde facturacionModule.cargarCertificados() -->
+                </div>
+
+                <div class="mt-20" style="margin-top: 25px;">
+                    <h3 style="font-size: 16px; font-weight: 700; color: #334155; margin-bottom: 15px;">Acciones Rápidas</h3>
+                    <div class="action-buttons" style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="btn-outline-custom" onclick="facturacionModule.imprimirUltimoRecibo()">
+                            <i class="fas fa-receipt"></i> Imprimir Último Recibo
+                        </button>
+                        <button class="btn-outline-custom" onclick="facturacionModule.consultarEstadoSRI()">
+                            <i class="fas fa-sync"></i> Consultar Estado SRI
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- PANEL DERECHO: TABLA -->
+        <main class="panel-table">
+            <div class="table-container" style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="font-size: 18px; font-weight: 800; color: #1e293b; margin: 0;">Historial de Comprobantes</h3>
+                    <div class="filters">
+                        <select id="filtro-tipo-doc" onchange="facturacionModule.cargarHistorial()" 
+                            style="padding: 10px 15px; border-radius: 10px; border: 2px solid #f1f5f9; background: #f8fafc; font-weight: 600; color: #475569; outline: none;">
+                            <option value="01">Facturas Electrónicas</option>
+                            <option value="04">Notas de Crédito</option>
+                            <option value="00">Recibos de Consultorio</option>
+                        </select>
+                    </div>
+                </div>
+
+                <table class="modern-table-factura" style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #f1f5f9;">
+                            <th style="padding: 15px; color: #64748b; font-size: 12px; text-transform: uppercase;">Fecha</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 12px; text-transform: uppercase;">Nro. Documento</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 12px; text-transform: uppercase;">Paciente</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 12px; text-transform: uppercase;">Total</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 12px; text-transform: uppercase;">Estado</th>
+                            <th style="padding: 15px; color: #64748b; font-size: 12px; text-transform: uppercase;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-comprobantes">
+                        <!-- Renderizado dinámico desde facturacionModule.cargarHistorial() -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL DE GESTIÓN DE FIRMA (AQUÍ ESTÁ LA CLAVE DEL ARREGLO) -->
+    <div id="modal-certificado" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+        <div class="modal-content" style="background: white; padding: 30px; border-radius: 20px; width: 450px; position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2 style="margin: 0; font-size: 20px; color: #1e293b;">Vincular Firma Electrónica</h2>
+                <span style="cursor: pointer; font-size: 28px; color: #64748b;" onclick="facturacionModule.cerrarModal()">&times;</span>
+            </div>
+            
+            <form id="form-p12" onsubmit="facturacionModule.subirP12(event)">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px;">Nombre Identificador</label>
+                    <input type="text" id="nombre-p12" required placeholder="Ej: Firma Principal 2026" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; outline: none;">
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px;">Archivo de Firma (.p12)</label>
+                    <input type="file" id="archivo-p12" accept=".p12" required style="width: 100%; font-size: 14px;">
+                </div>
+                
+                <div style="margin-bottom: 25px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px;">Contraseña del Archivo</label>
+                    <input type="password" id="pass-p12" required placeholder="Ingrese la clave del certificado" style="width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; outline: none;">
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                    <button type="button" onclick="facturacionModule.cerrarModal()" style="padding: 12px 20px; border-radius: 10px; border: 1px solid #e2e8f0; background: white; color: #64748b; font-weight: 600; cursor: pointer;">Cancelar</button>
+                    <button type="submit" style="padding: 12px 25px; border-radius: 10px; border: none; background: #4f46e5; color: white; font-weight: 700; cursor: pointer;">Guardar Firma</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+<style>
+    .btn-outline-custom {
+        width: 100%;
+        padding: 14px 18px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        color: #475569;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: 0.3s;
+    }
+    .btn-outline-custom:hover {
+        background: #eff6ff;
+        border-color: #4f46e5;
+        color: #4f46e5;
+        transform: translateX(5px);
+    }
+    .modern-table-factura td {
+        padding: 15px;
+        color: #1e293b;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .modern-table-factura tbody tr:hover { background: #f8fafc; }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>

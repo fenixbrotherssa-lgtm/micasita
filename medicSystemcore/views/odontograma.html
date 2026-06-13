@@ -1,0 +1,512 @@
+﻿<style>
+:root {
+    --medical-blue: #3b82f6; --medical-red: #ef4444; --medical-green: #10b981;
+    --medical-gold: #f59e0b; --medical-purple: #a855f7; --medical-cyan: #22d3ee;
+    --dark-slate: #1e293b; --border-soft: #cbd5e1; --bg-card: #0f172a;
+}
+
+.odo-container {
+    background: #fff; border-radius: 24px; padding: 35px;
+    box-shadow: 0 25px 60px rgba(0,0,0,.1); max-width: 1300px; margin: auto; font-family: 'Inter', sans-serif;
+}
+
+.odo-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 30px; border-bottom: 1px solid #f1f5f9; padding-bottom: 20px;
+}
+
+/* TOOLBAR Y SUBMENÚS */
+.toolbar-odo {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 20px; border: 1px solid #e2e8f0;
+}
+
+.tool-group { position: relative; display: inline-block; }
+
+.submenu-odo {
+    display: none; position: absolute; top: 100%; left: 50%;
+    transform: translateX(-50%); background: white; min-width: 200px; 
+    box-shadow: 0 15px 35px rgba(0,0,0,0.2); border-radius: 12px;
+    z-index: 999; padding: 8px; border: 1px solid #e2e8f0;
+}
+
+.tool-group::after { content: ""; position: absolute; top: 100%; left: 0; width: 100%; height: 15px; }
+.tool-group:hover .submenu-odo { display: block; animation: fadeInOdo 0.2s ease; }
+
+@keyframes fadeInOdo {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.submenu-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px; 
+    text-align: left; border: none; background: none; cursor: pointer; 
+    border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--dark-slate);
+    transition: background 0.2s;
+}
+.submenu-item:hover { background: #f1f5f9; color: var(--medical-blue); }
+
+.btn-tool-odo {
+    border: 2px solid transparent; padding: 12px 18px; border-radius: 12px;
+    color: #fff; font-weight: 700; cursor: pointer; transition: all .2s;
+    font-size: 14px; display: flex; align-items: center; gap: 8px;
+}
+
+.btn-tool-odo:hover { transform: translateY(-2px); }
+.active-tool { border-color: #1e293b !important; box-shadow: 0 0 15px rgba(0,0,0,0.15); transform: scale(1.05); }
+
+/* ESTADOS VISUALES SVG Y CAPAS */
+.arcada-wrapper { background: #ffffff; padding: 20px; border-radius: 20px; }
+.cuadrante-row { display: flex; justify-content: center; gap: 40px; margin-bottom: 20px; }
+.cuadrante { display: flex; gap: 5px; }
+
+.diente-unit { text-align: center; position: relative; padding: 5px; border-radius: 10px; transition: all 0.3s; }
+.diente-label { font-size: 12px; font-weight: 800; color: #475569; margin-bottom: 5px; }
+
+/* ENVOLTORIO PARA SUPERPOSICIÓN EXACTA */
+.diente-capas {
+    position: relative;
+    width: 60px;
+    height: 60px;
+    margin: 0 auto;
+}
+
+.diente-img {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    z-index: 1;
+    pointer-events: none; /* Vital: los clics pasan directo al SVG */
+    transition: opacity 0.3s ease;
+}
+
+.diente-svg {
+    position: relative;
+    width: 100%; height: 100%;
+    z-index: 2;
+    cursor: crosshair;
+}
+
+/* CARA BASE TRANSPARENTE PARA DEJAR VER LA IMAGEN */
+.cara-odo { 
+    fill: transparent; 
+    stroke: #94a3b8; 
+    stroke-width: 1.5; 
+    transition: fill 0.2s, stroke 0.2s; 
+}
+
+.cara-odo:hover {
+    fill: rgba(255, 255, 255, 0.3); /* Feedback visual suave al pasar el mouse */
+}
+
+/* CLASES DE ESTADO (Patologías cubren la imagen) */
+.caries { fill: var(--medical-red) !important; }
+.fractura { fill: var(--medical-red) !important; stroke: #fff; stroke-dasharray: 2; }
+.resina { fill: var(--medical-blue) !important; }
+.carilla_resina { fill: #e0f2fe !important; stroke: var(--medical-blue) !important; stroke-width: 2; }
+.carilla_porcelana { fill: #f0f9ff !important; stroke: var(--medical-cyan) !important; stroke-width: 2.5; }
+.corona { fill: var(--medical-gold) !important; }
+.protesis_fija { fill: var(--medical-green) !important; }
+.protesis_removible { fill: #065f46 !important; }
+.endodoncia { fill: var(--medical-purple) !important; }
+.sellante { fill: var(--medical-cyan) !important; }
+.raiz { fill: #7c2d12 !important; }
+.extraer { fill: #000 !important; }
+
+/* CAPAS ESPECIALES */
+.periodontitis-total { background: rgba(239, 68, 68, 0.15); border: 1px dashed var(--medical-red); border-radius: 10px; }
+
+/* SUPERNUMERARIO: S con círculo sobre el diente */
+.supernumerario-total::after {
+    content: "S";
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 22px;
+    height: 22px;
+    background: white;
+    border: 2px solid var(--medical-green);
+    color: var(--medical-green);
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.is-sanado { stroke: #2563eb !important; stroke-width: 3.5 !important; }
+.ausente-total .cara-odo { fill: #e2e8f0 !important; opacity: 0.3; }
+.ortodoncia-total { filter: drop-shadow(0 0 3px #6366f1); stroke: #6366f1; stroke-width: 2; }
+
+/* PANEL DETALLES - Se añade min-height para estabilizar contenedor */
+.odo-card {
+    display: none; width: 100%; background: var(--bg-card); color: #fff;
+    border-radius: 20px; padding: 20px; margin-top: 25px; border: 1px solid rgba(255,255,255,0.1);
+    min-height: 160px;
+}
+.odo-card.show { display: block; animation: slideUp 0.3s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* SCROLLBAR CUSTOM PARA HISTORIAL - Evita que rompa tu diseño oscuro */
+#odo-historial::-webkit-scrollbar { width: 6px; }
+#odo-historial::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); border-radius: 4px; }
+#odo-historial::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+#odo-historial::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.4); }
+
+.btn-guardar-odo {
+    background: linear-gradient(135deg, #059669, #10b981); color: #fff; padding: 18px;
+    width: 100%; border-radius: 15px; border: none; margin-top: 20px; font-weight: 800; cursor: pointer;
+    box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);
+}
+/* Ajuste para Dentición Mixta */
+.cuadrante.modo-mixto {
+    display: flex;
+    flex-direction: column; /* Apila permanentes y temporales */
+    gap: 15px;
+}
+
+.fila-dientes {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+}
+
+/* Reducir un poco el tamaño en modo mixto para que quepa todo */
+.modo-mixto .diente-unit {
+    transform: scale(0.85);
+    margin: -5px;
+}
+
+/* NUEVA ZONA: REPRESENTACION 2D DE LA RAIZ */
+.zona-raiz {
+    width: 100%; height: 12px; margin-bottom: 3px; border-radius: 4px;
+    background: #f1f5f9; border: 1px dashed #cbd5e1; cursor: crosshair;
+    transition: all 0.2s; font-size: 8px; color: #94a3b8;
+    display: flex; align-items: center; justify-content: center; font-weight: 800;
+}
+.zona-raiz:hover { background: #e2e8f0; }
+.zona-raiz.is-sanado { border: 2px solid #2563eb !important; }
+.zona-raiz.caries { background: var(--medical-red); border: none; color: transparent; }
+.zona-raiz.fractura { background: var(--medical-red); border: 2px dashed #fff; color: transparent; }
+.zona-raiz.endodoncia { background: var(--medical-purple); border: none; color: transparent; }
+.zona-raiz.raiz { background: #7c2d12; border: none; color: transparent; }
+</style>
+
+<div class="odo-container">
+    <div class="odo-header">
+        <div>
+            <h2 style="margin:0; color:var(--dark-slate);">Odontograma Pro</h2>
+            <div id="paciente_nombre_odo" style="color:var(--medical-blue); font-weight:700;">Cargando...</div>
+        </div>
+        <button class="btn-tool-odo" style="background:#f1f5f9; color: #475569;" onclick="window.router.load('pacientes')">
+            <i class="fas fa-times"></i> Salir
+        </button>
+    </div>
+
+    <div class="toolbar-odo">
+        <button class="btn-tool-odo" style="background:var(--medical-red)" onclick="setToolOdo('Caries',this)">Caries</button>
+        <button class="btn-tool-odo" style="background:var(--medical-red); border:2px dashed white" onclick="setToolOdo('Fractura',this)">Frac.</button>
+        <button class="btn-tool-odo" style="background:var(--medical-blue)" onclick="setToolOdo('Resina',this)">Resina</button>
+        
+        <div class="tool-group">
+            <button class="btn-tool-odo" style="background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1">
+                Carillas <i class="fas fa-chevron-down" style="font-size:10px; margin-left:5px"></i>
+            </button>
+            <div class="submenu-odo">
+                <button class="submenu-item" onclick="setToolOdo('Carilla_Resina', this)">
+                    <span style="width:12px; height:12px; background:#e0f2fe; border:1px solid #3b82f6; border-radius:2px"></span> Carilla Resina
+                </button>
+                <button class="submenu-item" onclick="setToolOdo('Carilla_Porcelana', this)">
+                    <span style="width:12px; height:12px; background:#f0f9ff; border:2px solid #22d3ee; border-radius:2px"></span> Carilla Porcelana
+                </button>
+            </div>
+        </div>
+
+        <button class="btn-tool-odo" style="background:var(--medical-gold)" onclick="setToolOdo('Corona',this)">Corona</button>
+
+        <div class="tool-group">
+            <button class="btn-tool-odo" style="background:var(--medical-green)">
+                Prótesis <i class="fas fa-chevron-down" style="font-size:10px; margin-left:5px"></i>
+            </button>
+            <div class="submenu-odo">
+                <button class="submenu-item" onclick="setToolOdo('Protesis_Fija', this)">🦷 P. Fija</button>
+                <button class="submenu-item" onclick="setToolOdo('Protesis_Removible', this)">🔄 P. Removible</button>
+            </div>
+        </div>
+
+        <button class="btn-tool-odo" style="background:var(--medical-purple)" onclick="setToolOdo('Endodoncia',this)">Endo.</button>
+        <button class="btn-tool-odo" style="background:var(--medical-cyan)" onclick="setToolOdo('Sellante',this)">Sellante</button>
+        <button class="btn-tool-odo" style="background:var(--medical-red); opacity:0.8" onclick="setToolOdo('Periodontitis',this)">Periodon.</button>
+        <button class="btn-tool-odo" style="background:var(--medical-green); border:2px solid white" onclick="setToolOdo('Supernumerario',this)">Supern.</button>
+        
+        <button class="btn-tool-odo" style="background:#6366f1" onclick="setToolOdo('Ortodoncia',this)">Brackets</button>
+        <button class="btn-tool-odo" style="background:var(--dark-slate)" onclick="setToolOdo('Ausente',this)">Ausente</button>
+        <button class="btn-tool-odo" style="background:#7c2d12" onclick="setToolOdo('Raiz',this)">Raíz</button>
+        <button class="btn-tool-odo" style="background:#000" onclick="setToolOdo('Extraer',this)">Ext.</button>
+        <button class="btn-tool-odo" style="background:#94a3b8" onclick="setToolOdo('Limpiar',this)"><i class="fas fa-eraser"></i></button>
+    </div>
+
+    <div class="arcada-wrapper">
+        <div class="cuadrante-row">
+            <div id="cuadrante-1" class="cuadrante"></div>
+            <div style="width:2px; background:#f1f5f9"></div>
+            <div id="cuadrante-2" class="cuadrante"></div>
+        </div>
+        <div class="cuadrante-row">
+            <div id="cuadrante-4" class="cuadrante"></div>
+            <div style="width:2px; background:#f1f5f9"></div>
+            <div id="cuadrante-3" class="cuadrante"></div>
+        </div>
+    </div>
+
+    <button class="btn-guardar-odo" onclick="guardarOdontograma()">
+        <i class="fas fa-save"></i> GUARDAR CAMBIOS CLÍNICOS
+    </button>
+
+   <div id="odo-card" class="odo-card">
+    <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+            <h3 id="odo-title" style="margin:0; font-size:18px;">Pieza</h3>
+            <div id="odo-info" style="font-size:13px; color:var(--medical-blue); margin-top:5px;"></div>
+        </div>
+        <span id="odo-badge" style="padding:4px 10px; border-radius:10px; font-size:10px; font-weight:800"></span>
+    </div>
+    <div id="odo-historial" style="margin-top:15px; display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; max-height:140px; overflow-y:auto; padding-right:5px; align-content:start;"></div>
+</div>
+
+<div id="visor-3d-container" style="width: 100%; height: 500px; background: #0f172a; border-radius: 20px; margin: 30px 0; position: relative; overflow: hidden; border: 1px solid #1e293b;">
+    <div id="loading-visor" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #3b82f6; font-family: 'Inter', sans-serif;">
+        <i class="fas fa-spinner fa-spin"></i> CARGANDO VISTA CLÍNICA 3D...
+    </div>
+</div>
+
+</div> 
+<script src="/js/three.min.js"></script>
+<script src="/js/GLTFLoader.js"></script>
+<script src="/js/OrbitControls.js"></script>
+
+<script>
+// ==========================================
+// ESTADO GLOBAL (HTML INLINE VERSION FALLBACK)
+// ==========================================
+window.odontogramaState = window.odontogramaState || { 
+    data: {}, 
+    currentTool: null, 
+    tipoPaciente: 'adulto' 
+};
+
+// Sincronizado con patologias de MSP Ecuador
+const HALLAZGOS_INICIALES = ['Caries', 'Fractura', 'Ausente', 'Raiz', 'Extraer', 'Periodontitis', 'Ortodoncia', 'Supernumerario'];
+
+window.odontogramaModule = window.odontogramaModule || {
+    init: async function(id) {
+        if (!id) return;
+        try {
+            window.odontogramaState.data = {};
+            const res = await window.api.get(`/odontograma/${id}`);
+            if (!res || !res.perfil) return;
+
+            document.getElementById('paciente_nombre_odo').innerText = `Paciente: ${res.perfil.Nombres} ${res.perfil.Apellidos || ""}`;
+            const edad = parseInt(res.perfil.Edad || 20);
+            window.odontogramaState.tipoPaciente = (edad < 12) ? 'nino' : 'adulto';
+
+            this.renderizar();
+            this.pintar(res.hallazgos);
+        } catch (e) { console.error("Error al iniciar odontograma:", e); }
+    },
+
+    renderizar: function() {
+        const t = window.odontogramaState.tipoPaciente;
+        const config = {
+            'cuadrante-1': t === 'nino' ? [55,54,53,52,51] : [18,17,16,15,14,13,12,11],
+            'cuadrante-2': t === 'nino' ? [61,62,63,64,65] : [21,22,23,24,25,26,27,28],
+            'cuadrante-3': t === 'nino' ? [71,72,73,74,75] : [31,32,33,34,35,36,37,38],
+            'cuadrante-4': t === 'nino' ? [85,84,83,82,81] : [48,47,46,45,44,43,42,41]
+        };
+        for (let c in config) {
+            const div = document.getElementById(c);
+            if (div) div.innerHTML = config[c].map(n => `
+                <div class="diente-unit" id="unit-${n}" onmouseenter="window.mostrarCardDiente('${n}')">
+                    <div class="diente-label">${n}</div>
+                    <div class="zona-raiz" data-cara="Raiz" onclick="window.marcarCara(this)" title="Raíz (R)">R</div>
+                    <div class="diente-capas">
+                        <img src="assets/dientes/${n}.png" class="diente-img" alt="Pieza ${n}" onerror="this.style.display='none'">
+                        <svg viewBox="0 0 100 100" class="diente-svg" data-diente-id="${n}">
+                            <polygon class="cara-odo" data-cara="Superior" points="0,0 100,0 75,25 25,25" onclick="window.marcarCara(this)" />
+                            <polygon class="cara-odo" data-cara="Derecha" points="100,0 100,100 75,75 75,25" onclick="window.marcarCara(this)" />
+                            <polygon class="cara-odo" data-cara="Inferior" points="100,100 0,100 25,75 75,75" onclick="window.marcarCara(this)" />
+                            <polygon class="cara-odo" data-cara="Izquierda" points="0,0 0,100 25,75 25,25" onclick="window.marcarCara(this)" />
+                            <polygon class="cara-odo" data-cara="Centro" points="25,25 75,25 75,75 25,75" onclick="window.marcarCara(this)" />
+                        </svg>
+                    </div>
+                </div>`).join('');
+        }
+    },
+
+   
+
+window.marcarCara = window.marcarCara || function(el) {
+    const tool = window.odontogramaState.currentTool;
+    const unit = el.closest('.diente-unit');
+    const svg = unit.querySelector('.diente-svg');
+    if (!tool || !svg) return;
+
+    const clase = tool.toLowerCase().replace(/ /g, '_');
+    const img = unit.querySelector('.diente-img');
+
+    if (tool === 'Limpiar') {
+        svg.classList.remove('ausente-total', 'ortodoncia-total');
+        unit.classList.remove('periodontitis-total', 'supernumerario-total');
+        svg.querySelectorAll('.cara-odo').forEach(c => c.setAttribute('class', 'cara-odo'));
+        unit.querySelectorAll('.zona-raiz').forEach(z => z.className = 'zona-raiz');
+        if(img) img.style.opacity = '1';
+
+        const numDiente = svg.getAttribute('data-diente-id');
+        const historial = window.odontogramaState.data[numDiente] || [];
+        historial.forEach(h => {
+             if (h.Estado === 'Ausente') {
+                svg.classList.add('ausente-total');
+                if(img) img.style.opacity = '0.15';
+             }
+        });
+
+    } else if (tool === 'Periodontitis') {
+        unit.classList.add('periodontitis-total');
+    } else if (tool === 'Supernumerario') {
+        unit.classList.add('supernumerario-total');
+    } else if (tool === 'Ausente' || tool === 'Ortodoncia') {
+        svg.classList.add(tool.toLowerCase() + '-total');
+        if (tool === 'Ausente' && img) img.style.opacity = '0.15';
+    } else {
+        svg.classList.remove('ausente-total', 'ortodoncia-total');
+        if(img) img.style.opacity = '1';
+
+        const esEvol = !HALLAZGOS_INICIALES.includes(tool);
+        
+        if (el.classList.contains('zona-raiz')) {
+            el.className = `zona-raiz ${clase} ${esEvol ? 'is-sanado' : ''}`;
+        } else {
+            el.setAttribute('class', `cara-odo ${clase} ${esEvol ? 'is-sanado' : ''}`);
+        }
+    }
+};
+
+window.setToolOdo = window.setToolOdo || function(tool, btn) {
+    window.odontogramaState.currentTool = tool;
+    document.querySelectorAll('.btn-tool-odo, .submenu-item').forEach(b => b.classList.remove('active-tool'));
+    if(btn) {
+        btn.classList.add('active-tool');
+        const parentGroup = btn.closest('.tool-group');
+        if (parentGroup) parentGroup.querySelector('.btn-tool-odo').classList.add('active-tool');
+    }
+};
+
+window.mostrarCardDiente = window.mostrarCardDiente || function(id) {
+    const card = document.getElementById('odo-card');
+    const historial = window.odontogramaState.data[id] || [];
+    card.classList.add('show');
+    document.getElementById('odo-title').innerText = `Pieza ${id}`;
+    
+    const tienePat = historial.some(h => HALLAZGOS_INICIALES.includes(h.Estado) && h.Tipo_Registro !== 'Evolucion');
+    const badge = document.getElementById('odo-badge');
+    badge.innerText = tienePat ? "PATOLOGÍA ACTIVA" : "PIEZA SANA";
+    badge.style.background = tienePat ? "var(--medical-red)" : "var(--medical-green)";
+
+    document.getElementById('odo-historial').innerHTML = historial.map(h => `
+        <div style="border-left:4px solid ${h.Tipo_Registro === 'Evolucion' ? 'var(--medical-blue)' : 'var(--medical-red)'}; padding:8px 12px; background:rgba(255,255,255,0.05); border-radius:8px;">
+            <div style="font-weight:bold; font-size:12px; color:#fff">${h.Estado.replace(/_/g, ' ')}</div>
+            <div style="font-size:10px; color:#94a3b8; margin-top:2px">${h.Cara_Diente} | ${h.Fecha ? new Date(h.Fecha).toLocaleDateString() : 'Nuevo Registro'}</div>
+        </div>`).join('') || '<div style="color:#64748b; font-size:12px; padding:10px">Sin antecedentes registrados.</div>';
+};
+
+window.guardarOdontograma = window.guardarOdontograma || function() {
+    const idPac = window.router?.currentPatientId;
+    const sesion = JSON.parse(localStorage.getItem('usuario_sesion') || '{}');
+    const idUser = sesion.ID_Usuario || 1;
+    const hallazgos = [];
+    
+    const estadosPosibles = ['caries', 'resina', 'carilla_resina', 'carilla_porcelana', 'corona', 'protesis_fija', 'protesis_removible', 'endodoncia', 'sellante', 'fractura', 'raiz', 'extraer'];
+
+    document.querySelectorAll('.diente-unit').forEach(unit => {
+        const svg = unit.querySelector('.diente-svg');
+        const num = svg.getAttribute('data-diente-id');
+
+        if (unit.classList.contains('periodontitis-total')) 
+            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Periodontitis', idUser));
+        
+        if (unit.classList.contains('supernumerario-total')) 
+            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Supernumerario', idUser));
+
+        if (svg.classList.contains('ausente-total')) 
+            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Ausente', idUser));
+        else if (svg.classList.contains('ortodoncia-total'))
+            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Ortodoncia', idUser));
+        else {
+            svg.querySelectorAll('.cara-odo').forEach(cara => {
+                const cls = cara.getAttribute('class') || '';
+                const estFound = estadosPosibles.find(e => cls.includes(e));
+                if (estFound) {
+                    const estNom = estFound.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    const tipoReg = cls.includes('is-sanado') ? 'Evolucion' : 'Inicial';
+                    hallazgos.push({
+                        id_paciente: parseInt(idPac),
+                        numero_diente: parseInt(num),
+                        cara_diente: cara.getAttribute('data-cara'),
+                        estado: estNom,
+                        tipo_registro: tipoReg,
+                        id_usuario: idUser,
+                        observaciones: ""
+                    });
+                }
+            });
+
+            unit.querySelectorAll('.zona-raiz').forEach(z => {
+                const cls = z.className || '';
+                const estFound = estadosPosibles.find(e => cls.includes(e));
+                if (estFound) {
+                    const estNom = estFound.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    const tipoReg = cls.includes('is-sanado') ? 'Evolucion' : 'Inicial';
+                    hallazgos.push({
+                        id_paciente: parseInt(idPac),
+                        numero_diente: parseInt(num),
+                        cara_diente: 'Raiz',
+                        estado: estNom,
+                        tipo_registro: tipoReg,
+                        id_usuario: idUser,
+                        observaciones: ""
+                    });
+                }
+            });
+        }
+    });
+
+    if (!hallazgos.length) return Swal.fire("Atención", "No hay cambios para registrar.", "info");
+
+    window.api.post('/odontograma/guardar', { hallazgos }).then(res => {
+        if (res.status === "Success") {
+            Swal.fire("Éxito", "Odontograma actualizado correctamente", "success");
+            window.odontogramaModule.init(idPac);
+        }
+    }).catch((err) => Swal.fire("Error", "Error al sincronizar datos: " + err.message, "error"));
+};
+
+function crearObjetoHallazgo(idPac, num, cara, estado, idUser) {
+    return {
+        id_paciente: parseInt(idPac),
+        numero_diente: parseInt(num),
+        cara_diente: cara,
+        estado: estado,
+        tipo_registro: HALLAZGOS_INICIALES.includes(estado) ? 'Inicial' : 'Evolucion',
+        id_usuario: idUser,
+        observaciones: ""
+    };
+}
+
+if(window.router?.currentPatientId) {
+    window.odontogramaModule.init(window.router.currentPatientId);
+}
+</script>

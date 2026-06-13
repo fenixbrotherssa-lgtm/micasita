@@ -1,0 +1,829 @@
+<div class="nav-header" style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 25px;">
+    
+    <!-- LADO IZQUIERDO: Navegación -->
+    <div class="nav-left" style="display: flex; align-items: center; gap: 15px; flex: 1;">
+        <button onclick="router.load('pacientes')" 
+            style="background: #4f46e5; color: white; border: none; width: 50px; height: 50px; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3); outline: none;"
+            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 15px rgba(79, 70, 229, 0.4)';" 
+            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 10px rgba(79, 70, 229, 0.3)';"
+            title="Volver a Lista">
+            <i class="fas fa-arrow-left" style="font-size: 1.2rem;"></i>
+        </button>
+        <span style="font-weight: 700; color: #1e293b; font-size: 1.1rem;">Volver a Lista</span>
+    </div>
+
+    <!-- CENTRO: Título y Estado -->
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+        <div class="nav-title" style="font-weight: 800; color: #1e293b; font-size: 1.3rem; text-transform: uppercase;">Expediente Clínico</div>
+        <div class="status-pill" style="background: #e0f2fe; color: #0369a1; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; border: 1px solid #bae6fd;">
+            <i class="fas fa-circle" style="font-size: 0.5rem; margin-right: 5px; vertical-align: middle;"></i> CONSULTA ACTIVA
+        </div>
+    </div>
+
+    <!-- LADO DERECHO: Acciones -->
+    <div style="display: flex; justify-content: flex-end; flex: 1;">
+        <button onclick="window.imprimirExpedienteCompleto()" 
+            style="background: #1e1b4b; color: white; border: none; padding: 12px 20px; border-radius: 12px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; transition: 0.3s; box-shadow: 0 4px 10px rgba(30, 27, 75, 0.2);">
+            <i class="fas fa-print"></i> Imprimir Historia Completa
+        </button>
+    </div>
+
+</div>
+
+
+    <div class="grid-layout">
+        <div class="main-content">
+           <div class="info-card">
+    <div class="card-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+       Identificación del Paciente
+    </div>
+    <div class="patient-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+        
+        <div class="data-group" style="grid-column: span 3; width: 100%;">
+    <label style="font-weight: bold;">Nombre Completo</label>
+    <input type="text" id="paciente_nombre" readonly 
+           style="width: 100%; 
+                  font-size: 1.1rem; 
+                  font-weight: 700; 
+                  border: none; 
+                  background: #f8fafc; 
+                  padding: 8px 12px;">
+</div>
+
+        <div class="data-group">
+            <label>DNI / Cédula</label>
+            <input type="text" id="paciente_dni" readonly>
+        </div>
+        <div class="data-group">
+            <label>Género</label>
+            <input type="text" id="paciente_genero" readonly>
+        </div>
+        <div class="data-group">
+            <label>N° Historia</label>
+            <input type="text" id="paciente_num_historia" readonly style="font-weight: 800; color: #1e40af;">
+        </div>
+
+        <div class="data-group">
+            <label>Fecha de Nacimiento</label>
+            <input type="text" id="paciente_fecha_nac" readonly>
+        </div>
+        <div class="data-group">
+            <label>Edad</label>
+            <input type="text" id="paciente_edad" readonly>
+        </div>
+        <div class="data-group">
+            <label>Etnia</label>
+            <input type="text" id="paciente_etnia" readonly>
+        </div>
+
+        <div class="data-group">
+            <label>Provincia</label>
+            <input type="text" id="paciente_provincia" readonly>
+        </div>
+        <div class="data-group">
+            <label>Cantón</label>
+            <input type="text" id="paciente_canton" readonly>
+        </div>
+        <div class="data-group">
+            <label>Parroquia</label>
+            <input type="text" id="paciente_parroquia" readonly>
+        </div>
+
+        <div class="data-group">
+            <label>Instrucción (Último Año)</label>
+            <input type="text" id="paciente_instruccion" readonly>
+        </div>
+        <div class="data-group">
+            <label>Ocupación</label>
+            <input type="text" id="paciente_ocupacion" readonly>
+        </div>
+        <div class="data-group">
+            <label>Estado Civil</label>
+            <input type="text" id="paciente_estado_civil" readonly>
+        </div>
+
+        <div class="data-group">
+            <label>Tipo Sanguíneo</label>
+            <input type="text" id="paciente_sangre" readonly>
+        </div>
+        <div class="data-group">
+            <label>Lugar de Nacimiento</label>
+            <input type="text" id="paciente_lugar_nacimiento" readonly>
+        </div>
+        <div class="data-group">
+            <label>Teléfono</label>
+            <input type="text" id="paciente_telefono" readonly>
+        </div>
+
+        <div class="data-group" style="grid-column: span 3;">
+            <label>Correo Electrónico</label>
+            <input type="text" id="paciente_email" readonly>
+        </div>
+
+        <div class="data-group" style="grid-column: span 3; margin-top: 10px; border-top: 1px solid #eee; pt: 10px;">
+            <label style="color: #b91c1c; font-weight: bold;">En Caso de Emergencia Avisar a:</label>
+        </div>
+        <div class="data-group">
+            <label>Nombre de Contacto</label>
+            <input type="text" id="paciente_em_nombre" readonly>
+        </div>
+        <div class="data-group">
+            <label>Parentesco</label>
+            <input type="text" id="paciente_em_parentesco" readonly>
+        </div>
+        <div class="data-group">
+            <label>Teléfono Contacto</label>
+            <input type="text" id="paciente_em_tel" readonly>
+        </div>
+    </div>
+</div>
+
+            <div class="info-card medical-alert">
+                <div class="card-title" style="color: #dc2626;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    Alertas Médicas y Anamnesis
+                </div>
+                <div class="anamnesis-content">
+                    <div class="area-group"><label>Alergias Conocidas</label><textarea id="paciente_alergias"></textarea></div>
+                    <div class="area-group"><label>Enfermedades Sistémicas</label><textarea id="paciente_enfermedades"></textarea></div>
+                    <div class="area-group"><label>Medicamentos Actuales</label><textarea id="paciente_medicamentos"></textarea></div>
+                    <div class="area-group"><label>Cirugías Previas</label><textarea id="paciente_cirugias"></textarea></div>
+                    <div class="area-group"><label>Observaciones Adicionales</label><textarea id="paciente_observaciones"></textarea></div>
+                </div>
+                <button class="btn-save-clinical" onclick="window.guardarCambiosClinicos()">
+                    Guardar Antecedentes Médicos
+                </button>
+            </div>
+<!-- ========================= -->
+<!-- MSP 033 - SIGNOS VITALES -->
+<!-- ========================= -->
+<div class="info-card">
+    <div class="card-title" style="color:#0ea5e9;">
+        🫀 Signos Vitales (MSP 033)
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:15px;">
+        <div class="input-group">
+            <label>Presión Arterial</label>
+            <input type="text" id="sv_pa" placeholder="120/80">
+        </div>
+        <div class="input-group">
+            <label>Fr. Cardíaca (lpm)</label>
+            <input type="text" id="sv_fc">
+        </div>
+        <div class="input-group">
+            <label>Temperatura (°C)</label>
+            <input type="text" id="sv_temp">
+        </div>
+        <div class="input-group">
+            <label>Fr. Respiratoria (rpm)</label>
+            <input type="text" id="sv_fr">
+        </div>
+        <div class="input-group">
+            <label>Saturación O2 (%)</label>
+            <input type="text" id="sv_saturacion">
+        </div>
+    </div>
+</div>
+
+<div class="info-card">
+    <div class="card-title" style="color:#f59e0b;">
+        👄 Examen Estomatognático (MSP 033)
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:20px;">
+        <div class="area-group">
+            <label><strong>1. Labios</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="1" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="1" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="1" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>2. Mejillas</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="2" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="2" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="2" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>3. Maxilar Superior</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="3" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="3" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="3" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>4. Maxilar Inferior</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="4" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="4" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="4" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>5. Lengua</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="5" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="5" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="5" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>6. Paladar</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="6" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="6" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="6" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>7. Piso</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="7" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="7" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="7" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>8. Carrillos</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="8" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="8" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="8" placeholder="Observaciones..."></textarea>
+        </div>
+
+        <div class="area-group">
+            <label><strong>9. Glándulas Salivales</strong></label>
+            <div>
+                <label><input type="checkbox" data-region="9" data-tipo="normal"> Normal</label>
+                <label><input type="checkbox" data-region="9" data-tipo="patologia"> Patología</label>
+            </div>
+            <textarea data-region="9" placeholder="Observaciones..."></textarea>
+        </div>
+
+    </div>
+</div>
+<button class="btn-save-clinical" onclick="window.guardarMSP033()">
+    Guardar MSP 033
+</button>
+            <div class="info-card">
+                <div class="card-title" style="color: #059669;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5">
+                        <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                    </svg>
+                    Planes de Tratamiento y Estado de Cuenta
+                </div>
+                <table class="treatment-table">
+                    <thead>
+                        <tr>
+                            <th>Tratamiento</th>
+                            <th style="text-align:right">Total</th>
+                            <th style="text-align:right">Pagado</th> 
+                            <th style="text-align:right">Saldo</th> 
+                            <th style="text-align:center">Acción</th> 
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyTratamientos">
+                        <tr>
+                            <td colspan="5" style="text-align:center;padding:20px;color:#64748b;">Cargando información financiera...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+         
+
+               <div class="info-card" style="margin-top: 20px;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
+            Historial de Recetas Emitidas
+        </div>
+        <button onclick="window.abrirModalReceta()" style="background: #4f46e5; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+            <i class="fas fa-plus"></i> Nueva Receta
+        </button>
+    </div>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                    <th style="padding: 12px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Fecha</th>
+                    <th style="padding: 12px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Médico</th>
+                    <th style="padding: 12px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Medicamentos</th>
+                    <th style="padding: 12px; text-align: center; font-size: 11px; color: #64748b; text-transform: uppercase;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyRecetasHistorial">
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8;">
+                        Cargando historial...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+            <div class="info-card">
+                <div class="card-title" style="color: #6366f1; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                        Galería Clínica y Comparador
+                    </div>
+                    <button onclick="window.abrirGaleriaImagenes()" style="background:#6366f1; color:white; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size: 0.8rem; font-weight: bold;">
+                        <i class="fas fa-plus"></i> Subir Imagen
+                    </button>
+                </div>
+                
+                <p style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 15px;">Selecciona dos imágenes para habilitar la comparación visual.</p>
+                
+                <div id="galeria_imagenes_grid" class="galeria-grid">
+                    <div style="grid-column: 1/-1; text-align: center; color: #94a3b8; padding: 20px;">
+                        Cargando imágenes...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="action-box" onclick="window.irAlOdontograma()">
+                <div class="icon-wrap" style="background: #e0f2fe; color: #0284c7;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M7 12c.5 0 1 1.5 1.5 3s2 1.5 2.5 1.5h2c.5 0 1 0 2.5-1.5s1-3 1.5-3c1.5 0 3-1 3-4s-1.5-5-4-5-3 1.5-4 1.5-1.5-1.5-4-1.5-4 2-4 5 1.5 4 3 4z"></path>
+                    </svg>
+                </div>
+                <h3>Odontograma</h3>
+                <p>Mapa dental y hallazgos</p>
+            </div>
+
+            <div class="action-box" onclick="window.abrirModalReceta()">
+                <div class="icon-wrap" style="background: #f3e8ff; color: #9333ea;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="12" x2="12" y2="18"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                </div>
+                <h3>Recetas Médicas</h3>
+                <p>Emitir nueva receta</p>
+            </div>
+        <!-- CONSENTIMIENTOS MSP-024 -->
+<div style="background:#fff; border-radius:12px; border:1px solid #e2e8f0; padding:15px; margin-top:15px;">
+    <div style="font-weight:900; font-size:0.8rem; color:#0f172a; margin-bottom:10px; border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+        <i class="fas fa-file-signature" style="color:#4f46e5;"></i> Consentimientos Informados (MSP-024)
+    </div>
+    <div id="lista-consentimientos-msp024"></div>
+</div>  
+            <div class="action-box" onclick="window.abrirModalPresupuesto()">
+                <div class="icon-wrap" style="background: #fef3c7; color: #d97706;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                </div>
+                <h3>Presupuestos</h3>
+                <p>Cotizar o aprobar planes</p>
+            </div>
+
+            <div class="action-box" onclick="window.abrirGaleriaImagenes()">
+                <div class="icon-wrap" style="background: #fef2f2; color: #dc2626;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                </div>
+                <h3>Imágenes/Rayos X</h3>
+                <p>Subir y gestionar fotos</p>
+            </div>
+
+            <div class="action-box" onclick="router.load('pagos')">
+                <div class="icon-wrap" style="background: #dcfce7; color: #166534;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                </div>
+                <h3>Historial de Pagos</h3>
+                <p>Abonos y facturación</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Estilos Base */
+    .historia-container { padding: 25px; background: #f1f5f9; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; }
+    .nav-header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px 25px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 25px; }
+    .nav-title { font-weight: 800; font-size: 1.25rem; color: #0f172a; }
+    .status-pill { background: #eff6ff; color: #1d4ed8; padding: 4px 12px; border-radius: 99px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+    .grid-layout { display: grid; grid-template-columns: 1fr 280px; gap: 25px; }
+    
+    .info-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 25px; }
+    .medical-alert { border-top: 4px solid #dc2626; }
+    .card-title { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #334155; margin-bottom: 20px; }
+    
+    .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .input-group label { display: block; font-size: 0.8rem; font-weight: 600; color: #64748b; margin-bottom: 6px; }
+    .input-group input { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #1e293b; font-weight: 600; }
+    
+    .area-group { margin-bottom: 15px; }
+    .area-group label { display: block; font-weight: 700; color: #475569; font-size: 0.85rem; margin-bottom: 8px; }
+    .area-group textarea { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; font-family: inherit; resize: vertical; min-height: 80px; }
+    
+    .btn-save-clinical { width: 100%; padding: 14px; background: #0f172a; color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+    .btn-save-clinical:hover { background: #1e293b; transform: translateY(-1px); }
+    
+    .treatment-table { width: 100%; border-collapse: collapse; }
+    .treatment-table th { background: #f1f5f9; padding: 12px; text-align: left; font-size: 0.8rem; color: #64748b; }
+    .treatment-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; font-weight: 500; }
+
+    /* Galería Mejorada */
+    .galeria-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-top: 15px; }
+    .galeria-item { position: relative; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; background: #fff; transition: 0.3s; }
+    .galeria-item:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    .galeria-item img { width: 100%; height: 140px; object-fit: cover; border-bottom: 1px solid #eee; cursor: zoom-in; display: block; }
+    .galeria-item .info { padding: 8px; }
+    .galeria-item .btns { display: flex; gap: 4px; padding: 0 8px 8px 8px; }
+    .galeria-item .btns button, .galeria-item .btns a { flex: 1; padding: 6px; border: none; border-radius: 6px; cursor: pointer; text-align: center; color: white; font-size: 11px; }
+
+    /* Sidebar */
+    .sidebar .action-box { background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .sidebar .action-box:hover { transform: scale(1.02); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    .icon-wrap { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+    .sidebar h3 { font-size: 1rem; font-weight: 700; color: #1e293b; margin: 0; }
+    .sidebar p { font-size: 0.8rem; color: #64748b; margin: 4px 0 0 0; }
+
+    /* Comparador Slider Estilos */
+    .comparison-slider input[type="range"] {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 5px;
+        background: rgba(255,255,255,0.3);
+        outline: none;
+    }
+    .comparison-slider input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 40px;
+        height: 40px;
+        background: #3b82f6;
+        border: 4px solid white;
+        border-radius: 50%;
+        cursor: ew-resize;
+        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+.input-group input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #1e293b;
+    font-weight: 600;
+}
+
+.area-group textarea {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-top: 5px;
+}
+    /* Clases auxiliares para los modales nativos */
+    .modal-swal-input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-family: inherit; }
+    .modal-swal-btn { background: #3b82f6; color: white; padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+</style>
+
+<script>
+    (function() {
+        // Obtenemos el ID del paciente desde la URL o el estado global
+        const urlParams = new URLSearchParams(window.location.search);
+        const pacienteId = urlParams.get('id') || window.currentPacienteId;
+
+        if (pacienteId && window.historiaModule) {
+            window.historiaModule.init(pacienteId);
+        } else {
+            console.error("❌ No se pudo inicializar el expediente: Falta ID o historiaModule.js no está cargado.");
+        }
+
+        // =====================================
+        // INTEGRACIÓN RECETAS
+        // =====================================
+        window.abrirModalReceta = function() {
+            const idPac = document.getElementById('paciente_dni')?.getAttribute('data-id') || window.currentPacienteId;
+            if (!idPac) return Swal.fire('Atención', 'Asegúrese de seleccionar un paciente.', 'warning');
+
+            Swal.fire({
+                title: 'Emitir Receta Médica',
+                width: '600px',
+                html: `
+                    <div style="text-align: left; font-size: 0.9rem;">
+                        <label style="font-weight: bold; color:#334155;">Medicamentos (Sepárelos por salto de línea)</label>
+                        <textarea id="rec_meds" class="modal-swal-input" style="height:80px; resize:vertical; margin-top:5px;" placeholder="Ej: Paracetamol 500mg - 1 tableta cada 8 horas..."></textarea>
+                        
+                        <label style="font-weight: bold; color:#334155;">Indicaciones Adicionales</label>
+                        <textarea id="rec_inds" class="modal-swal-input" style="height:80px; resize:vertical; margin-top:5px;" placeholder="Dieta líquida, reposo absoluto, etc."></textarea>
+                        
+                        <label style="font-weight: bold; color:#334155;">Próxima Cita (Opcional)</label>
+                        <input type="date" id="rec_cita" class="modal-swal-input" style="margin-top:5px;">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar Receta',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const meds = document.getElementById('rec_meds').value.trim();
+                    if (!meds) {
+                        Swal.showValidationMessage('Debe especificar al menos un medicamento.');
+                        return false;
+                    }
+                    return {
+                        medicamentos: meds.split('\n'),
+                        indicaciones: document.getElementById('rec_inds').value.trim(),
+                        proxima_cita: document.getElementById('rec_cita').value || null
+                    };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        const sesion = JSON.parse(localStorage.getItem('usuario_sesion') || '{}');
+                        const payload = {
+                            id_paciente: idPac,
+                            id_usuario: sesion.id_usuario || sesion.ID_Usuario || 1,
+                            id_clinica: sesion.id_clinica || sesion.ID_Clinica || 1,
+                            ...result.value
+                        };
+
+                        Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                        
+                        // Llamada a tu ruta: /api/recetas/guardar
+                        const res = await window.api.post('/recetas/guardar', payload);
+                        
+                        if (res.status === "Success") {
+                            Swal.fire('¡Éxito!', 'Receta guardada exitosamente.', 'success');
+                        } else {
+                            throw new Error(res.message);
+                        }
+                    } catch (error) {
+                        Swal.fire('Error', error.message || 'No se pudo guardar la receta.', 'error');
+                    }
+                }
+            });
+        };
+
+        // =====================================
+        // INTEGRACIÓN PRESUPUESTOS
+        // =====================================
+        window.abrirModalPresupuesto = function() {
+            const idPac = document.getElementById('paciente_dni')?.getAttribute('data-id') || window.currentPacienteId;
+            if (!idPac) return Swal.fire('Atención', 'Asegúrese de seleccionar un paciente.', 'warning');
+
+            Swal.fire({
+                title: 'Nueva Cotización / Presupuesto',
+                width: '750px',
+                html: `
+                    <div style="text-align: left; font-size: 0.9rem;">
+                        <div style="background:#f8fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:15px;">
+                            <h4 style="margin:0 0 10px 0; color:#0f172a;">Agregar Detalle</h4>
+                            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end;">
+                                <div><label>Tratamiento</label><input type="text" id="pres_nombre" class="modal-swal-input" style="margin:0;"></div>
+                                <div><label>Precio Unit.</label><input type="number" id="pres_precio" value="0" min="0" class="modal-swal-input" style="margin:0;"></div>
+                                <div><label>Descuento</label><input type="number" id="pres_desc" value="0" min="0" class="modal-swal-input" style="margin:0;"></div>
+                                <button type="button" class="modal-swal-btn" onclick="window.agregarItemPresupuesto()">Agregar</button>
+                            </div>
+                        </div>
+                        
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                            <thead>
+                                <tr style="background: #e2e8f0; color:#334155; text-align: left;">
+                                    <th style="padding:8px; border-radius:6px 0 0 6px;">Concepto</th>
+                                    <th style="padding:8px;">Precio</th>
+                                    <th style="padding:8px;">Desc.</th>
+                                    <th style="padding:8px;">Total</th>
+                                    <th style="padding:8px; border-radius:0 6px 6px 0;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody_presupuesto">
+                                <tr><td colspan="5" style="text-align:center; padding:10px; color:#94a3b8;">La cotización está vacía.</td></tr>
+                            </tbody>
+                        </table>
+                        
+                        <div style="text-align: right; font-size: 1.2rem; font-weight: bold; color: #0f172a; margin-bottom: 15px;">
+                            Gran Total: $<span id="pres_total_final">0.00</span>
+                        </div>
+
+                        <label style="font-weight: bold; color:#334155;">Observaciones</label>
+                        <textarea id="pres_obs" class="modal-swal-input" style="height:60px; resize:vertical; margin-top:5px;"></textarea>
+
+                        <hr style="border:none; border-top:1px dashed #cbd5e1; margin: 20px 0;">
+                        <button onclick="window.listarPresupuestosPendientes()" style="background:#f59e0b; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; width:100%; font-weight:bold;">
+                            <i class="fas fa-search"></i> Ver / Aprobar Presupuestos Pendientes
+                        </button>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar Presupuesto',
+                cancelButtonText: 'Cerrar',
+                didOpen: () => {
+                    window.itemsPresupuestoTemporal = [];
+                    
+                    window.actualizarTablaPresupuesto = () => {
+                        const tbody = document.getElementById('tbody_presupuesto');
+                        if (window.itemsPresupuestoTemporal.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:10px; color:#94a3b8;">La cotización está vacía.</td></tr>';
+                            document.getElementById('pres_total_final').innerText = '0.00';
+                            return;
+                        }
+
+                        let html = '';
+                        let total = 0;
+                        window.itemsPresupuestoTemporal.forEach((item, idx) => {
+                            html += `
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td style="padding:8px;">${item.nombre}</td>
+                                    <td style="padding:8px;">$${item.precio_lista.toFixed(2)}</td>
+                                    <td style="padding:8px;">$${item.descuento.toFixed(2)}</td>
+                                    <td style="padding:8px; font-weight:bold; color:#059669;">$${item.costo_total.toFixed(2)}</td>
+                                    <td style="padding:8px; text-align:right;">
+                                        <i class="fas fa-trash" style="color:#ef4444; cursor:pointer;" onclick="window.eliminarItemPresupuesto(${idx})"></i>
+                                    </td>
+                                </tr>
+                            `;
+                            total += item.costo_total;
+                        });
+                        tbody.innerHTML = html;
+                        document.getElementById('pres_total_final').innerText = total.toFixed(2);
+                    };
+
+                    window.agregarItemPresupuesto = () => {
+                        const nombre = document.getElementById('pres_nombre').value.trim();
+                        const precio = parseFloat(document.getElementById('pres_precio').value) || 0;
+                        const desc = parseFloat(document.getElementById('pres_desc').value) || 0;
+                        
+                        if(!nombre) return Swal.showValidationMessage('Especifique el tratamiento');
+                        
+                        window.itemsPresupuestoTemporal.push({
+                            id_prestacion: 1, // Puedes ajustarlo o conectarlo a tu catálogo de prestaciones real
+                            nombre: nombre,
+                            precio_lista: precio,
+                            descuento: desc,
+                            costo_total: (precio - desc),
+                            numero_diente: null
+                        });
+                        
+                        document.getElementById('pres_nombre').value = '';
+                        document.getElementById('pres_precio').value = '0';
+                        document.getElementById('pres_desc').value = '0';
+                        Swal.resetValidationMessage();
+                        window.actualizarTablaPresupuesto();
+                    };
+
+                    window.eliminarItemPresupuesto = (idx) => {
+                        window.itemsPresupuestoTemporal.splice(idx, 1);
+                        window.actualizarTablaPresupuesto();
+                    };
+                },
+                preConfirm: () => {
+                    if (window.itemsPresupuestoTemporal.length === 0) {
+                        Swal.showValidationMessage('Añada al menos un ítem al presupuesto.');
+                        return false;
+                    }
+                    return {
+                        detalle_json: window.itemsPresupuestoTemporal,
+                        total: parseFloat(document.getElementById('pres_total_final').innerText),
+                        observaciones: document.getElementById('pres_obs').value.trim()
+                    };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        const sesion = JSON.parse(localStorage.getItem('usuario_sesion') || '{}');
+                        const payload = {
+                            id_paciente: idPac,
+                            id_usuario: sesion.id_usuario || sesion.ID_Usuario || 1,
+                            id_clinica: sesion.id_clinica || sesion.ID_Clinica || 1,
+                            ...result.value
+                        };
+
+                        Swal.fire({ title: 'Guardando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                        
+                        // Llamada a tu ruta: /api/presupuestos/guardar
+                        const res = await window.api.post('/presupuestos/guardar', payload);
+                        
+                        if (res.status === "Success") {
+                            Swal.fire('¡Guardado!', 'El presupuesto se guardó con estado PENDIENTE.', 'success');
+                        } else {
+                            throw new Error(res.message);
+                        }
+                    } catch (error) {
+                        Swal.fire('Error', error.message || 'Error al guardar.', 'error');
+                    }
+                }
+            });
+        };
+
+        // Función para mostrar la lista de presupuestos pendientes y ejecutar el aprobarPresupuesto
+        window.listarPresupuestosPendientes = async function() {
+            const idPac = document.getElementById('paciente_dni')?.getAttribute('data-id') || window.currentPacienteId;
+            Swal.fire({ title: 'Cargando cotizaciones...', didOpen: () => Swal.showLoading() });
+            
+            try {
+                // Si la ruta GET está comentada en tu backend, asegúrate de descomentarla o ajustarla a la que tengas activa.
+                // Aquí usamos la estructura estándar de tu API
+                const res = await window.api.get(`/presupuestos/paciente/${idPac}`); 
+                const presupuestos = res || [];
+                
+                const pendientes = presupuestos.filter(p => p.Estado === 'PENDIENTE');
+                
+                if (pendientes.length === 0) {
+                    return Swal.fire('Información', 'Este paciente no tiene presupuestos pendientes de aprobación.', 'info');
+                }
+
+                let listHtml = pendientes.map(p => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:12px; margin-bottom:10px; border:1px solid #e2e8f0; border-radius:8px;">
+                        <div style="text-align:left;">
+                            <strong style="display:block; color:#0f172a;">#${p.ID_Presupuesto} - $${parseFloat(p.Total).toFixed(2)}</strong>
+                            <span style="font-size:0.8rem; color:#64748b;">${new Date(p.Fecha).toLocaleDateString()}</span>
+                        </div>
+                        <button onclick="window.confirmarAprobacion(${p.ID_Presupuesto})" style="background:#10b981; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:0.8rem;">
+                            Aprobar y Cargar
+                        </button>
+                    </div>
+                `).join('');
+
+                Swal.fire({
+                    title: 'Presupuestos Pendientes',
+                    html: `<div style="max-height: 300px; overflow-y: auto;">${listHtml}</div>`,
+                    showConfirmButton: false,
+                    showCloseButton: true
+                });
+
+            } catch(e) {
+                console.error("Error al listar presupuestos:", e);
+                Swal.fire('Atención', 'Asegúrese de que el endpoint GET /paciente/:id esté activo en presupuestoController.js', 'info');
+            }
+        };
+
+        window.confirmarAprobacion = async function(idPresupuesto) {
+            Swal.fire({
+                title: '¿Confirmar Aprobación?',
+                text: "Esto cargará los tratamientos a la tabla del paciente y generará saldo pendiente (deuda).",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#10b981',
+                cancelButtonColor: '#ef4444',
+                confirmButtonText: 'Sí, Aprobar'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    try {
+                        Swal.fire({ title: 'Aprobando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                        
+                        // Llamada a tu ruta mágica: /api/presupuestos/aprobar/:id_presupuesto
+                        const res = await window.api.post(`/presupuestos/aprobar/${idPresupuesto}`); 
+                        
+                        if (res.status === "Success") {
+                            await Swal.fire('¡Aprobado!', 'El plan de tratamiento se ha activado.', 'success');
+                            // Refrescar el expediente clínico (tabla tratamientos) para reflejar los cambios
+                            if (window.historiaModule && window.currentPacienteId) {
+                                window.historiaModule.initExpediente(window.currentPacienteId);
+                            }
+                        } else {
+                            throw new Error(res.message);
+                        }
+                    } catch (error) {
+                        Swal.fire('Error', error.message || 'Ocurrió un error en la aprobación.', 'error');
+                    }
+                }
+            });
+        };
+
+    })();
+</script>

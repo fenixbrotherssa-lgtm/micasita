@@ -1,0 +1,465 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ametra os</title>
+
+    <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="assets/vendor/inter-font/fuentes.css">
+    
+    <script src="assets/vendor/sweetalert2/sweetalert2.all.min.js"></script>
+    <script src="assets/vendor/chartjs/chart.umd.js"></script>
+    <script src="./node_modules/signature_pad/dist/signature_pad.umd.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --secondary: #64748b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-body: #f1f5f9;
+        }
+
+        html, body {
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            overflow: hidden; 
+            background: var(--bg-body);
+            font-family: 'Inter', sans-serif;
+            color: #1e293b;
+        }
+
+        #app-root {
+            width: 100%; height: 100%;
+            overflow-y: auto; overflow-x: hidden;
+            position: relative;
+        }
+
+        .btn-action {
+            border: none; padding: 8px 14px; border-radius: 6px;
+            cursor: pointer; font-size: 0.8rem; font-weight: 600;
+            transition: all 0.2s; display: inline-flex;
+            align-items: center; gap: 5px; text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-action:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+        .loading-overlay {
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            height: 100vh; font-size: 2rem; color: var(--primary); gap: 18px;
+        }
+        .loading-overlay small { font-size: 0.85rem; color: var(--secondary); font-weight: 600; }
+
+        .modal {
+            display: none; position: fixed !important; z-index: 10000 !important;
+            left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px);
+            align-items: center !important; justify-content: center !important;
+            overflow: hidden !important; 
+        }
+
+        #mini-doctor-wrapper {
+            position: fixed; bottom: 20px; right: 20px;
+            z-index: 9999; display: flex; flex-direction: column;
+            align-items: flex-end; gap: 10px;
+        }
+
+        #mini-doctor-bubble {
+            background: white; padding: 15px 35px 15px 15px; border-radius: 18px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15); max-width: 280px;
+            font-size: 13px; color: #1e293b; display: none;
+            border-left: 5px solid var(--primary); animation: fadeInUp 0.4s ease;
+            position: relative; line-height: 1.5;
+        }
+
+        #close-bubble { position: absolute; top: 8px; right: 10px; font-size: 14px; color: var(--secondary); cursor: pointer; }
+
+        #chat-window {
+            width: 320px; height: 420px; background: white;
+            border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            display: none; flex-direction: column; overflow: hidden;
+            border: 1px solid #e2e8f0;
+        }
+
+        #chat-header {
+            background: var(--primary); color: white; padding: 12px;
+            font-size: 14px; font-weight: 600; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+
+        #chat-messages {
+            flex: 1; padding: 15px; overflow-y: auto; font-size: 13px;
+            display: flex; flex-direction: column; gap: 10px; background: #f8fafc;
+        }
+
+        .msg { padding: 8px 12px; border-radius: 12px; max-width: 85%; line-height: 1.4; word-wrap: break-word; }
+        .msg-ia { background: #e0e7ff; color: #3730a3; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .msg-user { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+
+        #chat-input-area { padding: 10px; border-top: 1px solid #e2e8f0; display: flex; gap: 5px; background: white; }
+        #chat-input-area input { flex: 1; border: 1px solid #e2e8f0; padding: 8px 12px; border-radius: 20px; outline: none; font-size: 13px; }
+        #chat-input-area button { background: var(--primary); color: white; border: none; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; }
+
+        #mini-doctor-avatar {
+            width: 65px; height: 65px; border-radius: 50%; border: 4px solid white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; overflow: hidden;
+            background: #fff; transition: transform 0.2s;
+        }
+        #mini-doctor-avatar:hover { transform: scale(1.1); }
+
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+
+    <script>
+        // Proxies de módulos para evitar errores antes de la carga de scripts
+        window.kpiModule = window.kpiModule || { init: () => {} };
+        window.citasModule = window.citasModule || { init: () => {} };
+        window.inventarioModule = window.inventarioModule || { init: () => {}, abrirModal: () => {} };
+        window.gastosModule = window.gastosModule || { init: () => {}, abrirModalRegistro: () => {}, gestionarCatalogo: () => {} };
+        window.historiaModule = window.historiaModule || { init: () => {} };
+        window.sucursalesModule = window.sucursalesModule || { init: () => {} };
+
+        function toggleChat() {
+            const chat = document.getElementById('chat-window');
+            const bubble = document.getElementById('mini-doctor-bubble');
+            if (chat.style.display === 'none' || chat.style.display === '') {
+                chat.style.display = 'flex';
+                bubble.style.display = 'none';
+                document.getElementById('chat-input').focus();
+            } else {
+                chat.style.display = 'none';
+            }
+        }
+
+        window.notificarIA = function(texto, duracion = 15000) {
+            const bubble = document.getElementById('mini-doctor-bubble');
+            const txt = document.getElementById('mini-doctor-text');
+            const chat = document.getElementById('chat-window');
+            if (chat && chat.style.display === 'flex') return;
+            if (txt) txt.innerText = texto;
+            if (bubble) bubble.style.display = 'block';
+
+            if (window.bubbleTimer) clearTimeout(window.bubbleTimer);
+            window.bubbleTimer = setTimeout(() => { if(bubble) bubble.style.display = 'none'; }, duracion);
+        };
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const container = document.getElementById('chat-messages');
+            const texto = input.value.trim();
+            if (!texto) return;
+
+            const sesion = JSON.parse(localStorage.getItem('usuario_sesion') || '{}');
+            container.innerHTML += `<div class="msg msg-user">${texto}</div>`;
+            input.value = '';
+            container.scrollTop = container.scrollHeight;
+
+            const loadingId = "load-" + Date.now();
+            container.innerHTML += `<div class="msg msg-ia" id="${loadingId}"><i class="fas fa-sync fa-spin"></i> Pensando...</div>`;
+            container.scrollTop = container.scrollHeight;
+
+            // Inicializamos la memoria de la conversación en el navegador si no existe
+            window.historial_ia = window.historial_ia || [];
+
+            try {
+                const resp = await window.api.post('/ia/consultar', { 
+                    consulta_usuario: texto,
+                    historial: window.historial_ia, // <-- Añadido: Envía la memoria del chat
+                    usuario: {
+                        nombre: sesion.Nombres || sesion.username || "Usuario",
+                        id_rol: sesion.ID_Rol || sesion.id_rol || 2,
+                        id_clinica: sesion.ID_Clinica || sesion.id_clinica
+                    },
+                    contexto: { // <-- AñadIDO: El enlace vital con la historia clínica
+                        id_rol: sesion.ID_Rol || sesion.id_rol,
+                        id_clinica: sesion.ID_Clinica || sesion.id_clinica,
+                        id_referencia: window.router ? window.router.currentPatientId : null
+                    },
+                    modulo_actual: (window.router && window.router.ultimoModuloIA) || "Chat General" 
+                });
+                
+                document.getElementById(loadingId).innerText = resp.texto || "Entendido, Jefe.";
+
+                // Guardamos el historial actualizado que devuelve el backend
+                if (resp.historial) {
+                    window.historial_ia = resp.historial;
+                }
+
+            } catch (err) {
+                document.getElementById(loadingId).innerText = "Error de conexión con el cerebro IA.";
+            }
+            container.scrollTop = container.scrollHeight;
+        }
+    </script>
+</head>
+<body>
+
+    <div id="app-root">
+        <div class="loading-overlay">
+            <i class="fas fa-circle-notch fa-spin"></i>
+            <small>Iniciando ametra os...</small>
+        </div>
+    </div>
+
+    <div id="mini-doctor-wrapper">
+        <div id="mini-doctor-bubble">
+            <i class="fas fa-times" id="close-bubble" onclick="document.getElementById('mini-doctor-bubble').style.display='none'"></i>
+            <div style="display: flex; gap: 8px;">
+                <i class="fas fa-brain" style="color: var(--primary); margin-top: 3px;"></i>
+                <span id="mini-doctor-text">Monitoreando clínica...</span>
+            </div>
+        </div>
+
+        <div id="chat-window">
+            <div id="chat-header">
+                <span><i class="fas fa-robot"></i> Mini Doctor Pro</span>
+                <i class="fas fa-times" style="cursor:pointer" onclick="toggleChat()"></i>
+            </div>
+            <div id="chat-messages">
+                <div class="msg msg-ia">Hola, soy tu asistente. Analizaré el módulo en el que te encuentres para darte reportes reales.</div>
+            </div>
+            <div id="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Pregunta sobre la clínica..." onkeypress="if(event.key==='Enter') sendChatMessage()">
+                <button onclick="sendChatMessage()"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+
+        <div id="mini-doctor-avatar" onclick="toggleChat()">
+            <img src="assets/avatar-doctor.png" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='assets/icon.png'">
+        </div>
+    </div>
+
+    <!-- Cliente API local (define window.api). Bloqueante y rápido: no depende del backend. -->
+    <script src="js/api.js"></script>
+
+    <!-- ============================================================= -->
+    <!-- BOOTSTRAP DESACOPLADO DEL BACKEND                             -->
+    <!-- El núcleo (app.js + módulos) es LOCAL: carga inmediata.       -->
+    <!-- socket.io y librerías 3D dependen del backend: van en         -->
+    <!-- paralelo y NO bloquean el arranque (si el backend está frío,  -->
+    <!-- llegan tarde sin congelar la app).                            -->
+    <!-- ============================================================= -->
+    <script>
+        (function bootstrapApp() {
+
+            // 1) NÚCLEO LOCAL — se carga siempre, no depende del servidor.
+            const coreScripts = [
+                "js/cie10_odontologia.js",
+                "js/app.js",
+                "js/uimodules/login.js",
+                "js/uimodules/dashboard.js",
+                "js/uimodules/pacientes.js",
+                "js/uimodules/historia.js",
+                "js/uimodules/odontograma.js",
+                "js/uimodules/tratamientos.js",
+                "js/uimodules/sucursales.js",
+                "js/uimodules/usuarios.js",
+                "js/uimodules/caja.js",
+                "js/uimodules/gastos.js",
+                "js/uimodules/inventario.js",
+                "js/uimodules/citas.js",
+                "js/uimodules/kpi.js",
+                "js/uimodules/facturacion.js"
+            ];
+
+            // Carga una lista de scripts EN ORDEN (async=false), sin frenarse si uno falla.
+            function cargarSecuencial(lista, i, alTerminar) {
+                if (i >= lista.length) { if (alTerminar) alTerminar(); return; }
+                const s = document.createElement('script');
+                s.src = lista[i];
+                s.async = false;
+                s.onload  = () => cargarSecuencial(lista, i + 1, alTerminar);
+                s.onerror = () => {
+                    console.error("❌ No se pudo cargar (continuo igual):", lista[i]);
+                    cargarSecuencial(lista, i + 1, alTerminar);
+                };
+                document.body.appendChild(s);
+            }
+
+            // Arranca la SPA UNA sola vez, cuando el núcleo ya está disponible.
+            function arrancar() {
+                const sesion = localStorage.getItem('usuario_sesion');
+                const miniDoc = document.getElementById('mini-doctor-wrapper');
+                if (miniDoc) miniDoc.style.display = sesion ? 'flex' : 'none';
+
+                if (window.router && typeof window.router.load === 'function') {
+                    window.router.load(sesion ? 'dashboard' : 'login');
+                } else {
+                    console.error("⚠️ El núcleo cargó pero window.router no está definido. Revisa js/app.js.");
+                }
+            }
+
+            // 3) EXTRAS DEL BACKEND — socket.io (realtime) + librerías 3D (odontograma).
+            //    No bloquean. Si el backend está frío, fallan en silencio y se podrán
+            //    reintentar al volver a entrar al módulo correspondiente.
+            function cargarExtrasBackend() {
+                const serverBase = window.api.baseURL.replace('/api', '');
+
+                // socket.io: independiente. app.js lo detecta solo cuando 'io' aparezca.
+                const sock = document.createElement('script');
+                sock.src = `${serverBase}/socket.io/socket.io.js`;
+                sock.async = true;
+                sock.onload  = () => console.log("✅ Socket.io cargado.");
+                sock.onerror = () => console.warn("⏳ Socket.io no disponible aún (backend frío). El realtime reintentará solo.");
+                document.body.appendChild(sock);
+
+                // Librerías 3D EN ORDEN (GLTFLoader y OrbitControls dependen de THREE).
+                cargarSecuencial([
+                    `${serverBase}/assets/js/three.min.js`,
+                    `${serverBase}/assets/js/GLTFLoader.js`,
+                    `${serverBase}/assets/js/OrbitControls.js`
+                ], 0);
+            }
+
+            // 2) Espera SOLO a que api.js haya definido window.api (es local: milisegundos),
+            //    luego carga el núcleo y arranca. Sin setTimeout mágicos.
+            let intentos = 0;
+            const esperaApi = setInterval(() => {
+                if (window.api && window.api.baseURL) {
+                    clearInterval(esperaApi);
+                    cargarSecuencial(coreScripts, 0, arrancar); // núcleo → arranca
+                    cargarExtrasBackend();                       // extras en paralelo
+                } else if (++intentos > 120) { // ~6s de tolerancia
+                    clearInterval(esperaApi);
+                    console.error("⚠️ window.api nunca se definió. Verifica que js/api.js exista y cargue.");
+                }
+            }, 50);
+
+        })();
+    </script>
+
+
+<script>
+    // ESTA FUNCIÓN ES EL "CEREBRO" GLOBAL DE IMPRESIÓN
+ window.imprimirReciboGlobal = function(datos) {
+    console.log("🖨️ Iniciando impresión profesional para pago:", datos.ID_Pago);
+    
+    // 1. DETERMINAR LA BASE DEL SERVIDOR (Lógica de tu Expediente v3.0)
+    const serverUrl = window.api?.baseURL
+        ? window.api.baseURL.split('/api')[0]
+        : window.location.origin;
+
+    // 2. CONSTRUIR RUTA DEL LOGO (Misma lógica que usas en la historia clínica)
+    const logoUrl = datos.Logo_Ruta
+        ? (datos.Logo_Ruta.startsWith('http') ? datos.Logo_Ruta : `${serverUrl}/uploads/logos/${datos.Logo_Ruta}`)
+        : '';
+
+    const ventana = window.open('', '_blank', 'width=800,height=750');
+    
+    // Validamos datos básicos para evitar errores de renderizado
+    const nombreClinica = datos.Nombre_Clinica || 'MEDICINA ECUADOR PRO';
+    const montoFormateado = parseFloat(datos.Monto || 0).toFixed(2);
+    const fecha = datos.Fecha_Pago ? new Date(datos.Fecha_Pago).toLocaleString('es-EC') : new Date().toLocaleString('es-EC');
+
+    ventana.document.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <title>Recibo de Pago - ${datos.ID_Pago}</title>
+            <meta charset="UTF-8">
+            <style>
+                @media print { 
+                    body { background: white !important; padding: 0 !important; }
+                    .no-print { display: none !important; }
+                    .recibo-box { border: 1px solid #000 !important; box-shadow: none !important; margin: 0 !important; }
+                }
+                body { 
+                    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+                    background-color: #f1f5f9; 
+                    padding: 40px; 
+                    display: flex;
+                    justify-content: center;
+                }
+                .recibo-box { 
+                    background: white; 
+                    padding: 35px; 
+                    border-radius: 12px; 
+                    border: 1px solid #e2e8f0;
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+                    width: 100%;
+                    max-width: 550px;
+                }
+                .header { text-align: center; border-bottom: 3px solid #4f46e5; margin-bottom: 25px; padding-bottom: 15px; }
+                
+                /* Estilo para el logo */
+                .hdr-logo { max-height: 70px; max-width: 200px; object-fit: contain; margin-bottom: 10px; }
+
+                .monto-container { 
+                    background: #f5f3ff; 
+                    border: 2px dashed #4f46e5; 
+                    border-radius: 10px;
+                    margin: 25px 0;
+                    padding: 15px;
+                    text-align: center;
+                }
+                .monto-label { font-size: 14px; color: #4f46e5; font-weight: bold; text-transform: uppercase; }
+                .monto-valor { font-size: 45px; font-weight: 800; color: #1e1b4b; }
+                table { width: 100%; border-collapse: collapse; }
+                td { padding: 12px 0; border-bottom: 1px solid #f1f5f9; font-size: 15px; }
+                .label { color: #64748b; font-weight: 600; width: 40%; }
+                .val { text-align: right; color: #1e293b; font-weight: 500; }
+                .footer { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 30px; line-height: 1.5; }
+            </style>
+        </head>
+        <body>
+            <div class="recibo-box">
+                <div class="header">
+                    <!-- LOGO DINÁMICO -->
+                    ${logoUrl ? `<img src="${logoUrl}" class="hdr-logo" onerror="this.style.display='none'">` : ''}
+                    
+                    <h1 style="margin:0; color:#4f46e5; font-size: 24px;">${nombreClinica}</h1>
+                    <div style="margin-top: 5px; color: #64748b;">RUC: ${datos.RUC || '0000000000001'}</div>
+                    <div style="font-weight: bold; margin-top: 10px; color: #1e293b;">COMPROBANTE DE PAGO #00${datos.ID_Pago}</div>
+                </div>
+
+                <table>
+                    <tr><td class="label">Fecha y Hora</td><td class="val">${fecha}</td></tr>
+                    <tr><td class="label">Paciente</td><td class="val">${datos.Nombres} ${datos.Apellidos}</td></tr>
+                    <tr><td class="label">Identificación</td><td class="val">${datos.Cedula || 'S/N'}</td></tr>
+                    <tr><td class="label">Concepto</td><td class="val">${datos.Concepto || 'Abono a Tratamiento'}</td></tr>
+                    <tr><td class="label">Método de Pago</td><td class="val">${datos.Metodo_Pago}</td></tr>
+                </table>
+
+                <div class="monto-container">
+                    <div class="monto-label">Total Recibido</div>
+                    <div class="monto-valor">$${montoFormateado}</div>
+                </div>
+
+                <div class="footer">
+                    Este es un comprobante administrativo interno.<br>
+                    <strong>MedicinaEcuador Pro</strong> - Tecnología para su Salud Bucal.
+                </div>
+            </div>
+
+            <script>
+                function forzarImpresion() {
+                    window.requestAnimationFrame(() => {
+                        window.requestAnimationFrame(() => {
+                            window.print();
+                        });
+                    });
+                }
+
+                // Esperamos un poco más (1.2s) para asegurar que el logo cargó del servidor
+                window.onload = () => {
+                    setTimeout(forzarImpresion, 1200);
+                };
+
+                window.onafterprint = () => {
+                    window.close();
+                };
+
+                setTimeout(() => { window.close(); }, 60000);
+            <\/script>
+        </body>
+        </html>
+    `);
+
+    ventana.document.close();
+};
+</script>
+</body>
+</html>
