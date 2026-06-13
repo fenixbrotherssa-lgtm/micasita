@@ -10,9 +10,18 @@ echo "════════════════════════�
 echo "  Configuración de WhatsApp - AmetraOS"
 echo "══════════════════════════════════════════════"
 echo ""
-echo "1. Deteniendo el servicio..."
-sudo launchctl stop "$LABEL"
-sleep 2
+echo "1. Deteniendo el servicio y limpiando procesos..."
+sudo launchctl unload /Library/LaunchDaemons/${LABEL}.plist 2>/dev/null || true
+sudo pkill -f "node" 2>/dev/null || true
+sudo pkill -f "Google Chrome" 2>/dev/null || true
+
+echo "   Esperando que el puerto quede libre..."
+for i in $(seq 1 15); do
+    if ! lsof -i :8000 -sTCP:LISTEN -t &>/dev/null; then
+        break
+    fi
+    sleep 1
+done
 
 echo "2. Iniciando en modo QR (NO cierres esta ventana)..."
 echo ""
@@ -30,6 +39,8 @@ sudo node server.js
 
 echo ""
 echo "3. Reiniciando el servicio en segundo plano..."
+sudo pkill -f "Google Chrome" 2>/dev/null || true
+sudo launchctl load /Library/LaunchDaemons/${LABEL}.plist 2>/dev/null || true
 sudo launchctl start "$LABEL"
 sleep 2
 
