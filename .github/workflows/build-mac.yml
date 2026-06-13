@@ -22,21 +22,26 @@ jobs:
           node-version: '24'
 
       # ─────────────────────────────────────────
-      # BACKEND: instalar deps + ofuscar
+      # BACKEND: instalar deps + preparar archivos
+      # El ofuscador aplana la estructura en Mac, así que copiamos
+      # los fuentes directamente manteniendo la jerarquía de carpetas.
       # ─────────────────────────────────────────
-      - name: Instalar dependencias del backend (todas, para tener javascript-obfuscator)
+      - name: Instalar dependencias del backend (solo producción)
         working-directory: Backend_NodeJS
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
-        run: npm ci
+        run: npm ci --omit=dev
 
-      - name: Ofuscar backend
+      - name: Preparar fuentes del backend con estructura correcta
         working-directory: Backend_NodeJS
-        run: npm run build:obfuscate
-
-      - name: Eliminar devDependencies antes de empaquetar
-        working-directory: Backend_NodeJS
-        run: npm prune --omit=dev
+        run: |
+          mkdir -p dist
+          cp server.js dist/
+          cp -r config       dist/
+          cp -r controllers  dist/
+          cp -r middlewares  dist/
+          cp -r routes       dist/
+          cp -r services     dist/
 
       # ─────────────────────────────────────────
       # FRONTEND: instalar deps + compilar DMG
