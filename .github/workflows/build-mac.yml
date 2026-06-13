@@ -74,9 +74,7 @@ jobs:
 
       - name: Compilar DMG (x64 + arm64)
         working-directory: medicSystemcore
-        run: npm run dist:mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --mac --publish never
 
       # ─────────────────────────────────────────
       # BACKEND PKG: empaquetar instalador Mac
