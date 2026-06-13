@@ -144,7 +144,7 @@ function generarOpcionesDias() {
         d.setHours(d.getHours() - 5); // Ajuste Ecuador
         d.setDate(d.getDate() + i);
 
-        if (d.getDay() !== 0) {
+        if (d.getDay() !== -1) {
             const anio = d.getFullYear();
             const mes = String(d.getMonth() + 1).padStart(2, '0');
             const dia = String(d.getDate()).padStart(2, '0');
@@ -496,7 +496,7 @@ client.on('message', async (msg) => {
 
         if (chat.estado === 'MENU') {
             switch (texto) {
-                case "1": return await msg.reply("🕒 *HORARIOS:*\n\n☀️ Lun-Vie: 09:00 - 17:30\n🌤️ Sáb: 09:00 - 15:30" + navFooter);
+                case "1": return await msg.reply("🕒 *HORARIOS:*\n\n☀️ Lun-Vie: 09:00 - 19:00\n🌤️ Sáb: 09:00 - 15:30\n🌙 Dom: Bajo previa cita" + navFooter);
                 case "2":
                     const prest = await pool.request().query("SELECT Nombre_Prestacion FROM PRESTACIONES WHERE Activo = 1 ORDER BY Nombre_Prestacion ASC");
                     return await msg.reply(`🦷 *ESPECIALIDADES:*\n\n${prest.recordset.map(r => '• ' + r.Nombre_Prestacion).join('\n')}${navFooter}`);
