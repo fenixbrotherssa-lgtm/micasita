@@ -29,7 +29,11 @@ function resolverRutaChrome() {
     const esMac = process.platform === 'darwin';
 
     // 2. Chrome empaquetado dentro del proyecto (.cache/puppeteer)
-    const nombreChromeExe = esWin ? 'chrome.exe' : 'Google Chrome';
+    const nombresChromeExe = esWin
+        ? ['chrome.exe']
+        : esMac
+            ? ['Google Chrome for Testing', 'Google Chrome', 'Chromium']
+            : ['chrome', 'chromium', 'chromium-browser'];
     const buscar = (dir) => {
         if (!fs.existsSync(dir)) return null;
         for (const it of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -37,7 +41,7 @@ function resolverRutaChrome() {
             if (it.isDirectory()) {
                 const r = buscar(full);
                 if (r) return r;
-            } else if (it.name === nombreChromeExe) {
+            } else if (nombresChromeExe.includes(it.name)) {
                 return full;
             }
         }
@@ -76,15 +80,20 @@ const client = new Client({
     }),
     puppeteer: {
         handleSIGINT: false,
-        executablePath: RUTA_CHROME, // CAMBIO: antes era process.env.CHROME_PATH || null (causa del fallo)
+        executablePath: RUTA_CHROME,
         args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
             '--disable-extensions',
-            '--disable-gpu',           // CAMBIO 2: Desactiva aceleración gráfica (obligatorio en servicios)
-            '--disable-dev-shm-usage', // CAMBIO 3: Evita cierres por falta de memoria compartida
-            '--no-zygote',             // Mejora la estabilidad en procesos de fondo
-            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-ipc-flooding-protection',
+            `--user-agent=Mozilla/5.0 (${process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'Windows NT 10.0; Win64; x64'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`,
+            ...(process.platform !== 'darwin' ? [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--no-zygote',
+                '--disable-gpu'
+            ] : [])
         ]
     }
 });
