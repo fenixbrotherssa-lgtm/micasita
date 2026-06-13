@@ -57,15 +57,14 @@ docker ps
 ```
 Debe aparecer una línea con `ametra-db` y estado `Up`.
 
-### 4. Azure Data Studio (para restaurar la base de datos)
+### 4. Transferir el backup de la base de datos
 
-- Entrar a `https://azure.microsoft.com/products/data-studio`
-- Descargar para macOS e instalar
-- Al abrir, crear nueva conexión:
-  - Servidor: `127.0.0.1`
-  - Usuario: `sa`
-  - Contraseña: `Daviana06101988!`
-  - Tipo de autenticación: SQL Login
+La instalación se hace de forma remota por AnyDesk. El archivo de backup está en Windows en:
+`C:\MedicinaEcuador_Project\ametra-os-client\SistemaOdonto_Pro_PROD_v1.bak`
+
+Para transferirlo al Mac:
+- En AnyDesk, buscar el ícono de carpeta en la barra superior (**File Transfer**)
+- Copiar el archivo `.bak` desde Windows al **Escritorio del Mac** (Desktop)
 
 ---
 
@@ -114,24 +113,31 @@ sudo launchctl start com.casrodsoft.ametraos.backend
 
 ### Paso 4 — Restaurar la base de datos
 
-1. Copiar el archivo `.bak` de Windows al Mac (por USB o red)
-2. Copiar el `.bak` al contenedor Docker:
-   ```bash
-   docker cp /ruta/al/archivo/SistemaOdonto_Pro.bak ametra-db:/tmp/
-   ```
-3. Abrir Azure Data Studio → conectarse a `127.0.0.1`
-4. Clic derecho en **Databases** → **Restore**
-5. Source: Device → seleccionar el archivo `/tmp/SistemaOdonto_Pro.bak`
-6. Database name: `SistemaOdonto_Pro`
-7. Clic en **Restore**
+El archivo `.bak` ya fue transferido al Escritorio del Mac (ver Paso 4 de requisitos previos).
+
+Abrir Terminal y ejecutar estos dos comandos uno por uno:
+
+```bash
+# 1. Meter el backup al contenedor Docker
+docker cp ~/Desktop/SistemaOdonto_Pro_PROD_v1.bak ametra-db:/tmp/
+```
+
+```bash
+# 2. Restaurar la base de datos (tarda unos minutos según el tamaño)
+docker exec -it ametra-db /opt/mssql-tools18/bin/sqlcmd \
+  -S localhost -U sa -P "Daviana06101988!" -No \
+  -Q "RESTORE DATABASE [SistemaOdonto_Pro] FROM DISK = '/tmp/SistemaOdonto_Pro_PROD_v1.bak' WITH REPLACE"
+```
+
+Cuando termine debe decir: `RESTORE DATABASE successfully processed X pages`
 
 ### Paso 5 — Copiar la BASE_MAESTRA_NACIONAL.csv
 
-Conectar el USB con el archivo y en Terminal:
+Igual que el `.bak`, transferir el archivo `BASE_MAESTRA_NACIONAL.csv` al Escritorio del Mac por AnyDesk File Transfer, luego en Terminal:
+
 ```bash
-sudo cp /Volumes/NOMBRE_USB/BASE_MAESTRA_NACIONAL.csv /Library/AmetraOS/backend/
+sudo cp ~/Desktop/BASE_MAESTRA_NACIONAL.csv /Library/AmetraOS/backend/
 ```
-> Reemplazar `NOMBRE_USB` con el nombre real del pendrive (se ve en el Finder en la barra lateral izquierda).
 
 ### Paso 6 — Instalar la app de escritorio
 
