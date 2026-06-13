@@ -43,6 +43,14 @@ mkdir -p "$INSTALL_DIR/uploads/facturacion/xml_generados"
 mkdir -p "$INSTALL_DIR/uploads/facturacion/xml_firmados"
 mkdir -p "$INSTALL_DIR/sessions"
 
+# Restaurar sesión de WhatsApp si fue respaldada en preinstall
+SESSION_BAK="/tmp/ametra_sessions_backup"
+if [ -d "$SESSION_BAK" ]; then
+    echo "[AmetraOS] Restaurando sesión de WhatsApp..."
+    cp -r "$SESSION_BAK/." "$INSTALL_DIR/sessions/"
+    rm -rf "$SESSION_BAK"
+fi
+
 # ── 3. Crear .env si no existe (primera instalación) ────────────────────────
 ENV_FILE="$INSTALL_DIR/.env"
 if [ ! -f "$ENV_FILE" ]; then
