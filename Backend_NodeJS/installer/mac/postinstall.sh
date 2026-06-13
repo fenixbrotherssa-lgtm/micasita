@@ -103,6 +103,9 @@ chmod 644 "$PLIST_DEST"
 launchctl load "$PLIST_DEST"
 launchctl start "$LABEL"
 
+# ── 7. Silenciar Docker Desktop (no abrir ventana al arrancar) ──────────
+defaults write com.docker.docker showDockerDashboardAtLogin -bool false 2>/dev/null || true
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║  AmetraOS Backend instalado y corriendo como servicio del sistema ║"

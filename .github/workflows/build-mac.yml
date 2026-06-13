@@ -93,6 +93,14 @@ jobs:
           # package.json lo necesita Node para resolver módulos
           cp Backend_NodeJS/package.json pkg-root/Library/AmetraOS/backend/
 
+          # Scripts de utilidad accesibles tras la instalación
+          cp Backend_NodeJS/installer/mac/escanear-whatsapp.sh \
+             pkg-root/Library/AmetraOS/backend/escanear-whatsapp.sh
+          cp Backend_NodeJS/installer/mac/configurar-inicio-automatico.sh \
+             pkg-root/Library/AmetraOS/backend/configurar-inicio-automatico.sh
+          chmod +x pkg-root/Library/AmetraOS/backend/escanear-whatsapp.sh
+          chmod +x pkg-root/Library/AmetraOS/backend/configurar-inicio-automatico.sh
+
           # firmadormedico (sri.jar + JDK Mac si existe)
           if [ -d "pkg-root/Library/AmetraOS/backend/services/firmadormedico" ]; then
             echo "firmadormedico copiado por el ofuscador"

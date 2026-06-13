@@ -151,6 +151,35 @@ sudo cp ~/Desktop/BASE_MAESTRA_NACIONAL.csv /Library/AmetraOS/backend/
 
 ---
 
+### Paso 7 — Configurar inicio automático (una sola vez)
+
+Este script configura que todo arranque solo cuando el Mac enciende, sin que el cliente haga nada:
+
+```bash
+sudo bash /Library/AmetraOS/backend/configurar-inicio-automatico.sh
+```
+
+Al terminar muestra la secuencia de arranque confirmada. Desde ese momento el cliente solo enciende el Mac y en ~60 segundos el sistema está listo.
+
+### Paso 8 — Configurar WhatsApp (primera vez)
+
+Solo se hace una vez. Si el sistema no usa WhatsApp, omitir este paso.
+
+```bash
+sudo bash /Library/AmetraOS/backend/escanear-whatsapp.sh
+```
+
+El script:
+1. Para el servicio
+2. Muestra el QR en pantalla
+3. El cliente escanea desde el teléfono (WhatsApp → Dispositivos vinculados → Vincular dispositivo)
+4. Al completar el escaneo, presionar `Ctrl+C`
+5. El script reinicia el servicio solo
+
+La sesión queda guardada. No se vuelve a pedir el QR a menos que el cliente cierre sesión de WhatsApp desde el teléfono.
+
+---
+
 ## Verificación final
 
 Abrir Terminal y verificar que el backend responde:

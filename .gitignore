@@ -34,6 +34,13 @@ Backend_NodeJS/BASE_MAESTRA_NACIONAL.csv
 *.exe
 !medicSystemcore/dist/**/*.exe
 
+# ─── Artifacts descargados de GitHub Actions (no van al repo) ─
+AmetraOS-Backend-Mac/
+AmetraOS-Desktop-Mac/
+AmetraOS-Uninstall-Mac/
+*.dmg
+*.pkg
+
 # ─── OS ─────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
