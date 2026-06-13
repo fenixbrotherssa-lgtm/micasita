@@ -22,26 +22,34 @@ jobs:
           node-version: '24'
 
       # ─────────────────────────────────────────
-      # BACKEND: instalar deps + preparar archivos
-      # El ofuscador aplana la estructura en Mac, así que copiamos
-      # los fuentes directamente manteniendo la jerarquía de carpetas.
+      # BACKEND: instalar deps + ofuscar
+      # Se copia a dist-src/ primero para que el ofuscador procese
+      # un único directorio raíz y preserve la jerarquía de carpetas.
       # ─────────────────────────────────────────
-      - name: Instalar dependencias del backend (solo producción)
+      - name: Instalar dependencias del backend
         working-directory: Backend_NodeJS
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: npm ci --omit=dev
 
-      - name: Preparar fuentes del backend con estructura correcta
+      - name: Instalar javascript-obfuscator
+        working-directory: Backend_NodeJS
+        run: npm install --no-save javascript-obfuscator@4.2.2
+
+      - name: Copiar fuentes a carpeta temporal con estructura correcta
         working-directory: Backend_NodeJS
         run: |
-          mkdir -p dist
-          cp server.js dist/
-          cp -r config       dist/
-          cp -r controllers  dist/
-          cp -r middlewares  dist/
-          cp -r routes       dist/
-          cp -r services     dist/
+          mkdir -p dist-src
+          cp server.js       dist-src/
+          cp -r config       dist-src/
+          cp -r controllers  dist-src/
+          cp -r middlewares  dist-src/
+          cp -r routes       dist-src/
+          cp -r services     dist-src/
+
+      - name: Ofuscar dist-src/ → dist/ (mantiene jerarquía)
+        working-directory: Backend_NodeJS
+        run: npx javascript-obfuscator ./dist-src --output ./dist --compact true --self-defending true --string-array true --string-array-encoding base64 --target node
 
       # ─────────────────────────────────────────
       # FRONTEND: instalar deps + compilar DMG
