@@ -201,6 +201,22 @@ Debe responder algo (aunque sea un error de método) — eso confirma que el ser
 
 ---
 
+## Verificación rápida del sistema
+
+Abrir Terminal y ejecutar este comando para confirmar que todo funciona:
+
+```bash
+echo "=== Backend ===" && curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/auth && echo "" && echo "=== SQL Server ===" && docker ps --filter name=ametra-db --format "{{.Status}}" && echo "=== Servicio ===" && sudo launchctl list | grep casrodsoft && echo "=== WhatsApp ===" && grep "Conectado" /Library/Logs/AmetraOS/backend.log | tail -1
+```
+
+Resultado esperado:
+- Backend: `404` (el servidor responde — 404 es normal en GET /api/auth)
+- SQL Server: `Up X minutes`
+- Servicio: línea con `com.casrodsoft.ametraos.backend`
+- WhatsApp: `✅ Sistema Medicina Ecuador Pro: WhatsApp Web Conectado`
+
+---
+
 ## Comandos útiles de mantenimiento
 
 ```bash
@@ -208,7 +224,7 @@ Debe responder algo (aunque sea un error de método) — eso confirma que el ser
 tail -f /Library/Logs/AmetraOS/backend.log
 
 # Verificar que WhatsApp está conectado
-grep "Conectado" /Library/Logs/AmetraOS/backend.log | tail -3
+grep "Conectado" /Library/Logs/AmetraOS/backend.log | tail -1
 
 # Reiniciar el backend
 sudo launchctl stop com.casrodsoft.ametraos.backend
@@ -222,7 +238,24 @@ docker restart ametra-db
 
 # Ver logs de SQL Server
 docker logs ametra-db
+
+# Si Chrome/WhatsApp no responde — limpiar y reiniciar
+sudo pkill -f "Google Chrome"
+sudo launchctl stop com.casrodsoft.ametraos.backend
+sleep 5
+sudo launchctl start com.casrodsoft.ametraos.backend
 ```
+
+## Optimización de rendimiento (Mac 8GB)
+
+El Mac M2 con 8GB RAM corre ajustado con Docker + SQL Server + Chrome (WhatsApp). Estas configuraciones ya fueron aplicadas y no deben repetirse:
+
+- **Docker Desktop → Resources → Memory**: reducido a **2GB** (libera ~2GB para el sistema)
+- **SQL Server memoria máxima**: limitada a **1GB** con `sp_configure 'max server memory (MB)', 1024`
+
+Si el sistema se siente lento, verificar que Docker no haya vuelto a su configuración por defecto: Docker Desktop → Settings → Resources → Memory debe mostrar 2GB.
+
+---
 
 ## Actualizar AmetraOS a una nueva versión
 
