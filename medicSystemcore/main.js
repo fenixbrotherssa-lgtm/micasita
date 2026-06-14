@@ -41,7 +41,7 @@ function createWindow() {
         dominioPublico = publicURL.split('/api')[0];
     }
 
-    const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+    const iconPath = path.join(__dirname, 'assets', process.platform === 'darwin' ? 'icon.icns' : 'icon.ico');
 
     // --- CONTROL DE ESTADO DE RED ---
     const userDataPath = app.getPath('userData');
@@ -158,4 +158,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
