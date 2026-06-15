@@ -111,8 +111,11 @@ jobs:
              pkg-root/Library/AmetraOS/backend/escanear-whatsapp.sh
           cp Backend_NodeJS/installer/mac/configurar-inicio-automatico.sh \
              pkg-root/Library/AmetraOS/backend/configurar-inicio-automatico.sh
+          cp Backend_NodeJS/installer/mac/uninstall.sh \
+             pkg-root/Library/AmetraOS/backend/uninstall.sh
           chmod +x pkg-root/Library/AmetraOS/backend/escanear-whatsapp.sh
           chmod +x pkg-root/Library/AmetraOS/backend/configurar-inicio-automatico.sh
+          chmod +x pkg-root/Library/AmetraOS/backend/uninstall.sh
 
           # firmadormedico (sri.jar + JDK Mac si existe)
           if [ -d "pkg-root/Library/AmetraOS/backend/services/firmadormedico" ]; then
