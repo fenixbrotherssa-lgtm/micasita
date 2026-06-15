@@ -3,9 +3,14 @@ const { enviarMensaje } = require('../services/whatsappService');
 
 // Función auxiliar para formatear fechas a español (Ecuador)
 const formatearFechaEcuador = (fecha) => {
-    // Parsear manualmente para evitar que el string ISO se interprete como UTC medianoche
-    const [a, m, d] = String(fecha).split('T')[0].split('-');
-    const fechaLocal = new Date(parseInt(a), parseInt(m) - 1, parseInt(d));
+    let fechaLocal;
+    if (fecha instanceof Date) {
+        fechaLocal = fecha;
+    } else {
+        // Parsear manualmente: new Date('2026-06-16') interpreta UTC medianoche → día anterior en Ecuador
+        const [a, m, d] = String(fecha).split('T')[0].split('-');
+        fechaLocal = new Date(parseInt(a), parseInt(m) - 1, parseInt(d));
+    }
     return fechaLocal.toLocaleDateString('es-EC', {
         timeZone: 'America/Guayaquil',
         weekday: 'long',
