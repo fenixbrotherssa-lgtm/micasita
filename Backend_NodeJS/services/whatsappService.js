@@ -104,21 +104,20 @@ const client = new Client({
 // --- FUNCIONES DE APOYO ---
 
 function formatearFechaEcuador(fechaObj) {
-    return fechaObj.toLocaleDateString('es-EC', { 
-        weekday: 'long', 
-        day: 'numeric', 
-        month: 'long' 
+    return fechaObj.toLocaleDateString('es-EC', {
+        timeZone: 'America/Guayaquil',
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
     }).toUpperCase();
 }
 
 async function obtenerHorariosLibres(pool, id_clinica, fecha, id_doctor) {
     const jornada = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00"];
     try {
-        // Calcular fecha y hora actual en Ecuador
         const ahora = new Date();
-        ahora.setHours(ahora.getHours() - 5);
-        const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
-        const fechaHoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+        const horaActual = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Guayaquil', hour: '2-digit', minute: '2-digit', hour12: false }).format(ahora);
+        const fechaHoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(ahora);
         const esHoy = fecha === fechaHoy;
 
         // ✅ FIX: Filtrar por doctor para verificar su disponibilidad real
@@ -143,11 +142,10 @@ async function obtenerHorariosLibres(pool, id_clinica, fecha, id_doctor) {
 
 function generarOpcionesDias() {
     const dias = [];
-    for (let i = 0; i <= 13; i++) {  // ✅ Antes: i = 1, ahora incluye HOY
-        const d = new Date(); 
-        d.setHours(d.getHours() - 5); // Ajuste Ecuador
-        d.setDate(d.getDate() + i);
-
+    const hoyStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date());
+    const [anioBase, mesBase, diaBase] = hoyStr.split('-').map(Number);
+    for (let i = 0; i <= 13; i++) {
+        const d = new Date(anioBase, mesBase - 1, diaBase + i);
         if (d.getDay() !== -1) {
             const anio = d.getFullYear();
             const mes = String(d.getMonth() + 1).padStart(2, '0');

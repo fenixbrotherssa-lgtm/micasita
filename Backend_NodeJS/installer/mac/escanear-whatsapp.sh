@@ -34,16 +34,22 @@ echo "   Al completar el escaneo, presiona Ctrl+C para finalizar."
 echo "══════════════════════════════════════════════"
 echo ""
 
+_reiniciar_servicio() {
+    echo ""
+    echo "3. Reiniciando el servicio en segundo plano..."
+    sudo pkill -f "Google Chrome" 2>/dev/null || true
+    sudo launchctl load /Library/LaunchDaemons/${LABEL}.plist 2>/dev/null || true
+    sudo launchctl start "$LABEL"
+    sleep 2
+    echo ""
+    echo "✓ Listo. WhatsApp vinculado y servicio corriendo normalmente."
+    echo ""
+    exit 0
+}
+
+trap '_reiniciar_servicio' INT TERM
+
 cd "$INSTALL_DIR"
 sudo node server.js
 
-echo ""
-echo "3. Reiniciando el servicio en segundo plano..."
-sudo pkill -f "Google Chrome" 2>/dev/null || true
-sudo launchctl load /Library/LaunchDaemons/${LABEL}.plist 2>/dev/null || true
-sudo launchctl start "$LABEL"
-sleep 2
-
-echo ""
-echo "✓ Listo. WhatsApp vinculado y servicio corriendo normalmente."
-echo ""
+_reiniciar_servicio
