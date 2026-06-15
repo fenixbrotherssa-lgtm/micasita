@@ -27,17 +27,27 @@ Cada descarga llega como `.zip`. Descomprimirlo para obtener el `.pkg` o `.dmg` 
   ```
   Debe mostrar `v24.x.x`
 
-### 2. Docker Desktop
+### 2. OrbStack
 
-- Entrar a `https://www.docker.com/products/docker-desktop`
-- Descargar para Mac (elegir **Apple Silicon** si el Mac es M1/M2/M3/M4, o **Intel** si es más antiguo)
-- Abrir el `.dmg`, arrastrar Docker a Aplicaciones
-- Abrir Docker desde Aplicaciones y dejarlo correr (aparece la ballena en la barra de menú)
-- Esperar hasta que diga **"Docker Desktop is running"**
+OrbStack reemplaza a Docker Desktop. Arranca automáticamente con el Mac como servicio del sistema — no requiere que el usuario abra ninguna aplicación.
+
+Abrir **Terminal** y ejecutar:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Cuando termine, ejecutar:
+
+```bash
+eval "$(/opt/homebrew/bin/brew shellenv zsh)" && brew install orbstack
+```
+
+Abrir OrbStack desde Aplicaciones, conceder los permisos que pide y esperar a que diga **"Running"**. No requiere cuenta para uso básico.
 
 ### 3. SQL Server 2025 Express
 
-Con Docker corriendo, abrir **Terminal** y pegar este comando completo:
+Con OrbStack corriendo, abrir **Terminal** y pegar este comando completo:
 
 ```bash
 docker run -d --name ametra-db \
@@ -45,7 +55,7 @@ docker run -d --name ametra-db \
   -e "SA_PASSWORD=Daviana06101988!" \
   -e "MSSQL_PID=Express" \
   -p 1433:1433 \
-  --restart unless-stopped \
+  --restart always \
   mcr.microsoft.com/mssql/server:2025-latest
 ```
 
@@ -151,15 +161,23 @@ sudo cp ~/Desktop/BASE_MAESTRA_NACIONAL.csv /Library/AmetraOS/backend/
 
 ---
 
-### Paso 7 — Configurar inicio automático (una sola vez)
+### Paso 7 — Verificar inicio automático
 
-Este script configura que todo arranque solo cuando el Mac enciende, sin que el cliente haga nada:
+OrbStack arranca como daemon del sistema en el boot del Mac sin necesitar que nadie inicie sesión. El contenedor SQL Server tiene política `--restart always`, por lo que sube solo junto con OrbStack.
+
+Verificar que la política quedó correcta:
 
 ```bash
-sudo bash /Library/AmetraOS/backend/configurar-inicio-automatico.sh
+docker inspect ametra-db --format='{{.HostConfig.RestartPolicy.Name}}'
 ```
 
-Al terminar muestra la secuencia de arranque confirmada. Desde ese momento el cliente solo enciende el Mac y en ~60 segundos el sistema está listo.
+Debe mostrar `always`. Si no:
+
+```bash
+docker update --restart always ametra-db
+```
+
+Desde ese momento el cliente solo enciende el Mac y en ~45 segundos el sistema está listo — sin tocar nada.
 
 ### Paso 8 — Configurar WhatsApp (primera vez)
 
@@ -248,12 +266,17 @@ sudo launchctl start com.casrodsoft.ametraos.backend
 
 ## Optimización de rendimiento (Mac 8GB)
 
-El Mac M2 con 8GB RAM corre ajustado con Docker + SQL Server + Chrome (WhatsApp). Estas configuraciones ya fueron aplicadas y no deben repetirse:
+OrbStack usa significativamente menos RAM que Docker Desktop (gestión automática de memoria). Solo es necesario limitar SQL Server:
 
-- **Docker Desktop → Resources → Memory**: reducido a **2GB** (libera ~2GB para el sistema)
-- **SQL Server memoria máxima**: limitada a **1GB** con `sp_configure 'max server memory (MB)', 1024`
+- **SQL Server memoria máxima**: limitada a **1GB** — ejecutar una sola vez:
 
-Si el sistema se siente lento, verificar que Docker no haya vuelto a su configuración por defecto: Docker Desktop → Settings → Resources → Memory debe mostrar 2GB.
+```bash
+docker exec -it ametra-db /opt/mssql-tools18/bin/sqlcmd \
+  -S localhost -U sa -P "Daviana06101988!" -No \
+  -Q "EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'max server memory (MB)', 1024; RECONFIGURE;"
+```
+
+No se necesita tocar ninguna configuración de OrbStack.
 
 ---
 

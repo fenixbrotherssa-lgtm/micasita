@@ -1,35 +1,50 @@
 #!/bin/bash
-# Ejecutar este script UNA SOLA VEZ después de instalar todo.
-# Configura que Docker, SQL Server y el backend arranquen solos al encender el Mac.
+# Verificación de inicio automático — AmetraOS con OrbStack
+# OrbStack ya arranca como daemon del sistema, no requiere configuración adicional.
 
 echo ""
 echo "══════════════════════════════════════════════"
-echo "  Configurando inicio automático - AmetraOS"
+echo "  Verificando inicio automático - AmetraOS"
 echo "══════════════════════════════════════════════"
 echo ""
 
-# 1. Docker Desktop arranque al iniciar sesión
-echo "• Configurando Docker para arrancar con el Mac..."
-osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Docker.app", hidden:true}' 2>/dev/null || true
-defaults write com.docker.docker showDockerDashboardAtLogin -bool false
+# 1. Verificar que OrbStack está corriendo
+echo "• Verificando OrbStack..."
+if docker info >/dev/null 2>&1; then
+    echo "  ✓ OrbStack activo"
+else
+    echo "  ✗ OrbStack no responde. Abrir OrbStack desde Aplicaciones y esperar que diga Running."
+    exit 1
+fi
 
-# 2. Verificar que el servicio del backend está activo
+# 2. Verificar que el contenedor existe y tiene política de reinicio correcta
+echo "• Verificando SQL Server..."
+RESTART=$(docker inspect ametra-db --format='{{.HostConfig.RestartPolicy.Name}}' 2>/dev/null)
+if [ "$RESTART" = "always" ]; then
+    echo "  ✓ SQL Server con reinicio automático (always)"
+else
+    echo "  Ajustando política de reinicio..."
+    docker update --restart always ametra-db
+    echo "  ✓ Listo"
+fi
+
+# 3. Verificar que el contenedor está corriendo
+STATUS=$(docker inspect ametra-db --format='{{.State.Running}}' 2>/dev/null)
+if [ "$STATUS" = "true" ]; then
+    echo "  ✓ SQL Server corriendo"
+else
+    echo "  Iniciando SQL Server..."
+    docker start ametra-db
+    echo "  ✓ Iniciado"
+fi
+
+# 4. Verificar el servicio del backend
 echo "• Verificando servicio del backend..."
 if sudo launchctl list | grep -q "casrodsoft"; then
     echo "  ✓ Backend registrado como servicio del sistema"
 else
-    echo "  ✗ Problema: el servicio no está registrado. Reinstalar el .pkg"
-fi
-
-# 3. Verificar que el contenedor Docker tiene política de reinicio
-echo "• Verificando SQL Server..."
-RESTART=$(docker inspect ametra-db --format='{{.HostConfig.RestartPolicy.Name}}' 2>/dev/null)
-if [ "$RESTART" = "unless-stopped" ]; then
-    echo "  ✓ SQL Server se reinicia automáticamente con Docker"
-else
-    echo "  Ajustando política de reinicio de SQL Server..."
-    docker update --restart unless-stopped ametra-db
-    echo "  ✓ Listo"
+    echo "  ✗ El servicio no está registrado. Reinstalar el .pkg"
+    exit 1
 fi
 
 echo ""
@@ -37,11 +52,10 @@ echo "════════════════════════�
 echo "  Secuencia de arranque al encender el Mac:"
 echo ""
 echo "  1. Mac enciende"
-echo "  2. Usuario inicia sesión"
-echo "  3. Docker arranca en segundo plano (sin ventana)"
-echo "  4. SQL Server arranca dentro de Docker"
-echo "  5. Backend AmetraOS arranca como servicio"
-echo "  6. En ~60 segundos todo está listo para usar"
+echo "  2. OrbStack arranca como servicio del sistema"
+echo "  3. SQL Server arranca dentro de OrbStack"
+echo "  4. Backend AmetraOS arranca como servicio"
+echo "  5. En ~45 segundos todo está listo para usar"
 echo ""
 echo "  El cliente NO necesita hacer nada técnico."
 echo "══════════════════════════════════════════════"

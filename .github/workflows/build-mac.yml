@@ -119,6 +119,9 @@ jobs:
             echo "firmadormedico copiado por el ofuscador"
           fi
 
+          # Assets estáticos (three.js, GLTFLoader, pdf.js, qrcode, etc.)
+          cp -r Backend_NodeJS/assets pkg-root/Library/AmetraOS/backend/
+
           # Estructura vacía de uploads (el servidor la crea si no existe, pero la dejamos)
           mkdir -p pkg-root/Library/AmetraOS/backend/uploads
 
