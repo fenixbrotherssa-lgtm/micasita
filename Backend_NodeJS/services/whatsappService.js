@@ -679,27 +679,35 @@ cron.schedule('0 8 * * *', async () => {
     }
 });
 
-// --- LIMPIEZA DE SINGLETON AL ARRANCAR ---
-// Chrome deja archivos Singleton bloqueados si se cae bruscamente.
-// Si no se limpian, el siguiente arranque falla silenciosamente.
-function limpiarSingleton() {
+// --- LIMPIEZA DE CHROME ANTERIOR AL ARRANCAR ---
+// Cuando Node se cae o launchd lo reinicia, Chrome queda como proceso huérfano.
+// Si no se mata, el nuevo arranque falla con "browser is already running".
+function limpiarChromeAnterior() {
+    if (process.platform === 'win32') return;
+    const { execSync } = require('child_process');
     const sesDir = path.join(__dirname, '..', 'sessions');
+    try {
+        execSync(`pkill -f "${sesDir.replace(/"/g, '\\"')}" 2>/dev/null || true`, { stdio: 'ignore', shell: true });
+        execSync('sleep 1', { stdio: 'ignore' });
+        console.log('🧹 [WhatsApp]: Chrome anterior detenido');
+    } catch {}
+    // Limpiar archivos Singleton que Chrome deja al caerse bruscamente
     if (!fs.existsSync(sesDir)) return;
-    const buscarYBorrar = (dir) => {
+    const borrarSingleton = (dir) => {
         try {
             for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
                 const fullPath = path.join(dir, item.name);
-                if (item.isDirectory()) buscarYBorrar(fullPath);
+                if (item.isDirectory()) borrarSingleton(fullPath);
                 else if (item.name.startsWith('Singleton')) {
                     try { fs.unlinkSync(fullPath); } catch {}
                 }
             }
         } catch {}
     };
-    buscarYBorrar(sesDir);
+    borrarSingleton(sesDir);
 }
 
-limpiarSingleton();
+limpiarChromeAnterior();
 
 client.on('disconnected', (reason) => {
     console.log('❌ [WhatsApp]: Desconectado ->', reason, '— reiniciando servicio...');
