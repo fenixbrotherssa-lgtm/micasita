@@ -679,6 +679,38 @@ cron.schedule('0 8 * * *', async () => {
     }
 });
 
+// --- LIMPIEZA DE SINGLETON AL ARRANCAR ---
+// Chrome deja archivos Singleton bloqueados si se cae bruscamente.
+// Si no se limpian, el siguiente arranque falla silenciosamente.
+function limpiarSingleton() {
+    const sesDir = path.join(__dirname, '..', 'sessions');
+    if (!fs.existsSync(sesDir)) return;
+    const buscarYBorrar = (dir) => {
+        try {
+            for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+                const fullPath = path.join(dir, item.name);
+                if (item.isDirectory()) buscarYBorrar(fullPath);
+                else if (item.name.startsWith('Singleton')) {
+                    try { fs.unlinkSync(fullPath); } catch {}
+                }
+            }
+        } catch {}
+    };
+    buscarYBorrar(sesDir);
+}
+
+limpiarSingleton();
+
+client.on('disconnected', (reason) => {
+    console.log('❌ [WhatsApp]: Desconectado ->', reason, '— reiniciando servicio...');
+    process.exit(1);
+});
+
+client.on('auth_failure', (msg) => {
+    console.error('❌ [WhatsApp]: Fallo de autenticación ->', msg);
+    process.exit(1);
+});
+
 // --- INICIALIZACIÓN ---
 client.initialize();
 
