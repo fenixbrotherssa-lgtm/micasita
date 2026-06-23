@@ -1,0 +1,158 @@
+name: Build Casrodsoft Remote - Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+
+env:
+  FLUTTER_VERSION: "3.24.5"
+  RUST_VERSION: "1.75"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  CARGO_EXPAND_VERSION: "1.0.95"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VERSION: "1.4.8"
+
+jobs:
+  # Job 1: Generar el bridge Flutter<->Rust en Linux (mas rapido y sencillo)
+  generate-bridge:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake curl gcc git g++ libclang-dev \
+            libgtk-3-dev llvm-dev nasm ninja-build pkg-config wget
+
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Install Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install flutter_rust_bridge_codegen
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --locked
+
+      - name: Run flutter pub get
+        run: cd flutter && flutter pub get
+
+      - name: Generate bridge
+        run: |
+          flutter_rust_bridge_codegen \
+            --rust-input src/flutter_ffi.rs \
+            --dart-output flutter/lib/bridge_generated.dart \
+            --dart-decl-output flutter/lib/bridge_definitions.dart \
+            --wasm
+
+      - name: Upload bridge artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-files
+          path: |
+            src/bridge_generated.rs
+            flutter/lib/bridge_generated.dart
+            flutter/lib/bridge_generated.freezed.dart
+            flutter/lib/bridge_definitions.dart
+
+  # Job 2: Compilar el exe de Windows
+  build-windows:
+    needs: generate-bridge
+    runs-on: windows-2022
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-files
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup vcpkg with GitHub Actions cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+        shell: bash
+
+      - name: Build Rust library (librustdesk.dll)
+        run: |
+          cargo build --release --features flutter
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+          LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
+
+      - name: Copy librustdesk.dll to Flutter
+        run: |
+          cp target/release/librustdesk.dll flutter/
+        shell: bash
+
+      - name: Build Flutter Windows app
+        run: |
+          cd flutter
+          flutter pub get
+          flutter build windows --release
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+
+      - name: Package installer (zip)
+        run: |
+          Compress-Archive -Path flutter/build/windows/x64/runner/Release/* `
+            -DestinationPath "casrodsoft-remote-${{ env.VERSION }}-windows-x64.zip"
+        shell: pwsh
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: casrodsoft-remote-windows-x64
+          path: casrodsoft-remote-${{ env.VERSION }}-windows-x64.zip
