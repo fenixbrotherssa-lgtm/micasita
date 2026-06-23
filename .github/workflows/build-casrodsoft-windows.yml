@@ -43,6 +43,7 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
 
       - name: Install Flutter ${{ env.FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
