@@ -68,7 +68,7 @@ jobs:
       - name: Install bridge codegen tools
         run: |
           cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
         env:
           LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
 
@@ -79,9 +79,7 @@ jobs:
         run: |
           flutter_rust_bridge_codegen `
             --rust-input src/flutter_ffi.rs `
-            --dart-output flutter/lib/generated_bridge.dart `
-            --dart-decl-output flutter/lib/bridge_definitions.dart `
-            --wasm
+            --dart-output flutter/lib/generated_bridge.dart
         shell: pwsh
         env:
           LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
