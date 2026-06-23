@@ -127,7 +127,10 @@ jobs:
 
       - name: Build Rust library (librustdesk.dll)
         run: |
-          cargo build --release --features flutter
+          $vcpkgInc = "$env:VCPKG_ROOT\installed\x64-windows-static\include"
+          $env:BINDGEN_EXTRA_CLANG_ARGS = "-I$vcpkgInc"
+          cargo build --release --features flutter --lib
+        shell: pwsh
         env:
           VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
           LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
