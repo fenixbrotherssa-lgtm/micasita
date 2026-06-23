@@ -122,15 +122,11 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          & "$env:VCPKG_ROOT\vcpkg" install --triplet x64-windows-static --host-triplet x64-windows
+          & "$env:VCPKG_ROOT\vcpkg" install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static --classic
         shell: pwsh
 
       - name: Build Rust library (librustdesk.dll)
-        run: |
-          $vcpkgInc = "$env:VCPKG_ROOT\installed\x64-windows-static\include"
-          $env:BINDGEN_EXTRA_CLANG_ARGS = "-I$vcpkgInc"
-          cargo build --release --features flutter --lib
-        shell: pwsh
+        run: cargo build --release --features flutter --lib
         env:
           VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
           LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
