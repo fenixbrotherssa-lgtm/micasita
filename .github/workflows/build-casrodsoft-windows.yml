@@ -67,10 +67,12 @@ jobs:
         with:
           path: |
             src/bridge_generated.rs
+            src/bridge_generated.io.rs
+            src/bridge_generated.web.rs
             flutter/lib/bridge_generated.dart
             flutter/lib/bridge_generated.freezed.dart
             flutter/lib/bridge_definitions.dart
-          key: bridge-${{ github.sha }}
+          key: bridge-${{ hashFiles('src/flutter_ffi.rs') }}-v2
 
   # Job 2: Compilar el exe de Windows
   build-windows:
@@ -92,10 +94,12 @@ jobs:
         with:
           path: |
             src/bridge_generated.rs
+            src/bridge_generated.io.rs
+            src/bridge_generated.web.rs
             flutter/lib/bridge_generated.dart
             flutter/lib/bridge_generated.freezed.dart
             flutter/lib/bridge_definitions.dart
-          key: bridge-${{ github.sha }}
+          key: bridge-${{ hashFiles('src/flutter_ffi.rs') }}-v2
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2
