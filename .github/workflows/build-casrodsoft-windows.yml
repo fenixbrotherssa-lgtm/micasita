@@ -122,8 +122,8 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-        shell: bash
+          $env:VCPKG_ROOT/vcpkg install --triplet x64-windows-static --host-triplet x64-windows
+        shell: pwsh
 
       - name: Build Rust library (librustdesk.dll)
         run: |
