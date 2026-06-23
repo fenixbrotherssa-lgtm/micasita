@@ -79,7 +79,7 @@ jobs:
         run: |
           flutter_rust_bridge_codegen `
             --rust-input src/flutter_ffi.rs `
-            --dart-output flutter/lib/bridge_generated.dart `
+            --dart-output flutter/lib/generated_bridge.dart `
             --dart-decl-output flutter/lib/bridge_definitions.dart `
             --wasm
         shell: pwsh
