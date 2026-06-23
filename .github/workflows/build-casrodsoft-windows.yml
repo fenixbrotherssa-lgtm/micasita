@@ -67,15 +67,15 @@ jobs:
             --dart-decl-output flutter/lib/bridge_definitions.dart \
             --wasm
 
-      - name: Upload bridge artifact
-        uses: actions/upload-artifact@v4
+      - name: Cache bridge files
+        uses: actions/cache/save@v4
         with:
-          name: bridge-files
           path: |
             src/bridge_generated.rs
             flutter/lib/bridge_generated.dart
             flutter/lib/bridge_generated.freezed.dart
             flutter/lib/bridge_definitions.dart
+          key: bridge-${{ github.sha }}
 
   # Job 2: Compilar el exe de Windows
   build-windows:
@@ -92,11 +92,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore bridge files
-        uses: actions/download-artifact@v4
+      - name: Restore bridge files from cache
+        uses: actions/cache/restore@v4
         with:
-          name: bridge-files
-          path: ./
+          path: |
+            src/bridge_generated.rs
+            flutter/lib/bridge_generated.dart
+            flutter/lib/bridge_generated.freezed.dart
+            flutter/lib/bridge_definitions.dart
+          key: bridge-${{ github.sha }}
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2
