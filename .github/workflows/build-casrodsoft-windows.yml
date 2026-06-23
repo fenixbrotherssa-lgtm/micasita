@@ -14,69 +14,7 @@ env:
   VERSION: "1.4.8"
 
 jobs:
-  # Job 1: Generar el bridge Flutter<->Rust en Linux (mas rapido y sencillo)
-  generate-bridge:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Export GitHub Actions cache environment variables
-        uses: actions/github-script@v6
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install prerequisites
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y clang cmake curl gcc git g++ libclang-dev \
-            libgtk-3-dev llvm-dev nasm ninja-build pkg-config wget
-
-      - name: Install Rust ${{ env.RUST_VERSION }}
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt
-
-      - name: Install Flutter ${{ env.FLUTTER_VERSION }}
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-
-      - name: Install flutter_rust_bridge_codegen
-        run: |
-          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --locked
-
-      - name: Run flutter pub get
-        run: cd flutter && flutter pub get
-
-      - name: Generate bridge
-        run: |
-          flutter_rust_bridge_codegen \
-            --rust-input src/flutter_ffi.rs \
-            --dart-output flutter/lib/bridge_generated.dart \
-            --dart-decl-output flutter/lib/bridge_definitions.dart \
-            --wasm
-
-      - name: Cache bridge files
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            src/bridge_generated.rs
-            src/bridge_generated.io.rs
-            src/bridge_generated.web.rs
-            flutter/lib/bridge_generated.dart
-            flutter/lib/bridge_generated.freezed.dart
-            flutter/lib/bridge_definitions.dart
-          key: bridge-${{ hashFiles('src/flutter_ffi.rs') }}-v2
-
-  # Job 2: Compilar el exe de Windows
   build-windows:
-    needs: generate-bridge
     runs-on: windows-2022
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -88,18 +26,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Restore bridge files from cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            src/bridge_generated.rs
-            src/bridge_generated.io.rs
-            src/bridge_generated.web.rs
-            flutter/lib/bridge_generated.dart
-            flutter/lib/bridge_generated.freezed.dart
-            flutter/lib/bridge_definitions.dart
-          key: bridge-${{ hashFiles('src/flutter_ffi.rs') }}-v2
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2
@@ -117,6 +43,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
+          components: rustfmt
 
       - name: Setup vcpkg with GitHub Actions cache
         uses: lukka/run-vcpkg@v11
@@ -129,6 +56,36 @@ jobs:
           & "$env:VCPKG_ROOT\vcpkg" install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static --classic
         shell: pwsh
 
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-
+
+      - name: Install bridge codegen tools
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --locked
+        env:
+          LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
+
+      - name: Run flutter pub get
+        run: cd flutter && flutter pub get
+
+      - name: Generate bridge (Windows)
+        run: |
+          flutter_rust_bridge_codegen `
+            --rust-input src/flutter_ffi.rs `
+            --dart-output flutter/lib/bridge_generated.dart `
+            --dart-decl-output flutter/lib/bridge_definitions.dart `
+            --wasm
+        shell: pwsh
+        env:
+          LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
+
       - name: Build Rust library (librustdesk.dll)
         run: cargo build --release --features flutter --lib
         env:
@@ -136,14 +93,12 @@ jobs:
           LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
 
       - name: Copy librustdesk.dll to Flutter
-        run: |
-          cp target/release/librustdesk.dll flutter/
+        run: cp target/release/librustdesk.dll flutter/
         shell: bash
 
       - name: Build Flutter Windows app
         run: |
           cd flutter
-          flutter pub get
           flutter build windows --release
         env:
           VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
