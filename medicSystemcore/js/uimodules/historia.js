@@ -171,9 +171,14 @@ if(document.getElementById('paciente_em_parentesco'))
                 // 8. CONSENTIMIENTOS MSP-024  
                 // ======================================
                 this.cargarConsentimientosMSP024(pacienteId);
+            } else {
+                // ANTES: si el backend respondía Error (403/404/500), esto no hacía NADA —
+                // el expediente se quedaba con los campos vacíos/anteriores, sin avisar.
+                Swal.fire('Error', (data && data.message) || 'No se pudo cargar el expediente del paciente.', 'error');
             }
         } catch (err) {
             console.error("❌ Error al cargar expediente:", err);
+            Swal.fire('Error', 'No se pudo cargar el expediente del paciente.', 'error');
         }
     },
 
@@ -210,6 +215,21 @@ if(document.getElementById('paciente_em_parentesco'))
         }).join('');
     },
 
+    // PDF/DICOM (resonancias, RX escaneadas) no se pueden mostrar como <img> — antes esto
+    // se detectaba recién cuando el navegador fallaba al cargarlos, y el onerror intentaba
+    // caer a 'assets/placeholder-img.png', que tampoco existe en el proyecto: como el
+    // onerror se dispara de nuevo con ESE fallo, quedaba en bucle infinito pidiendo un
+    // archivo que nunca va a existir. Mejor detectarlo antes y ni intentar el <img>.
+    esImagenArchivo: function(nombreOMime) {
+        return /^image\//.test(nombreOMime || '') || /\.(jpe?g|png|gif|webp|bmp)$/i.test(nombreOMime || '');
+    },
+
+    // Resonancias/RX que vienen directo del equipo médico en formato DICOM — no es una
+    // imagen estándar del navegador, necesita decodificarse con cornerstone (ver verImagenFull).
+    esDicomArchivo: function(nombreOMime) {
+        return /\.dcm$/i.test(nombreOMime || '') || /dicom/i.test(nombreOMime || '');
+    },
+
     cargarGaleriaClinica: async function(pacienteId) {
         const grid = document.getElementById('galeria_imagenes_grid');
         if (!grid) return;
@@ -217,39 +237,56 @@ if(document.getElementById('paciente_em_parentesco'))
         try {
             const res = await window.api.get(`/pacientes/imagenes/${pacienteId}`);
             const serverUrl = window.api.baseURL.replace('/api', '');
-            
-            if (res.status === "Success" && res.imagenes && res.imagenes.length > 0) {
-                grid.innerHTML = res.imagenes.map(imgData => {
-                    const fileName = imgData.archivo;
-                    const tipo = imgData.tipo || 'Otro';
-                    const imgUrl = `${serverUrl}/uploads/clinico/${fileName}`;
-                    const fechaTxt = new Date(imgData.fecha).toLocaleDateString();
 
+            if (res.status === "Success" && res.imagenes && res.imagenes.length > 0) {
+                // Guardamos el set completo (con fecha/tipo reales) para que el visor de
+                // pantalla completa pueda navegar entre ellas por índice, no solo mostrar una.
+                this.imagenesActuales = res.imagenes.map(imgData => ({
+                    tipo: imgData.tipo || 'Otro',
+                    fecha: imgData.fecha,
+                    url: `${serverUrl}/uploads/clinico/${imgData.archivo}`,
+                    archivo: imgData.archivo
+                }));
+
+                grid.innerHTML = this.imagenesActuales.map((img, index) => {
+                    const fechaTxt = new Date(img.fecha).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' });
                     const colors = { 'Rayos X': '#ef4444', 'Antes': '#3b82f6', 'Despues': '#10b981', 'Intraoral': '#8b5cf6' };
-                    const badgeColor = colors[tipo] || '#64748b';
+                    const badgeColor = colors[img.tipo] || '#64748b';
+
+                    const esImg = this.esImagenArchivo(img.archivo);
+                    const esDicom = this.esDicomArchivo(img.archivo);
+                    const previewHtml = esImg
+                        ? `<img src="${img.url}" onclick="window.verImagenFull(${index})" style="cursor: zoom-in;">`
+                        : `<div onclick="window.verImagenFull(${index})" style="width:100%; height:140px; display:flex; align-items:center; justify-content:center; background:#f1f5f9; border-bottom:1px solid #eee; cursor:zoom-in; color:${esDicom ? '#0ea5e9' : '#64748b'};">
+                                <i class="fas ${esDicom ? 'fa-x-ray' : 'fa-file-pdf'}" style="font-size:2.6rem;"></i>
+                           </div>`;
 
                     return `
-                    <div class="galeria-item" data-tipo="${tipo}">
+                    <div class="galeria-item" data-tipo="${img.tipo}">
                         <div style="position: absolute; top: 5px; left: 5px; z-index: 10;">
-                            <input type="checkbox" class="compare-check" value="${imgUrl}" data-tipo="${tipo}" style="width: 18px; height: 18px; cursor: pointer;">
+                            <input type="checkbox" class="compare-check" value="${img.url}" data-tipo="${img.tipo}" style="width: 18px; height: 18px; cursor: pointer;">
                         </div>
-                        <img src="${imgUrl}" onclick="window.verImagenFull('${imgUrl}')" onerror="this.src='assets/placeholder-img.png'" style="cursor: zoom-in;">
+                        ${previewHtml}
                         <div class="info">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <span style="background: ${badgeColor}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold;">${tipo.toUpperCase()}</span>
+                                <span style="background: ${badgeColor}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold;">${img.tipo.toUpperCase()}</span>
                                 <span style="color: #94a3b8; font-size: 10px;">${fechaTxt}</span>
                             </div>
                         </div>
                         <div class="btns">
-                            <button onclick="window.verImagenFull('${imgUrl}')" style="background: #64748b;" title="Ver"><i class="fas fa-eye"></i></button>
-                            <a href="${imgUrl}" download="${fileName}" style="background: #10b981;" title="Descargar"><i class="fas fa-download"></i></a>
+                            <button onclick="window.verImagenFull(${index})" style="background: #64748b;" title="Ver"><i class="fas fa-eye"></i></button>
+                            <a href="${img.url}" download="${img.archivo}" style="background: #10b981;" title="Descargar"><i class="fas fa-download"></i></a>
                         </div>
                     </div>`;
                 }).join('');
 
                 if (res.imagenes.length >= 2) this.injectCompareButton();
             } else {
-                grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No hay imágenes registradas.</div>`;
+                this.imagenesActuales = [];
+                // Un error real del backend (403/500) se veía igual que "sin fotos aún".
+                grid.innerHTML = res.status === "Error"
+                    ? `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#dc2626;">${res.message || 'No se pudo cargar la galería.'}</div>`
+                    : `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#94a3b8;">No hay imágenes registradas.</div>`;
             }
         } catch (err) { console.error("❌ Error al cargar galería:", err); }
     },
@@ -440,7 +477,10 @@ const signos = {
 };
 
 // Enviamos los signos al backend
-await window.api.post('/pacientes/msp/signos', signos);
+const resSignos = await window.api.post('/pacientes/msp/signos', signos);
+if (resSignos && resSignos.status === 'Error') {
+    return Swal.fire('Error', resSignos.message || 'No se pudieron guardar los signos vitales.', 'error');
+}
 
 // ============================
 // 2. EXAMEN ESTOMATOGNÁTICO (DINÁMICO PARA LAS 9 REGIONES)
@@ -474,10 +514,15 @@ document.querySelectorAll('.area-group').forEach(group => {
 });
 
 // Enviamos el examen completo (las 9 regiones que existan en el DOM)
-await window.api.post('/pacientes/msp/examen-estomatognatico', {
+const resExamen = await window.api.post('/pacientes/msp/examen-estomatognatico', {
     id_paciente: idPaciente,
     hallazgos
 });
+if (resExamen && resExamen.status === 'Error') {
+    // Los signos vitales de arriba SÍ se guardaron — se avisa que solo esta segunda
+    // parte falló, en vez de decir "Expediente Actualizado" como si todo hubiera ido bien.
+    return Swal.fire('Guardado parcial', `Los signos vitales se guardaron, pero el examen estomatognático no: ${resExamen.message || 'error desconocido'}`, 'warning');
+}
 
 // ✅ SUCCESS
 Swal.fire({
@@ -1064,10 +1109,14 @@ window.abrirModalReceta = async function() {
                         window.imprimirDocumentoClinico('receta', recetaParaImprimir);
                     }
                 });
+            } else {
+                // ANTES: si el backend rechazaba la receta (validación, 500, etc.) esto no
+                // hacía nada — el doctor pensaba que se había guardado.
+                Swal.fire("Error", res.message || "No se pudo guardar la receta.", "error");
             }
-        } catch (e) { 
+        } catch (e) {
             console.error(e);
-            Swal.fire("Error", "No se pudo guardar", "error"); 
+            Swal.fire("Error", "No se pudo guardar", "error");
         }
     }
 };
@@ -1150,6 +1199,11 @@ window.obtenerReporteAuditado = async () => {
                     </tr>`;
             });
             contenedor.innerHTML = htmlRows;
+        } else if (res.status === "Error") {
+            // ANTES: un error real del backend (403/500) se mostraba igual que "sin
+            // resultados" — el usuario no tenía forma de distinguir un filtro vacío de un
+            // fallo real del servidor.
+            contenedor.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:#dc2626;">${res.message || 'No se pudo generar el reporte.'}</td></tr>`;
         } else {
             contenedor.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No hay datos para esta combinación de filtros.</td></tr>';
         }
@@ -1179,10 +1233,10 @@ document.addEventListener('DOMContentLoaded', cargarPrestacionesAudit);
 
 window.itemsPre = [];
 
-window.abrirModalPresupuesto = async function() {
+window.abrirModalPresupuesto = async function(itemsPreCargados) {
     // CORRECCIÓN: Asegurar el nombre de variable id_paciente para el controlador
     const id_paciente = window.currentPacienteId || window.router?.currentPatientId || document.getElementById('paciente_dni')?.getAttribute('data-id');
-    
+
     if (!id_paciente) return Swal.fire("Error", "Seleccione un paciente", "error");
 
     let catalogo = window.router?.catalogoPrestaciones || [];
@@ -1194,7 +1248,22 @@ window.abrirModalPresupuesto = async function() {
         } catch (e) { console.error("Error al recuperar catálogo", e); }
     }
 
-    window.itemsPre = []; 
+    // Si vienen sugerencias precargadas (ej. desde "Sugerencias por Pieza" del Odontograma),
+    // se convierten al formato que usa esta tabla en vez de arrancar vacía.
+    // OJO: numero_diente/cara deben conservarse como datos reales (no solo en el texto del
+    // nombre) — si se aprueba este presupuesto, aprobarPresupuesto() los necesita para poder
+    // espejar el tratamiento de vuelta en el Odontograma. Antes se perdían acá y la pieza se
+    // quedaba "pendiente" para siempre, repitiéndose en Sugerencias por Pieza.
+    window.itemsPre = (itemsPreCargados || []).map(it => ({
+        id_prestacion: it.id_prestacion,
+        nombre: it.numero_diente ? `${it.nombre} (Pieza ${it.numero_diente})` : it.nombre,
+        numero_diente: it.numero_diente || null,
+        cara: it.cara || null,
+        precio_lista: it.precio_lista,
+        cantidad: 1,
+        costo_total: it.costo_total,
+        descuento: it.descuento || 0
+    }));
 
     const { value: formValues } = await Swal.fire({
         title: 'Presupuesto de Tratamientos',
@@ -1235,6 +1304,7 @@ window.abrirModalPresupuesto = async function() {
                     div.style.display = div.innerText.toLowerCase().includes(term) ? 'block' : 'none';
                 });
             });
+            window.renderPreList();
         },
         showCancelButton: true,
         confirmButtonColor: '#3b82f6',
@@ -1381,7 +1451,10 @@ window.abrirGaleriaImagenes = function() {
             const tipo = result.value;
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = 'image/*';
+            // Antes solo 'image/*' — bloqueaba a nivel de sistema operativo cualquier
+            // resonancia/RX que llegara como PDF o DICOM (.dcm), aunque el backend
+            // (pacienteRoutes.js) nunca tuvo restricción de tipo ni de tamaño.
+            input.accept = 'image/*,.pdf,application/pdf,.dcm,application/dicom';
             input.multiple = true;
 
             input.onchange = async (e) => {
@@ -1420,68 +1493,296 @@ window.abrirGaleriaImagenes = function() {
     });
 };
 
-window.verImagenFull = function(url) {
-    let scale = 1;
-    let pointX = 0;
-    let pointY = 0;
+// Visor clínico avanzado: recibe el ÍNDICE dentro de window.historiaModule.imagenesActuales
+// (no una URL suelta) para poder navegar entre todas las imágenes del paciente sin cerrar el
+// visor. Mantiene el zoom con rueda + arrastre que ya existía, y suma: navegación anterior/
+// siguiente (botones + flechas del teclado), rotar en pasos de 90°, y muestra el tipo real
+// y la fecha real de subida (ya no adivinadas del nombre del archivo).
+// returnFocus:false no alcanzó a evitar el salto de scroll al cerrar (SweetAlert2 también
+// puede recalcular el layout de la página al abrir/cerrar y perder la posición). En vez de
+// seguir adivinando la causa exacta, guardamos la posición real antes de abrir y la
+// restauramos a la fuerza al cerrar — funciona sin importar cuál sea la causa de fondo.
+function guardarPosicionScroll() {
+    const appRoot = document.getElementById('app-root');
+    return { ventana: window.scrollY, appRoot: appRoot ? appRoot.scrollTop : 0 };
+}
+function restaurarPosicionScroll(pos) {
+    // Pequeño delay para que corra DESPUÉS de cualquier ajuste interno que haga SweetAlert2 al cerrar.
+    setTimeout(() => {
+        window.scrollTo(0, pos.ventana);
+        const appRoot = document.getElementById('app-root');
+        if (appRoot) appRoot.scrollTop = pos.appRoot;
+    }, 0);
+}
+
+window.verImagenFull = function(index) {
+    const lista = (window.historiaModule && window.historiaModule.imagenesActuales) || [];
+    if (!lista.length) return;
+    index = ((index % lista.length) + lista.length) % lista.length; // navegación circular
+    const imgData = lista[index];
+    const posicionScroll = guardarPosicionScroll();
+
+    const esImg = window.historiaModule.esImagenArchivo(imgData.archivo);
+    const esDicom = window.historiaModule.esDicomArchivo(imgData.archivo);
+
+    let scale = 1, pointX = 0, pointY = 0, rotation = 0;
     let start = { x: 0, y: 0 };
     let isDragging = false;
 
+    const fechaTxt = imgData.fecha ? new Date(imgData.fecha).toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+    const colores = { 'Rayos X': '#ef4444', 'Antes': '#3b82f6', 'Despues': '#10b981', 'Intraoral': '#8b5cf6' };
+    const badgeColor = colores[imgData.tipo] || '#64748b';
+
+    // El contenido central cambia según el tipo de archivo: una foto normal usa el <img>
+    // con zoom CSS de siempre; un DICOM necesita un lienzo propio decodificado con
+    // cornerstone (no existe forma de mostrarlo con <img>); cualquier otro archivo (PDF)
+    // no se puede previsualizar aquí, así que solo se ofrece abrirlo.
+    let contenidoCentral;
+    if (esImg) {
+        contenidoCentral = `
+            <img src="${imgData.url}" id="img-zoom-target"
+                 style="width: 100%; height: 100%; object-fit: contain; transform-origin: center center; transform: translate(0,0) scale(1) rotate(0deg); transition: none;">
+            <span id="zoom-badge" style="position:absolute; left:10px; bottom:10px; color:#e2e8f0; font-size:0.72rem; font-family:monospace; background:rgba(0,0,0,0.5); padding:4px 8px; border-radius:6px; pointer-events:none;">100%</span>`;
+    } else if (esDicom) {
+        contenidoCentral = `
+            <div id="dicom-viewport" style="width:100%; height:100%;"></div>
+            <span id="dicom-hud" style="position:absolute; left:10px; bottom:10px; color:#38bdf8; font-size:0.72rem; font-family:monospace; background:rgba(0,0,0,0.5); padding:4px 8px; border-radius:6px; pointer-events:none;">Cargando DICOM...</span>`;
+    } else {
+        contenidoCentral = `
+            <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#94a3b8;">
+                <i class="fas fa-file-pdf" style="font-size:4rem; color:#64748b;"></i>
+                <span>Este tipo de archivo no se puede previsualizar aquí.</span>
+                <a href="${imgData.url}" target="_blank" style="background:#4f46e5; color:white; padding:8px 18px; border-radius:8px; text-decoration:none; font-weight:700; font-size:0.85rem;"><i class="fas fa-external-link-alt"></i> Abrir</a>
+            </div>`;
+    }
+
     Swal.fire({
         html: `
-            <div id="zoom-container" style="overflow: hidden; height: 75vh; background: #000; cursor: grab; position: relative; border-radius: 8px;">
-                <img src="${url}" id="img-zoom-target" 
-                     style="width: 100%; height: 100%; object-fit: contain; transform-origin: 0 0; transform: translate(0,0) scale(1); transition: none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="background:${badgeColor}; color:white; padding:3px 10px; border-radius:6px; font-size:0.72rem; font-weight:bold;">${(imgData.tipo || '').toUpperCase()}</span>
+                <span style="font-size:0.8rem; color:#cbd5e1;"><i class="far fa-calendar"></i> ${fechaTxt}</span>
+                <span style="font-size:0.8rem; color:#94a3b8;">${index + 1} / ${lista.length}</span>
             </div>
-            <div style="color: white; margin-top: 10px; font-size: 0.85rem;">
-                <i class="fas fa-search-plus"></i> Rueda del mouse para Zoom y arrastra para mover
+            <div id="zoom-container" style="overflow: hidden; height: 70vh; background: #000; cursor: ${esImg ? 'grab' : 'default'}; position: relative; border-radius: 8px;">
+                ${contenidoCentral}
+                ${lista.length > 1 ? `
+                    <button id="btn-nav-prev" title="Anterior (←)" style="position:absolute; left:8px; top:50%; transform:translateY(-50%); background:rgba(0,0,0,0.55); color:white; border:none; width:42px; height:42px; border-radius:50%; cursor:pointer; font-size:1.1rem;"><i class="fas fa-chevron-left"></i></button>
+                    <button id="btn-nav-next" title="Siguiente (→)" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:rgba(0,0,0,0.55); color:white; border:none; width:42px; height:42px; border-radius:50%; cursor:pointer; font-size:1.1rem;"><i class="fas fa-chevron-right"></i></button>
+                ` : ''}
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; color: white; margin-top: 10px; font-size: 0.8rem;">
+                <span>
+                    ${esImg ? '<i class="fas fa-search-plus"></i> Rueda: zoom (hasta 25x) · arrastrá: mover · doble clic: restablecer' : ''}
+                    ${esDicom ? '<i class="fas fa-x-ray"></i> Rueda: zoom · clic izq. arrastrá: mover · clic der. arrastrá: brillo/contraste · doble clic: restablecer' : ''}
+                </span>
+                ${(esImg || esDicom) ? `<button id="btn-rotar" title="Rotar 90°" style="background:#4f46e5; color:white; border:none; padding:6px 14px; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px;"><i class="fas fa-rotate-right"></i> Rotar</button>` : ''}
             </div>
         `,
         showConfirmButton: false,
         showCloseButton: true,
         width: '90%',
         background: '#1a1a1a',
+        returnFocus: false, // evita el salto de scroll al cerrar: la imagen no es un elemento
+                            // "enfocable" como un botón, y SweetAlert2 termina enfocando la
+                            // página entera al intentar devolver el foco, lo que la sube al tope.
         didOpen: () => {
             const container = document.getElementById('zoom-container');
-            const img = document.getElementById('img-zoom-target');
 
-            const setTransform = () => {
-                img.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+            if (esImg) {
+                const img = document.getElementById('img-zoom-target');
+                const badge = document.getElementById('zoom-badge');
+
+                const setTransform = () => {
+                    img.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale}) rotate(${rotation}deg)`;
+                    if (badge) badge.textContent = `${Math.round(scale * 100)}%`;
+                };
+
+                container.onwheel = (e) => {
+                    e.preventDefault();
+                    const xs = (e.clientX - pointX) / scale;
+                    const ys = (e.clientY - pointY) / scale;
+                    const delta = (e.wheelDelta ? e.wheelDelta : -e.deltaY);
+                    // Zoom clínico: llega hasta 25x para poder inspeccionar detalle fino en
+                    // fotos de alta resolución (4K) sin perder nitidez — la escala CSS sobre
+                    // la imagen original no reduce su calidad, solo hace visible más detalle
+                    // hasta el límite de los píxeles reales del archivo.
+                    (delta > 0) ? (scale *= 1.2) : (scale /= 1.2);
+                    if (scale < 1) scale = 1;
+                    if (scale > 25) scale = 25;
+                    pointX = e.clientX - xs * scale;
+                    pointY = e.clientY - ys * scale;
+                    setTransform();
+                };
+
+                container.onmousedown = (e) => {
+                    if (scale === 1) return;
+                    e.preventDefault();
+                    start = { x: e.clientX - pointX, y: e.clientY - pointY };
+                    isDragging = true;
+                    container.style.cursor = 'grabbing';
+                };
+
+                window.onmouseup = () => { isDragging = false; container.style.cursor = 'grab'; };
+
+                container.onmousemove = (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    pointX = e.clientX - start.x;
+                    pointY = e.clientY - start.y;
+                    setTransform();
+                };
+
+                container.ondblclick = () => { scale = 1; pointX = 0; pointY = 0; setTransform(); };
+
+                const btnRotar = document.getElementById('btn-rotar');
+                if (btnRotar) btnRotar.onclick = () => { rotation = (rotation + 90) % 360; setTransform(); };
+
+            } else if (esDicom) {
+                inicializarVisorDicom(container, imgData.url);
+            }
+
+            const btnPrev = document.getElementById('btn-nav-prev');
+            const btnNext = document.getElementById('btn-nav-next');
+            if (btnPrev) btnPrev.onclick = () => window.verImagenFull(index - 1);
+            if (btnNext) btnNext.onclick = () => window.verImagenFull(index + 1);
+
+            // Un solo listener de teclado vivo a la vez: se saca el anterior (si quedó de la
+            // imagen previa) antes de agregar el nuevo, para no acumular listeners "viejos"
+            // con un índice desactualizado en cada paso de navegación.
+            if (window._historiaKeydownHandler) document.removeEventListener('keydown', window._historiaKeydownHandler);
+            window._historiaKeydownHandler = (e) => {
+                if (e.key === 'ArrowLeft') window.verImagenFull(index - 1);
+                if (e.key === 'ArrowRight') window.verImagenFull(index + 1);
             };
-
-            container.onwheel = (e) => {
-                e.preventDefault();
-                const xs = (e.clientX - pointX) / scale;
-                const ys = (e.clientY - pointY) / scale;
-                const delta = (e.wheelDelta ? e.wheelDelta : -e.deltaY);
-                (delta > 0) ? (scale *= 1.2) : (scale /= 1.2);
-                if(scale < 1) scale = 1;
-                if(scale > 10) scale = 10;
-                pointX = e.clientX - xs * scale;
-                pointY = e.clientY - ys * scale;
-                setTransform();
-            };
-
-            container.onmousedown = (e) => {
-                if (scale === 1) return;
-                e.preventDefault();
-                start = { x: e.clientX - pointX, y: e.clientY - pointY };
-                isDragging = true;
-                container.style.cursor = 'grabbing';
-            };
-
-            window.onmouseup = () => { isDragging = false; container.style.cursor = 'grab'; };
-
-            container.onmousemove = (e) => {
-                if (!isDragging) return;
-                e.preventDefault();
-                pointX = e.clientX - start.x;
-                pointY = e.clientY - start.y;
-                setTransform();
-            };
+            document.addEventListener('keydown', window._historiaKeydownHandler);
+        },
+        didClose: () => {
+            if (window._historiaKeydownHandler) {
+                document.removeEventListener('keydown', window._historiaKeydownHandler);
+                window._historiaKeydownHandler = null;
+            }
+            // El canvas de cornerstone se recrea cada vez que se abre el visor (SweetAlert2
+            // reemplaza el HTML entero) — sin este disable() se acumula un "enable" fantasma
+            // por cada DICOM abierto durante la sesión.
+            const viewportDicom = document.getElementById('dicom-viewport');
+            if (viewportDicom && window.cornerstone) {
+                try { window.cornerstone.disable(viewportDicom); } catch (e) { /* ya estaba deshabilitado */ }
+            }
+            restaurarPosicionScroll(posicionScroll);
         }
     });
 };
+
+// Visor DICOM real (resonancias/RX) para verImagenFull: decodifica el archivo con
+// cornerstone + dicom-parser y lo pinta en un canvas propio — no es posible mostrarlo
+// con un <img> normal porque el navegador no entiende el formato DICOM. El zoom/pan y el
+// ajuste de brillo-contraste (ventana/nivel) trabajan sobre los datos originales del
+// archivo en cada re-render, así que no hay pérdida de calidad como sí ocurre al escalar
+// una imagen ya rasterizada.
+function inicializarVisorDicom(container, url) {
+    const el = document.getElementById('dicom-viewport');
+    const hud = document.getElementById('dicom-hud');
+    if (!el) return;
+
+    if (!window.cornerstone || !window.cornerstoneWADOImageLoader || !window.dicomParser) {
+        el.innerHTML = `<div style="height:100%; display:flex; align-items:center; justify-content:center; color:#f87171; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                            <i class="fas fa-triangle-exclamation" style="font-size:2.4rem;"></i>
+                            <span>El visor DICOM no se pudo cargar (faltan librerías).</span>
+                         </div>`;
+        return;
+    }
+
+    window.cornerstoneWADOImageLoader.external.cornerstone = window.cornerstone;
+    window.cornerstoneWADOImageLoader.external.dicomParser = window.dicomParser;
+
+    let imagenLista = false;
+    let arrastrando = null; // 'pan' | 'wl'
+    let ultimo = { x: 0, y: 0 };
+
+    const actualizarHud = () => {
+        if (!hud || !imagenLista) return;
+        const vp = window.cornerstone.getViewport(el);
+        hud.textContent = `Zoom ${Math.round(vp.scale * 100)}% · Brillo/Contraste ${Math.round(vp.voi.windowCenter)} / ${Math.round(vp.voi.windowWidth)}`;
+    };
+
+    try {
+        window.cornerstone.enable(el);
+    } catch (e) {
+        console.error('❌ No se pudo inicializar el lienzo DICOM:', e);
+        return;
+    }
+
+    window.cornerstone.loadAndCacheImage('wadouri:' + url).then((image) => {
+        window.cornerstone.displayImage(el, image);
+        imagenLista = true;
+        el.style.cursor = 'grab';
+        actualizarHud();
+    }).catch((err) => {
+        console.error('❌ No se pudo decodificar el archivo DICOM:', err);
+        if (hud) hud.remove();
+        el.innerHTML = `<div style="height:100%; display:flex; align-items:center; justify-content:center; color:#f87171; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+                            <i class="fas fa-triangle-exclamation" style="font-size:2.4rem;"></i>
+                            <span>No se pudo abrir este archivo DICOM. Puede estar dañado o incompleto.</span>
+                         </div>`;
+    });
+
+    el.oncontextmenu = (e) => e.preventDefault(); // el clic derecho ajusta brillo/contraste, no abre el menú del navegador
+
+    el.onwheel = (e) => {
+        if (!imagenLista) return;
+        e.preventDefault();
+        const vp = window.cornerstone.getViewport(el);
+        const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
+        vp.scale = Math.min(Math.max(vp.scale * factor, 0.1), 20);
+        window.cornerstone.setViewport(el, vp);
+        actualizarHud();
+    };
+
+    el.onmousedown = (e) => {
+        if (!imagenLista) return;
+        e.preventDefault();
+        arrastrando = e.button === 2 ? 'wl' : 'pan';
+        ultimo = { x: e.clientX, y: e.clientY };
+        el.style.cursor = arrastrando === 'pan' ? 'grabbing' : 'crosshair';
+    };
+
+    window.addEventListener('mouseup', () => {
+        arrastrando = null;
+        if (imagenLista) el.style.cursor = 'grab';
+    });
+
+    el.onmousemove = (e) => {
+        if (!arrastrando || !imagenLista) return;
+        e.preventDefault();
+        const deltaX = e.clientX - ultimo.x;
+        const deltaY = e.clientY - ultimo.y;
+        ultimo = { x: e.clientX, y: e.clientY };
+        const vp = window.cornerstone.getViewport(el);
+        if (arrastrando === 'pan') {
+            vp.translation.x += deltaX / vp.scale;
+            vp.translation.y += deltaY / vp.scale;
+        } else {
+            vp.voi.windowWidth = Math.max(1, vp.voi.windowWidth + deltaX * 2);
+            vp.voi.windowCenter += deltaY * 2;
+        }
+        window.cornerstone.setViewport(el, vp);
+        actualizarHud();
+    };
+
+    el.ondblclick = () => {
+        if (!imagenLista) return;
+        window.cornerstone.reset(el);
+        actualizarHud();
+    };
+
+    const btnRotar = document.getElementById('btn-rotar');
+    if (btnRotar) btnRotar.onclick = () => {
+        if (!imagenLista) return;
+        const vp = window.cornerstone.getViewport(el);
+        vp.rotation = (vp.rotation + 90) % 360;
+        window.cornerstone.setViewport(el, vp);
+    };
+}
 
 window.abrirComparador = function() {
     const selected = document.querySelectorAll('.compare-check:checked');
@@ -1489,6 +1790,7 @@ window.abrirComparador = function() {
     
     const img1 = selected[0].value;
     const img2 = selected[1].value;
+    const posicionScroll = guardarPosicionScroll();
 
     Swal.fire({
         title: 'Comparador Clínico',
@@ -1496,6 +1798,8 @@ window.abrirComparador = function() {
         background: '#1a1a1a',
         showConfirmButton: false,
         showCloseButton: true,
+        returnFocus: false, // mismo motivo que en verImagenFull: evita el salto de scroll al cerrar
+        didClose: () => restaurarPosicionScroll(posicionScroll),
         html: `
             <div class="comparison-slider" style="position: relative; width: 100%; height: 70vh; overflow: hidden; border-radius: 8px;">
                 <img src="${img2}" style="width: 100%; height: 100%; object-fit: contain; position: absolute; top:0; left:0;">
@@ -1557,15 +1861,23 @@ window.cargarDatosDePago = async function(pacienteId, idPlanSeleccionado = null)
 
 window.procesarPagoElectron = async function(event) {
     if (event) event.preventDefault();
-    
+
+    // 🛡️ Candado anti doble-clic: si ya hay un envío en curso, ignoramos el click extra
+    const formPago = document.getElementById('formRegistroPago');
+    const btnConfirmar = formPago ? formPago.querySelector('.btn-confirmar') : null;
+    if (btnConfirmar) {
+        if (btnConfirmar.disabled) return;
+        btnConfirmar.disabled = true;
+    }
+
     const idPlan = document.getElementById('select_plan').value;
     const monto = document.getElementById('pago_monto').value;
     const sesionRaw = localStorage.getItem('usuario_sesion');
-    
-    if (!sesionRaw) return Swal.fire('Error', 'Sesión no válida.', 'error');
+
+    if (!sesionRaw) { if (btnConfirmar) btnConfirmar.disabled = false; return Swal.fire('Error', 'Sesión no válida.', 'error'); }
     const sesion = JSON.parse(sesionRaw);
 
-    if (!idPlan || !monto || monto <= 0) return Swal.fire('Atención', 'Datos inválidos.', 'warning');
+    if (!idPlan || !monto || monto <= 0) { if (btnConfirmar) btnConfirmar.disabled = false; return Swal.fire('Atención', 'Datos inválidos.', 'warning'); }
 
     // Usamos esta variable de forma consistente en toda la función
     const idPacienteActual = window.currentPacienteId;
@@ -1659,8 +1971,10 @@ window.procesarPagoElectron = async function(event) {
     } catch (error) {
         console.error("Error en el proceso de pago:", error);
         Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
+    } finally {
+        if (btnConfirmar) btnConfirmar.disabled = false;
     }
-}; 
+};
 
 window.irAlOdontograma = function() {
     const idReal = document.getElementById('paciente_dni')?.getAttribute('data-id') || window.currentPacienteId;
@@ -1682,8 +1996,10 @@ window.guardarCambiosClinicos = async function() {
         const res = await window.api.post('/pacientes/anamnesis', payload);
         if(res.status === "Success") {
             Swal.fire({ icon: 'success', title: 'Actualizado', timer: 800, showConfirmButton: false });
+        } else {
+            Swal.fire('Error', res.message || 'No se pudo guardar los cambios clínicos', 'error');
         }
-    } catch (err) { 
+    } catch (err) {
         Swal.fire('Error', 'No se pudo guardar los cambios clínicos', 'error'); 
     }
 };

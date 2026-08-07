@@ -151,60 +151,28 @@ window.cargarHistorialPresupuestos = async function(idPaciente) {
     }
 };
 
+// ANTES: esto llamaba a /presupuestos/aprobar, que insertaba el plan DIRECTO en el backend
+// sin médico, sin CIE-10 y sin consentimiento MSP-024 — un "plan huérfano" comparado con lo
+// que exige planificar desde el Odontograma o Tratamiento. Ahora reutiliza el mismo modal
+// completo (modalNuevoTratamiento): el doctor asigna médico/diagnóstico por ítem (con el lápiz
+// de edición) y firma el consentimiento, y recién ahí se instala el plan — el backend marca el
+// presupuesto como APROBADO en la MISMA transacción del plan (ver asignarTratamientosLote).
 window.aprobarPresupuestoClick = async function(id) {
     try {
         const idPaciente = window.router.currentPatientId;
         const presupuestos = await window.api.get(`/presupuestos/paciente/${idPaciente}`);
         const p = presupuestos.find(item => item.ID_Presupuesto === id);
-        
+
         if (!p) return;
         let detalle = [];
         try { detalle = JSON.parse(p.Detalle_JSON || '[]'); } catch(e) { detalle = []; }
 
-        const htmlResumen = `
-            <div style="text-align: left; font-size: 0.85rem;">
-                <p>Se instalarán los siguientes servicios en el plan oficial:</p>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #e2e8f0;">
-                    <thead>
-                        <tr style="background: #f8fafc;">
-                            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align:left;">Servicio</th>
-                            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align:center;">Cant.</th>
-                            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align:right;">Subtotal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${detalle.map(d => `
-                            <tr>
-                                <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.nombre}</td>
-                                <td style="padding: 8px; border: 1px solid #e2e8f0; text-align:center;">${d.cantidad || 1}</td>
-                                <td style="padding: 8px; border: 1px solid #e2e8f0; text-align:right;">$${parseFloat(d.costo_total).toFixed(2)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                <div style="margin-top:15px; text-align:right; font-weight:800; font-size:1.1rem; color:#10b981;">
-                    Total a Confirmar: $${parseFloat(p.Total).toFixed(2)}
-                </div>
-            </div>
-        `;
-
-        const result = await Swal.fire({
-            title: `Aprobar Presupuesto #${id}`,
-            html: htmlResumen,
-            width: '550px',
-            showCancelButton: true,
-            confirmButtonColor: '#10b981',
-            confirmButtonText: 'Confirmar e Instalar',
-            cancelButtonText: 'Cerrar'
-        });
-
-        if (result.isConfirmed) {
-            const res = await window.api.post('/presupuestos/aprobar', { id_presupuesto: id });
-            if (res.status === 'Success') {
-                Swal.fire({ icon: 'success', title: 'Plan Actualizado', timer: 1500, showConfirmButton: false });
-                window.tratamientosModule.init(idPaciente);
-            }
+        if (detalle.length === 0) {
+            return Swal.fire('Error', 'Este presupuesto no tiene ítems válidos.', 'error');
         }
+
+        const itemsParaModal = detalle.map(d => ({ ...d, id_paciente: idPaciente }));
+        window.modalNuevoTratamiento(itemsParaModal, id);
     } catch (e) {
         console.error(e);
         Swal.fire('Error', 'No se pudo procesar la aprobación', 'error');
@@ -257,7 +225,11 @@ window.buscarCIETratamiento = function(termino) {
 // ==========================================
 // MODAL DE CARGA POR LOTE (PLANIFICACIÓN) - ACTUALIZADO Y CORREGIDO
 // ==========================================
-window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
+// `idPresupuestoOrigen`: si este lote viene de "Aprobar Presupuesto", el backend marca ese
+// presupuesto como APROBADO en la MISMA transacción del plan — así el doctor pasa por el
+// consentimiento MSP-024, firma y elección de médico en vez de que quede un plan huérfano
+// creado directo por el backend sin nada de eso.
+window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupuestoOrigen = null) {
     const idPaciente = window.router.currentPatientId;
     const cat = window.router.catalogoPrestaciones || [];
     let listaLote = [...itemsPreCargados]; 
@@ -511,6 +483,10 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
                     <!-- ÁREA DE FIRMA -->
                     <label id="lbl-firma" style="font-weight:800; font-size:0.65rem; color:#4f46e5; margin-bottom: 5px;">${esMenorPaciente ? 'FIRMA DEL REPRESENTANTE LEGAL' : 'FIRMA DEL PACIENTE'}</label>
                     <canvas id="canvas-firma" style="border: 1px dashed #94a3b8; border-radius: 8px; width: 100%; height: 110px; cursor: crosshair; background: #f8fafc;"></canvas>
+                    <button type="button" id="btn-enviar-firma-movil" style="width:100%; margin-top:8px; padding:7px; border-radius:6px; border:1px dashed #4f46e5; background:#eef2ff; color:#4f46e5; font-weight:800; font-size:0.66rem; cursor:pointer;">
+                        <i class="fas fa-mobile-alt"></i> ENVIAR A FIRMA (CELULAR)
+                    </button>
+                    <div id="estado-firma-movil" style="font-size:0.6rem; color:#64748b; margin-top:4px; text-align:center; min-height:12px;"></div>
                     <div style="display: flex; justify-content: space-between; margin-top: 8px;">
                         <span style="font-size: 0.65rem; color: #ef4444; cursor: pointer; font-weight: bold; padding: 2px 5px; border-radius: 4px; transition: background 0.2s;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='transparent'" onclick="if(window.modalFirmaPad) window.modalFirmaPad.clear()">
                             <i class="fas fa-eraser"></i> LIMPIAR FIRMA
@@ -545,7 +521,16 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
                 Swal.showValidationMessage('Agregue al menos un ítem a la lista de tratamientos.');
                 return false;
             }
-            
+
+            // Los ítems precargados (ej. desde "Sugerencias por Pieza" del Odontograma) pueden
+            // llegar sin médico asignado — exigirlo acá también, igual que ya exige el
+            // formulario manual de "AGREGAR", en vez de guardar un tratamiento sin doctor.
+            const sinMedico = listaLote.findIndex(it => !it.id_usuario_medico);
+            if (sinMedico !== -1) {
+                Swal.showValidationMessage(`Falta asignar médico en "${listaLote[sinMedico].nombre}" — use el lápiz de edición en la tabla.`);
+                return false;
+            }
+
             // ¿Requiere representante? (menor de edad o checkbox no-apto)
             const chkNoApto = document.getElementById('chk-no-apto');
             const requiereRep = !!(chkNoApto && chkNoApto.checked);
@@ -630,24 +615,191 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
                 }
             }
 
+            // --- FIRMA REMOTA DESDE EL CELULAR (opcional, además del mouse/trackpad) ---
+            // Reusa la MISMA conexión socket que ya arma js/app.js (window.socketRT) — no abre
+            // una segunda. Solo llena el mismo canvas de siempre con lo que mande el celular;
+            // el resto del flujo (preConfirm, guardado, etc.) no se toca para nada.
+            (function() {
+                const btnEnviarMovil = document.getElementById('btn-enviar-firma-movil');
+                const estadoMovil = document.getElementById('estado-firma-movil');
+                if (!btnEnviarMovil || !estadoMovil) return;
+
+                let requestIdActivo = null;
+                let manejadorFirmaRecibida = null;
+
+                const limpiarSolicitud = () => {
+                    if (window.socketRT && manejadorFirmaRecibida) {
+                        window.socketRT.off('firma-recibida', manejadorFirmaRecibida);
+                    }
+                    manejadorFirmaRecibida = null;
+                };
+
+                btnEnviarMovil.onclick = () => {
+                    if (!window.socketRT || !window.socketRT.connected) {
+                        estadoMovil.style.color = '#dc2626';
+                        estadoMovil.innerText = 'Sin conexión en tiempo real con el servidor.';
+                        return;
+                    }
+                    limpiarSolicitud();
+                    requestIdActivo = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+                    const nombrePaciente = `${perfilPaciente.Nombres || ''} ${perfilPaciente.Apellidos || ''}`.trim();
+
+                    // El servidor ya sabe a qué clínica pertenece este socket (por el token
+                    // que verificó al conectar) — no hace falta mandarle un id_clinica acá.
+                    window.socketRT.emit('solicitar-firma', {
+                        requestId: requestIdActivo,
+                        paciente_nombre: nombrePaciente || 'Paciente',
+                        resumen: listaLote.length ? listaLote.map(it => it.nombre).join(', ') : 'Sin procedimientos agregados aún'
+                    });
+
+                    estadoMovil.style.color = '#4f46e5';
+                    estadoMovil.innerText = '📱 Esperando firma en el celular...';
+
+                    manejadorFirmaRecibida = (payload) => {
+                        if (!payload || payload.requestId !== requestIdActivo) return;
+                        if (window.modalFirmaPad) window.modalFirmaPad.fromDataURL(payload.firma_base64);
+                        estadoMovil.style.color = '#059669';
+                        estadoMovil.innerText = '✅ Firma recibida del celular.';
+                        limpiarSolicitud();
+                    };
+                    window.socketRT.on('firma-recibida', manejadorFirmaRecibida);
+                };
+
+                // Si el doctor cierra el modal (cancela o guarda) con una solicitud activa,
+                // avisa al celular para que la saque de su lista de pendientes.
+                window._cancelarFirmaMovilPendiente = () => {
+                    if (requestIdActivo && window.socketRT) {
+                        window.socketRT.emit('cancelar-firma', { requestId: requestIdActivo });
+                    }
+                    limpiarSolicitud();
+                };
+            })();
+
             // 1. RENDERIZAR TABLA
+            // `filaEditando` controla qué fila (si alguna) se muestra en modo edición inline.
+            // NO se usa un Swal.fire anidado para editar: SweetAlert2 solo sostiene UNA instancia
+            // global, así que abrir un segundo Swal.fire mientras este modal está abierto lo
+            // reemplaza y resuelve el de este modal como "cancelado" — eso sacaba al doctor de
+            // vuelta al Odontograma como si hubiera cancelado toda la planificación.
+            let filaEditando = -1;
+            let cieTempEdicion = null;
+
             window.renderLoteTable = () => {
                 const tbody = document.getElementById('lote-body');
                 if (!tbody) return;
-                tbody.innerHTML = listaLote.length === 0 
+                tbody.innerHTML = listaLote.length === 0
                     ? '<tr><td colspan="4" style="text-align:center; padding:15px; color:#94a3b8;">No hay ítems en el lote</td></tr>'
-                    : listaLote.map((item, index) => `
+                    : listaLote.map((item, index) => {
+                        if (index === filaEditando) {
+                            return `
+                            <tr style="border-bottom:1px solid #f1f5f9; background:#f8fafc;">
+                                <td colspan="4" style="padding:10px;">
+                                    <div style="font-size:0.7rem; font-weight:800; color:#1e293b; margin-bottom:8px;">${item.nombre}</div>
+                                    <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+                                        <div style="flex:1; min-width:150px;">
+                                            <label style="font-size:0.62rem; font-weight:800; color:#4f46e5;">MÉDICO</label>
+                                            <select id="inline-medico" class="swal2-select" style="width:100%; margin:2px 0 0; font-size:0.75rem;">
+                                                <option value="">-- Seleccione --</option>
+                                                ${medicos.map(m => `<option value="${m.ID_Usuario}" ${item.id_usuario_medico == m.ID_Usuario ? 'selected' : ''}>Dr. ${m.Apellidos} ${m.Nombres}</option>`).join('')}
+                                            </select>
+                                        </div>
+                                        <div style="width:100px;">
+                                            <label style="font-size:0.62rem; font-weight:800; color:#4f46e5;">DESC. ($)</label>
+                                            <input id="inline-desc" type="number" value="${item.descuento || 0}" class="swal2-input" style="width:100%; margin:2px 0 0; font-size:0.75rem;">
+                                        </div>
+                                        <div style="flex:1.3; min-width:180px; position:relative;">
+                                            <label style="font-size:0.62rem; font-weight:800; color:#4f46e5;">DIAGNÓSTICO CIE-10</label>
+                                            <input id="inline-cie" type="text" placeholder="Buscar..." value="${item.cie_texto || ''}" class="swal2-input" style="width:100%; margin:2px 0 0; font-size:0.75rem;" oninput="window.buscarCieInline(this.value)">
+                                            <div id="inline-cie-res" style="position:absolute; top:100%; left:0; z-index:20; background:white; border:1px solid #cbd5e1; border-radius:6px; width:100%; max-height:130px; overflow-y:auto; display:none;"></div>
+                                        </div>
+                                        <div style="display:flex; gap:6px;">
+                                            <button type="button" onclick="window.guardarEdicionLote(${index})" style="background:#10b981; color:white; border:none; padding:9px 14px; border-radius:6px; font-weight:800; cursor:pointer; font-size:0.75rem;">Guardar</button>
+                                            <button type="button" onclick="window.cancelarEdicionLote()" style="background:#94a3b8; color:white; border:none; padding:9px 12px; border-radius:6px; font-weight:800; cursor:pointer;"><i class="fas fa-times"></i></button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>`;
+                        }
+
+                        // Los ítems que vienen de "Exportar a Tratamiento" (odontograma.js) traen
+                        // `cara` (singular) y `hallazgo_origen` (qué hallazgo lo generó, ej.
+                        // "Caries"). Los que se agregan a mano acá traen `caras` (plural, checkboxes
+                        // marcados). Antes solo se mostraba `caras`, así que los ítems exportados
+                        // quedaban sin mostrar ni la cara ni el motivo — la "tarjetita" que faltaba.
+                        const caraTexto = item.caras || item.cara || '';
+                        return `
                         <tr style="border-bottom:1px solid #f1f5f9;">
                             <td style="padding:8px;">
                                 <strong>${item.nombre}</strong><br>
-                                <small style="color:#64748b;">${item.nombre_medico}</small>
+                                <small style="color:#64748b;">${item.nombre_medico || ''}</small>
                                 ${item.cie_cod ? `<br><small style="color:#4f46e5; font-weight:700;">Diag: ${item.cie_cod}</small>` : ''}
+                                ${item.hallazgo_origen ? `<br><small style="color:#b91c1c; font-weight:700;"><i class="fas fa-notes-medical"></i> Sugerido por: ${item.hallazgo_origen}</small>` : ''}
                             </td>
-                            <td style="padding:8px; text-align:center;"><span style="background:#eef2ff; color:#4f46e5; padding:2px 6px; border-radius:4px; font-weight:800;">${item.numero_diente || 'Gral'}</span> ${item.caras ? `<small>(${item.caras})</small>` : ''}</td>
-                            <td style="padding:8px; text-align:right; font-weight:800;">$${item.costo_total.toFixed(2)}</td>
-                            <td style="padding:8px; text-align:center;"><button onclick="window.quitarDeLote(${index})" style="color:#ef4444; background:none; border:none; cursor:pointer;"><i class="fas fa-trash"></i></button></td>
+                            <td style="padding:8px; text-align:center;"><span style="background:#eef2ff; color:#4f46e5; padding:2px 6px; border-radius:4px; font-weight:800;">${item.numero_diente || 'Gral'}</span> ${caraTexto ? `<small>(${caraTexto})</small>` : ''}</td>
+                            <td style="padding:8px; text-align:right; font-weight:800;">
+                                $${item.costo_total.toFixed(2)}
+                                ${item.descuento ? `<br><small style="color:#059669; font-weight:700;">Desc: $${parseFloat(item.descuento).toFixed(2)}</small>` : ''}
+                            </td>
+                            <td style="padding:8px; text-align:center; white-space:nowrap;">
+                                <button onclick="window.editarItemLote(${index})" title="Editar médico, descuento y diagnóstico" style="color:#4f46e5; background:none; border:none; cursor:pointer; margin-right:8px;"><i class="fas fa-pencil-alt"></i></button>
+                                <button onclick="window.quitarDeLote(${index})" style="color:#ef4444; background:none; border:none; cursor:pointer;"><i class="fas fa-trash"></i></button>
+                            </td>
                         </tr>
-                    `).join('');
+                    `;
+                    }).join('');
+            };
+
+            window.editarItemLote = (index) => {
+                filaEditando = index;
+                cieTempEdicion = { cod: listaLote[index].cie_cod || null, texto: listaLote[index].cie_texto || null };
+                window.renderLoteTable();
+            };
+
+            window.cancelarEdicionLote = () => {
+                filaEditando = -1;
+                cieTempEdicion = null;
+                window.renderLoteTable();
+            };
+
+            window.buscarCieInline = (valor) => {
+                const cont = document.getElementById('inline-cie-res');
+                if (!cont) return;
+                const termino = (valor || '').toLowerCase();
+                if (!termino || termino.length < 2) { cont.style.display = 'none'; return; }
+                const resultados = (window.CATALOGO_CIE10 || []).filter(it =>
+                    it.c.toLowerCase().includes(termino) || it.d.toLowerCase().includes(termino)
+                ).slice(0, 15);
+                cont.innerHTML = resultados.length ? resultados.map(it =>
+                    `<div class="inline-cie-opt" data-cod="${it.c}" data-txt="${it.d.replace(/"/g, '&quot;')}" style="padding:6px 8px; cursor:pointer; font-size:0.72rem; border-bottom:1px solid #f1f5f9;"><strong style="color:#4f46e5;">${it.c}</strong> - ${it.d}</div>`
+                ).join('') : '<div style="padding:8px; font-size:0.72rem; color:#94a3b8;">Sin resultados</div>';
+                cont.style.display = 'block';
+                cont.querySelectorAll('.inline-cie-opt').forEach(div => {
+                    div.onclick = () => {
+                        cieTempEdicion = { cod: div.dataset.cod, texto: div.dataset.txt };
+                        document.getElementById('inline-cie').value = div.dataset.txt;
+                        cont.style.display = 'none';
+                    };
+                });
+            };
+
+            window.guardarEdicionLote = (index) => {
+                const item = listaLote[index];
+                if (!item) return;
+                const medSel = document.getElementById('inline-medico');
+                const desc = parseFloat(document.getElementById('inline-desc').value) || 0;
+
+                item.id_usuario_medico = medSel.value;
+                item.nombre_medico = medSel.value ? medSel.options[medSel.selectedIndex].text : '';
+                item.descuento = desc;
+                item.costo_total = Math.max(0, (item.precio_lista * (item.cantidad || 1)) - desc);
+                item.saldo_pendiente = item.costo_total;
+                item.cie_cod = cieTempEdicion ? cieTempEdicion.cod : item.cie_cod;
+                item.cie_texto = cieTempEdicion ? cieTempEdicion.texto : item.cie_texto;
+
+                filaEditando = -1;
+                cieTempEdicion = null;
+                window.renderLoteTable();
             };
 
             // 2. AGREGAR AL LOTE
@@ -791,10 +943,22 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
                     'Centro': 'Centro', 'Oclusal': 'Centro', 'O': 'Centro'
                 };
 
+                // res.hallazgos ya viene ordenado por fecha ascendente (ORDER BY Fecha ASC en el
+                // backend), así que un estado más nuevo para la MISMA cara/pieza debe REEMPLAZAR
+                // al viejo, no sumarse. Antes esto usaba classList.add() sin sacar nada, así que
+                // una pieza con Caries -> Resina (historial preservado) terminaba con las dos
+                // clases CSS puestas a la vez, y ganaba la que estuviera declarada más abajo en el
+                // <style> de arriba — no la que realmente fuera el estado actual del diente.
+                const ESTADOS_REHAB_LOTE = ['Protesis', 'Protesis Fija', 'Protesis Removible', 'Implante', 'Puente', 'Corona', 'Corona Fija'];
+
                 res.hallazgos.forEach(h => {
                     const unit = document.getElementById(`v-unit-${h.Numero_Diente}`);
                     const svg = document.querySelector(`[data-v-svg="${h.Numero_Diente}"]`);
                     if (!svg || !unit) return;
+
+                    // Si esta pieza había quedado marcada Ausente y llega una rehabilitación más
+                    // nueva (prótesis/implante/corona/puente), hay que sacar el gris de "Ausente".
+                    if (ESTADOS_REHAB_LOTE.includes(h.Estado)) svg.classList.remove('ausente-total');
 
                     if (h.Estado === 'Ausente') svg.classList.add('ausente-total');
                     if (h.Estado === 'Ortodoncia') unit.classList.add('ortodoncia-total');
@@ -804,16 +968,21 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
                     const estadoClase = mapaEstados[h.Estado];
                     if (estadoClase) {
                         const esCoberturaTotal = ['Corona', 'Carilla Resina', 'Carilla Porcelana', 'Protesis Fija', 'Extraer', 'Raiz'].includes(h.Estado);
-                        
+
+                        // IMPORTANTE: .v-cara-odo son <polygon>/<rect> DENTRO de un <svg> — en SVG
+                        // la propiedad .className NO es un string editable (es un SVGAnimatedString
+                        // de solo lectura), así que asignarle un valor no cambia nada visualmente.
+                        // Hay que usar setAttribute('class', ...) como ya hace el resto del código
+                        // para estos mismos elementos (ver pintarHallazgos() en odontograma.js).
                         if (h.Cara_Diente === 'General' || esCoberturaTotal) {
-                            svg.querySelectorAll('.v-cara-odo').forEach(c => c.classList.add(estadoClase));
+                            svg.querySelectorAll('.v-cara-odo').forEach(c => c.setAttribute('class', `v-cara-odo ${estadoClase}`));
                         } else if (h.Cara_Diente === 'Raiz') {
-                            const vRaiz = unit.querySelector('.v-zona-raiz');
-                            if (vRaiz) vRaiz.classList.add(estadoClase);
+                            const vRaiz = unit.querySelector('.v-zona-raiz'); // esto sí es un <div> HTML normal
+                            if (vRaiz) vRaiz.className = `v-zona-raiz ${estadoClase}`;
                         } else {
                             const caraNombre = mapaCaras[h.Cara_Diente] || h.Cara_Diente;
                             const elCara = svg.querySelector(`[data-cara="${caraNombre}"]`);
-                            if (elCara) elCara.classList.add(estadoClase);
+                            if (elCara) elCara.setAttribute('class', `v-cara-odo ${estadoClase}`);
                         }
                     }
                 });
@@ -831,13 +1000,21 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
                 });
             }
             window.renderLoteTable();
+        },
+        willClose: () => {
+            // El modal se cierra (guardado o cancelado): si había una firma remota pendiente
+            // en el celular, avisa para que la quite de su lista.
+            if (window._cancelarFirmaMovilPendiente) {
+                window._cancelarFirmaMovilPendiente();
+                window._cancelarFirmaMovilPendiente = null;
+            }
         }
     });
 
     // --- INTEGRACIÓN DEL GUARDADO FINAL AL BACKEND ---
     if (resultadoLote) {
     try {
-        const payload = { 
+        const payload = {
             tratamientos:              resultadoLote.tratamientos,
             firma_paciente:            resultadoLote.firma,
             especialidad:              resultadoLote.especialidad,
@@ -845,7 +1022,8 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = []) {
             representante:             resultadoLote.representante,
             requiere_representante:    resultadoLote.requiere_representante,
             consentimiento_aceptado:   resultadoLote.consentimiento.aceptado,
-            consentimiento_revocatoria: resultadoLote.consentimiento.revocatoria
+            consentimiento_revocatoria: resultadoLote.consentimiento.revocatoria,
+            id_presupuesto_origen:     idPresupuestoOrigen || null
         };
         
         const resPost = await window.api.post('/tratamientos/asignar-lote', payload);
@@ -1022,7 +1200,7 @@ window.borrarTratamientoAsignado = function(id) {
                         timer: 1500,
                         showConfirmButton: false
                     });
-                    
+
                     // 2. Refrescar la tabla automáticamente
                     if (window.tratamientosModule && typeof window.tratamientosModule.renderTablaTratamientos === 'function') {
                         // Usamos el ID del paciente que ya está guardado en el router
@@ -1033,7 +1211,7 @@ window.borrarTratamientoAsignado = function(id) {
                     // AQUÍ CAPTURAMOS LOS BLOQUEOS (403 Forbidden) O ERRORES (500)
                     // console.error ya registra el stack en el log
                     console.error("❌ Error en el proceso de borrado:", err);
-                    
+
                     Swal.fire({
                         icon: 'warning', // Icono de advertencia para reglas de negocio
                         title: 'Operación denegada',

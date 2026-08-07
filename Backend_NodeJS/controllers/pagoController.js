@@ -22,6 +22,31 @@ const registrarPago = async (req, res) => {
         await transaction.begin();
 
         try {
+            // 0. GUARDA ANTI DOBLE-CLIC: si este mismo pago (paciente+plan+monto+usuario)
+            // ya se registró hace pocos segundos, no lo volvemos a insertar.
+            const dupCheck = await transaction.request()
+                .input('id_paciente', sql.Int, id_paciente)
+                .input('id_plan', sql.Int, id_plan)
+                .input('monto', sql.Decimal(18, 2), monto)
+                .input('id_usuario', sql.Int, id_usuario_audit)
+                .query(`
+                    SELECT TOP 1 ID_Pago FROM Pagos
+                    WHERE ID_Paciente = @id_paciente
+                      AND ID_Plan = @id_plan
+                      AND Monto = @monto
+                      AND ID_Usuario = @id_usuario
+                      AND Fecha_Pago >= DATEADD(SECOND, -8, GETDATE())
+                `);
+
+            if (dupCheck.recordset.length > 0) {
+                await transaction.rollback();
+                return res.status(409).json({
+                    status: "Error",
+                    message: "Este pago ya fue registrado hace unos segundos (posible doble clic). No se volvió a registrar.",
+                    id_pago: dupCheck.recordset[0].ID_Pago
+                });
+            }
+
             // 1. BUSCAR O CREAR LA CAJA ABIERTA DEL USUARIO
             let cajaResult = await transaction.request()
                 .input('user_id', sql.Int, id_usuario_audit)

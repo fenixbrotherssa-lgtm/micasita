@@ -302,24 +302,70 @@ const getExamenEstomatognaticoIndividual = async (req, res) => {
 // ======================================
 // 7. GESTIÓN DE IMÁGENES Y ELIMINACIÓN
 // ======================================
+// Antes: no se guardaba nada en BD. Las imágenes se "descubrían" listando la carpeta y
+// ADIVINANDO tipo/fecha a partir del nombre del archivo (PAC-<id>-<timestamp>-<random>.ext).
+// El parseo leía por error el <random> como si fueran milisegundos desde 1970 (por eso
+// aparecían fechas como "1/1/1970"), y el <timestamp> como si fuera el "tipo" — el tipo real
+// que el doctor elige al subir (Rayos X/Antes/Después/Intraoral) se descartaba sin guardar.
+// Ahora se usa Archivos_Multimedia (ya existía en el schema, sin usar) como fuente de verdad.
 const subirImagenesPaciente = async (req, res) => {
     if (!req.files || req.files.length === 0) return res.status(400).json({ status: "Error", message: "Sin imágenes" });
-    res.json({ status: "Success", archivos: req.files.map(f => f.filename) });
+    try {
+        const { id_paciente, tipo } = req.body;
+        const pool = await getConnection();
+        for (const f of req.files) {
+            await pool.request()
+                .input('idPac', sql.Int, id_paciente)
+                .input('tipo', tipo || 'Otro')
+                .input('url', f.filename)
+                .query(`INSERT INTO Archivos_Multimedia (ID_Paciente, Tipo_Archivo, URL_Archivo, Fecha_Subida) VALUES (@idPac, @tipo, @url, GETDATE())`);
+        }
+        res.json({ status: "Success", archivos: req.files.map(f => f.filename) });
+    } catch (error) {
+        console.error("🔴 Error guardando imágenes clínicas:", error.message);
+        res.status(500).json({ status: "Error", message: "No se pudo registrar la imagen en la base de datos." });
+    }
 };
+
+// Migración perezosa: si un paciente tiene fotos viejas en disco (de antes de este fix) que
+// nunca quedaron en Archivos_Multimedia, las registra usando la fecha real de creación del
+// archivo (fs.stat, confiable) en vez de intentar adivinar nada del nombre. Se ejecuta una
+// sola vez por paciente — la próxima consulta ya las encuentra en la tabla y no vuelve a tocar el disco.
+async function migrarImagenesLegacySiHaceFalta(pool, id) {
+    const yaTiene = await pool.request().input('id', sql.Int, id).query(`SELECT COUNT(*) as c FROM Archivos_Multimedia WHERE ID_Paciente = @id`);
+    if (yaTiene.recordset[0].c > 0) return;
+
+    const baseDir = process.env.NODE_ENV === 'production' ? process.cwd() : path.join(__dirname, '..');
+    const directoryPath = path.join(baseDir, 'uploads', 'clinico');
+    if (!fs.existsSync(directoryPath)) return;
+
+    const archivosViejos = fs.readdirSync(directoryPath).filter(file => file.startsWith(`PAC-${id}-`));
+    for (const archivo of archivosViejos) {
+        const stats = fs.statSync(path.join(directoryPath, archivo));
+        await pool.request()
+            .input('idPac', sql.Int, id)
+            .input('tipo', 'Otro')
+            .input('url', archivo)
+            .input('fecha', sql.DateTime, stats.birthtime || stats.mtime)
+            .query(`INSERT INTO Archivos_Multimedia (ID_Paciente, Tipo_Archivo, URL_Archivo, Fecha_Subida) VALUES (@idPac, @tipo, @url, @fecha)`);
+    }
+}
 
 const getImagenesPaciente = async (req, res) => {
     const { id } = req.params;
-    const baseDir = process.env.NODE_ENV === 'production' ? process.cwd() : path.join(__dirname, '..');
-    const directoryPath = path.join(baseDir, 'uploads', 'clinico');
-    if (!fs.existsSync(directoryPath)) return res.json({ status: "Success", imagenes: [] });
-    fs.readdir(directoryPath, (err, files) => {
-        if (err) return res.status(500).json({ status: "Error" });
-        const imagenes = files.filter(file => file.startsWith(`PAC-${id}-`)).map(file => {
-            const partes = file.split('-');
-            return { archivo: file, tipo: partes[2] || 'Otro', fecha: partes[3] ? parseInt(partes[3]) : Date.now() };
-        });
-        res.json({ status: "Success", imagenes });
-    });
+    try {
+        const pool = await getConnection();
+        await migrarImagenesLegacySiHaceFalta(pool, id);
+
+        const result = await pool.request().input('id', sql.Int, id).query(`
+            SELECT ID_Archivo, Tipo_Archivo as tipo, URL_Archivo as archivo, Fecha_Subida as fecha
+            FROM Archivos_Multimedia WHERE ID_Paciente = @id ORDER BY Fecha_Subida DESC
+        `);
+        res.json({ status: "Success", imagenes: result.recordset });
+    } catch (error) {
+        console.error("🔴 Error obteniendo imágenes clínicas:", error.message);
+        res.status(500).json({ status: "Error", message: "No se pudieron cargar las imágenes." });
+    }
 };
 
 const eliminarPaciente = async (req, res) => {

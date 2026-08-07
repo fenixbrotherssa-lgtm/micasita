@@ -52,7 +52,18 @@ window.loginModule = {
 
                 // Guardamos todo en la memoria del navegador
                 localStorage.setItem('usuario_sesion', JSON.stringify(datosSesion));
-                
+
+                // 🔌 Re-unir el socket de tiempo real a la sala de la clínica con el token
+                // NUEVO. Como esta app es una SPA (no recarga la página al loguear), el
+                // socket ya venía abierto desde antes y su evento 'connect' NO se vuelve a
+                // disparar solo por loguearse de nuevo — sin esto, "Enviar a Firma (celular)"
+                // y las actualizaciones en tiempo real seguían atadas al login anterior hasta
+                // cerrar TODA la app (no solo la sesión). Mismo arreglo que ya tiene el celular
+                // en ametra-mobile/src/core/socket.js (socketRT.reunirse()).
+                if (window.socketRT) {
+                    window.socketRT.emit('unirse-clinica', datosSesion.token);
+                }
+
                 // Notificación elegante de éxito
                 Swal.fire({
                     icon: 'success',

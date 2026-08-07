@@ -1,39 +1,84 @@
 ﻿const { Client, LocalAuth, Location } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode'); // genera la imagen (data URL) para el panel admin, distinto del de consola
 const bcrypt = require('bcrypt');
 const path = require('path'); // <--- AÑADIDO: Vital para manejar rutas en servicios
 const fs = require('fs');     // <--- AÑADIDO: Necesario para localizar el ejecutable de Chrome
+const os = require('os');     // <--- AÑADIDO: Para ubicar la caché por defecto de Puppeteer
+const { execFileSync } = require('child_process'); // <--- AÑADIDO: para limpiar Chrome huérfano al arrancar
 const { getConnection, sql } = require('../config/db');
+const { dispararAlertaEmergencia, estaFueraDeHorario } = require('./guardiaService');
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
 const sesionesConversacion = new Map();
 
-const CLINICA_LAT_DEF = -1.0471181180373076; 
-const CLINICA_LNG_DEF = -79.46953457199427;
+const CLINICA_LAT_DEF = -0.299817;
+const CLINICA_LNG_DEF = -76.856057;
+
+// --- HORARIOS DE ATENCIÓN (Clinica_Horarios) ---
+// Antes esto era un texto fijo en el código, igual para todas las sedes. Ahora se arma
+// desde la tabla configurable en el módulo de Sedes, agrupando días consecutivos con el
+// mismo horario (ej. "Lun-Vie 09:00-17:30") en vez de imprimir 7 líneas sueltas.
+const DIAS_CORTOS = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' };
+
+function formatearHorarios(filas) {
+    if (!filas || filas.length === 0) return 'Esta sede aún no configuró sus horarios.';
+
+    const porDia = {};
+    filas.forEach(f => { porDia[f.Dia_Semana] = f; });
+    const claveDia = (f) => f.Cerrado ? 'CERRADO' : `${f.Hora_Apertura || '?'}-${f.Hora_Cierre || '?'}`;
+    const cerrarRango = (diaIni, diaFin, clave) => {
+        const rango = diaIni === diaFin ? DIAS_CORTOS[diaIni] : `${DIAS_CORTOS[diaIni]}-${DIAS_CORTOS[diaFin]}`;
+        if (clave === 'CERRADO') return `🔴 ${rango}: Cerrado`;
+        const [apertura, cierre] = clave.split('-');
+        return `☀️ ${rango}: ${apertura} - ${cierre}`;
+    };
+
+    const lineas = [];
+    let inicio = null, claveActual = null;
+    for (let dia = 1; dia <= 7; dia++) {
+        const f = porDia[dia];
+        const k = f ? claveDia(f) : null; // sin fila = ese día no se configuró, se omite
+        if (k === null) {
+            if (inicio) { lineas.push(cerrarRango(inicio, dia - 1, claveActual)); inicio = null; claveActual = null; }
+            continue;
+        }
+        if (k !== claveActual) {
+            if (inicio) lineas.push(cerrarRango(inicio, dia - 1, claveActual));
+            inicio = dia; claveActual = k;
+        }
+    }
+    if (inicio) lineas.push(cerrarRango(inicio, 7, claveActual));
+    return lineas.length ? lineas.join('\n') : 'Esta sede aún no configuró sus horarios.';
+}
 
 // =======================================================================
 // --- RESOLUTOR DE CHROME (a prueba de instalaciones) ---
 // Busca el navegador en este orden:
 //   1. Variable CHROME_PATH del .env (si la definieron a mano)
 //   2. Chrome que viaja DENTRO del proyecto (.cache/puppeteer) -> portable
-//   3. Chrome instalado normalmente en Windows
+//   3. Chrome que Puppeteer descargó en su caché por defecto (fuera del
+//      proyecto), la versión compatible con el Puppeteer instalado
+//   4. Chrome instalado normalmente en Windows (puede autoactualizarse
+//      y quedar incompatible, por eso es el último recurso)
 // Si no encuentra ninguno, devuelve null como último recurso.
 // =======================================================================
 function resolverRutaChrome() {
-    // 1. CHROME_PATH definido en el .env
-    if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
-        return process.env.CHROME_PATH;
-    }
-
     const esWin = process.platform === 'win32';
     const esMac = process.platform === 'darwin';
 
-    // 2. Chrome empaquetado dentro del proyecto (.cache/puppeteer)
     const nombresChromeExe = esWin
         ? ['chrome.exe']
         : esMac
             ? ['Google Chrome for Testing', 'Google Chrome', 'Chromium']
             : ['chrome', 'chromium', 'chromium-browser'];
+
+    // 1. CHROME_PATH definido en el .env
+    if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
+        return process.env.CHROME_PATH;
+    }
+
+    // 2. Chrome empaquetado dentro del proyecto (.cache/puppeteer)
     const buscar = (dir) => {
         if (!fs.existsSync(dir)) return null;
         for (const it of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -51,7 +96,33 @@ function resolverRutaChrome() {
     const enProyecto = buscar(path.join(__dirname, '..', '.cache', 'puppeteer'));
     if (enProyecto) return enProyecto;
 
-    // 3. Rutas comunes según sistema operativo
+    // 3. Chrome que Puppeteer ya descargó en su caché por defecto (fuera del
+    //    proyecto: %USERPROFILE%\.cache\puppeteer). Se prioriza la versión
+    //    más alta cacheada, que es la compatible con el Puppeteer instalado.
+    //    Evita depender del Chrome del sistema, que se autoactualiza solo
+    //    (Google Update) y puede quedar por delante de lo que Puppeteer
+    //    soporta, causando una ventana en blanco que nunca carga.
+    const cacheDefault = path.join(os.homedir(), '.cache', 'puppeteer', 'chrome');
+    if (fs.existsSync(cacheDefault)) {
+        const versiones = fs.readdirSync(cacheDefault, { withFileTypes: true })
+            .filter(it => it.isDirectory())
+            .map(it => it.name)
+            .sort((a, b) => {
+                const va = a.replace('win64-', '').split('.').map(Number);
+                const vb = b.replace('win64-', '').split('.').map(Number);
+                for (let i = 0; i < Math.max(va.length, vb.length); i++) {
+                    if ((va[i] || 0) !== (vb[i] || 0)) return (vb[i] || 0) - (va[i] || 0);
+                }
+                return 0;
+            });
+        for (const v of versiones) {
+            const candidato = path.join(cacheDefault, v, 'chrome-win64', 'chrome.exe');
+            if (fs.existsSync(candidato)) return candidato;
+        }
+    }
+
+    // 4. Último recurso: Chrome instalado normal en el sistema (puede fallar
+    //    si se autoactualizó más allá de lo que Puppeteer soporta)
     const comunes = esWin ? [
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
         'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
@@ -73,22 +144,33 @@ function resolverRutaChrome() {
 const RUTA_CHROME = resolverRutaChrome();
 console.log('🌐 [WhatsApp]: Chrome detectado en ->', RUTA_CHROME || 'NO ENCONTRADO');
 
+// Carpeta real del perfil de Chrome para esta sesión (LocalAuth agrega
+// "session" por debajo del dataPath para el clientId por defecto). La
+// necesitamos también en limpiarSesionHuerfana() para identificar el
+// Chrome correcto sin tocar otros procesos del sistema.
+const SESSIONS_DATA_PATH = path.join(__dirname, '..', 'sessions');
+const SESSION_PROFILE_DIR = path.join(SESSIONS_DATA_PATH, 'session');
+
 const client = new Client({
     // CAMBIO 1: Forzamos la ruta absoluta hacia la carpeta 'sessions' en la raíz del proyecto
-    authStrategy: new LocalAuth({ 
-        dataPath: path.join(__dirname, '..', 'sessions') 
+    authStrategy: new LocalAuth({
+        dataPath: SESSIONS_DATA_PATH
     }),
     puppeteer: {
         handleSIGINT: false,
-        executablePath: RUTA_CHROME,
         headless: true,
+        executablePath: RUTA_CHROME, // CAMBIO: antes era process.env.CHROME_PATH || null (causa del fallo)
         args: [
-            '--disable-dev-shm-usage',
             '--disable-extensions',
+            '--disable-dev-shm-usage', // Evita cierres por falta de memoria compartida
             '--no-first-run',
             '--no-default-browser-check',
             '--disable-ipc-flooding-protection',
             `--user-agent=Mozilla/5.0 (${process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7' : 'Windows NT 10.0; Win64; x64'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`,
+            // En Windows/Linux hacen falta estos flags para correr como servicio; en Mac
+            // rompen Chrome (--no-zygote/--no-sandbox) o no aplican (--disable-gpu).
+            // En Mac en cambio hace falta desactivar site-isolation o whatsapp-web.js
+            // falla con "Execution context was destroyed" al cargar.
             ...(process.platform !== 'darwin' ? [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -104,53 +186,92 @@ const client = new Client({
 // --- FUNCIONES DE APOYO ---
 
 function formatearFechaEcuador(fechaObj) {
-    return fechaObj.toLocaleDateString('es-EC', {
-        timeZone: 'America/Guayaquil',
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long'
+    return fechaObj.toLocaleDateString('es-EC', { 
+        weekday: 'long', 
+        day: 'numeric', 
+        month: 'long' 
     }).toUpperCase();
+}
+
+// Suma 30 minutos a una hora "HH:MM" (duración fija de un turno del bot).
+function sumarMediaHora(hhmm) {
+    const [h, m] = hhmm.split(':').map(Number);
+    const total = h * 60 + m + 30;
+    return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
 async function obtenerHorariosLibres(pool, id_clinica, fecha, id_doctor) {
     const jornada = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00"];
     try {
+        // Calcular fecha y hora actual en Ecuador
         const ahora = new Date();
-        const horaActual = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Guayaquil', hour: '2-digit', minute: '2-digit', hour12: false }).format(ahora);
-        const fechaHoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(ahora);
+        ahora.setHours(ahora.getHours() - 5);
+        const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+        const fechaHoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
         const esHoy = fecha === fechaHoy;
 
-        // ✅ FIX: Filtrar por doctor para verificar su disponibilidad real
+        // ✅ FIX: Filtrar por doctor para verificar su disponibilidad real. Se trae
+        // Hora_Inicio Y Hora_Fin (no solo el inicio): una cita creada desde el escritorio
+        // puede durar más de 30 min, y comparar solo el inicio exacto dejaba "libre" el
+        // segundo tramo de una cita larga — el mismo hueco quedaba ofrecible dos veces.
         const res = await pool.request()
             .input('f', sql.Date, fecha)
             .input('cli', sql.Int, id_clinica)
             .input('doc', sql.Int, id_doctor)
-            .query(`SELECT LEFT(CAST(Hora_Inicio AS VARCHAR), 5) as hora FROM Citas WHERE Fecha_Cita = @f AND ID_Clinica = @cli AND ID_Doctor = @doc AND Estado != 'Cancelada'`);
-        
-        const ocupadas = res.recordset.map(r => r.hora);
+            .query(`SELECT LEFT(CAST(Hora_Inicio AS VARCHAR), 5) as inicio, LEFT(CAST(Hora_Fin AS VARCHAR), 5) as fin FROM Citas WHERE Fecha_Cita = @f AND ID_Clinica = @cli AND ID_Doctor = @doc AND Estado != 'Cancelada'`);
+
+        const ocupadas = res.recordset;
 
         return jornada.filter(h => {
-            if (ocupadas.includes(h)) return false;          // Ya reservada por este doctor
+            const finTurno = sumarMediaHora(h);
+            const seSolapa = ocupadas.some(o => o.inicio < finTurno && o.fin > h); // overlap real, no solo igualdad de inicio
+            if (seSolapa) return false;
             if (esHoy && h <= horaActual) return false;      // ✅ Hora ya pasó hoy
             return true;
         });
-    } catch (err) { 
+    } catch (err) {
         console.error("Error horarios:", err);
-        return []; 
+        return [];
     }
 }
 
-function generarOpcionesDias() {
+// Un doctor tiene "disponibilidad" ese día si al menos uno de los horarios
+// de la jornada sigue libre (no ocupado, y si es hoy, que no haya pasado ya).
+async function hayDisponibilidadEnFecha(pool, id_clinica, fecha) {
+    try {
+        const resDoctores = await pool.request()
+            .input('cli', sql.Int, id_clinica)
+            .query(`SELECT ID_Usuario FROM Usuarios WHERE ID_Clinica = @cli AND ID_Rol = 3 AND Activo = 1`);
+
+        for (const doc of resDoctores.recordset) {
+            const libres = await obtenerHorariosLibres(pool, id_clinica, fecha, doc.ID_Usuario);
+            if (libres.length > 0) return true;
+        }
+        return false;
+    } catch (err) {
+        console.error("Error verificando disponibilidad de domingo:", err);
+        return false;
+    }
+}
+
+async function generarOpcionesDias(pool, id_clinica) {
     const dias = [];
-    const hoyStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date());
-    const [anioBase, mesBase, diaBase] = hoyStr.split('-').map(Number);
-    for (let i = 0; i <= 13; i++) {
-        const d = new Date(anioBase, mesBase - 1, diaBase + i);
-        if (d.getDay() !== -1) {
-            const anio = d.getFullYear();
-            const mes = String(d.getMonth() + 1).padStart(2, '0');
-            const dia = String(d.getDate()).padStart(2, '0');
-            const fechaLimpia = `${anio}-${mes}-${dia}`;
+    for (let i = 0; i <= 13; i++) {  // ✅ Antes: i = 1, ahora incluye HOY
+        const d = new Date();
+        d.setHours(d.getHours() - 5); // Ajuste Ecuador
+        d.setDate(d.getDate() + i);
+
+        const anio = d.getFullYear();
+        const mes = String(d.getMonth() + 1).padStart(2, '0');
+        const dia = String(d.getDate()).padStart(2, '0');
+        const fechaLimpia = `${anio}-${mes}-${dia}`;
+
+        if (d.getDay() === 0) {
+            // Domingo: se ofrece como opción solo si hay disponibilidad real ese día
+            if (await hayDisponibilidadEnFecha(pool, id_clinica, fechaLimpia)) {
+                dias.push({ label: formatearFechaEcuador(d), value: fechaLimpia });
+            }
+        } else {
             dias.push({ label: formatearFechaEcuador(d), value: fechaLimpia });
         }
     }
@@ -158,12 +279,27 @@ function generarOpcionesDias() {
 }
 // --- EVENTOS DE CLIENTE ---
 
+// Estado consultable desde el panel admin (ver whatsappRoutes.js), para poder
+// mostrar "conectado / reiniciando / requiere escanear QR" sin tener que
+// entrar por AnyDesk a leer la consola del servidor.
+let estadoBot = 'iniciando';
+let ultimoQRDataURL = null;
+
 client.on('qr', (qr) => {
+    estadoBot = 'esperando_qr';
     qrcode.generate(qr, { small: true });
     console.log('--- ESCANEA EL QR PARA MEDICINA ECUADOR PRO ---');
+
+    QRCode.toDataURL(qr, { margin: 1, width: 280 })
+        .then((dataUrl) => { ultimoQRDataURL = dataUrl; })
+        .catch((e) => console.error('Error generando imagen QR:', e.message));
 });
 
-client.on('ready', () => console.log('✅ Sistema Medicina Ecuador Pro: WhatsApp Web Conectado'));
+client.on('ready', () => {
+    estadoBot = 'conectado';
+    ultimoQRDataURL = null; // ya no aplica, evita mostrar un QR viejo en el panel
+    console.log('✅ Sistema Medicina Ecuador Pro: WhatsApp Web Conectado');
+});
 
 client.on('message', async (msg) => {
     if (msg.isStatus || msg.from === 'status@broadcast') return;
@@ -192,10 +328,10 @@ client.on('message', async (msg) => {
             chat.estado = 'MENU';
             sesionesConversacion.set(msg.from, chat);
             
-            let menuTxt = `¡Hola! 👋 Soy *Mini Doctor*, tu asistente de *${nombreClinica}*. 🦷✨\n\n¿En qué puedo apoyarte hoy?\n\n🏠 *MENÚ PRINCIPAL*\n\n1️⃣ Horarios\n2️⃣ Especialidades\n3️⃣ Agendar Cita\n4️⃣ Consultar Cita\n5️⃣ Ubicaciones`;
-            
+            let menuTxt = `¡Hola! 👋 Soy *Mini Doctor*, tu asistente de *${nombreClinica}*. 🦷✨\n\n¿En qué puedo apoyarte hoy?\n\n🏠 *MENÚ PRINCIPAL*\n\n1️⃣ Horarios\n2️⃣ Servicios\n3️⃣ Especialidades\n4️⃣ Agendar Cita\n5️⃣ Consultar Cita\n6️⃣ Ubicaciones`;
+
             if (chat.id_rol === 1 || chat.id_rol === 3) {
-                menuTxt += `\n\n🔐 *PANEL ADMINISTRATIVO*\n6️⃣ Agenda de Hoy\n7️⃣ Resumen de Caja\n8️⃣ Recordatorios (Citas/Deudas)\n9️⃣ Salir del Modo Doctor`;
+                menuTxt += `\n\n🔐 *PANEL ADMINISTRATIVO*\n7️⃣ Agenda de Hoy\n8️⃣ Resumen de Caja\n9️⃣ Recordatorios (Citas/Deudas)\n🔟 Salir del Modo Doctor`;
             }
 
             return await msg.reply(menuTxt);
@@ -264,7 +400,8 @@ client.on('message', async (msg) => {
                 } else {
                     chat.idPacienteRegistrado = checkP.recordset[0].ID_Paciente;
                     chat.estado = 'AGENDAR_FECHA'; sesionesConversacion.set(msg.from, chat);
-                    return await msg.reply(`📍 Sede: *${chat.ciudad_seleccionada}*\n\n📅 *ELIJA EL DÍA DE SU CITA:*\n\n${generarOpcionesDias().map((d,i) => `${i+1}️⃣ ${d.label}`).join('\n')}${navFooter}`);
+                    const diasSede = await generarOpcionesDias(pool, chat.id_clinica_seleccionada);
+                    return await msg.reply(`📍 Sede: *${chat.ciudad_seleccionada}*\n\n📅 *ELIJA EL DÍA DE SU CITA:*\n\n${diasSede.map((d,i) => `${i+1}️⃣ ${d.label}`).join('\n')}${navFooter}`);
                 }
             } else {
                 return await msg.reply("⚠️ Opción de sede incorrecta. Elija un número de la lista:");
@@ -308,7 +445,8 @@ client.on('message', async (msg) => {
                     sesionesConversacion.set(msg.from, chat);
 
                     await msg.reply(`✨ *PACIENTE RECONOCIDO*\n\nHola de nuevo, ${paciente.Nombres}. Ya contamos con su registro en el sistema.`);
-                    return await msg.reply(`📅 *ELIJA EL DÍA DE SU CITA:*\n\n${generarOpcionesDias().map((d,i) => `${i+1}️⃣ ${d.label}`).join('\n')}${navFooter}`);
+                    const diasReconocido = await generarOpcionesDias(pool, chat.id_clinica_seleccionada);
+                    return await msg.reply(`📅 *ELIJA EL DÍA DE SU CITA:*\n\n${diasReconocido.map((d,i) => `${i+1}️⃣ ${d.label}`).join('\n')}${navFooter}`);
                 }
 
                 // Si realmente no existe el DNI en ninguna parte, pedimos teléfono
@@ -377,7 +515,8 @@ client.on('message', async (msg) => {
                         : `✅ *REGISTRO EXITOSO*\n\nBienvenido/a, ${chat.nombres_p || 'a nuestro sistema'}.`;
 
                     await msg.reply(mensaje);
-                    return await msg.reply(`📅 *ELIJA EL DÍA DE SU CITA:*\n\n${generarOpcionesDias().map((d,i) => `${i+1}️⃣ ${d.label}`).join('\n')}${navFooter}`);
+                    const diasRegistro = await generarOpcionesDias(pool, chat.id_clinica_seleccionada);
+                    return await msg.reply(`📅 *ELIJA EL DÍA DE SU CITA:*\n\n${diasRegistro.map((d,i) => `${i+1}️⃣ ${d.label}`).join('\n')}${navFooter}`);
 
                 } catch (dbErr) {
                     console.error("Error Crítico en Registro:", dbErr.message);
@@ -400,7 +539,7 @@ client.on('message', async (msg) => {
         }
 
         if (chat.estado === 'AGENDAR_FECHA') {
-            const opciones = generarOpcionesDias();
+            const opciones = await generarOpcionesDias(pool, chat.id_clinica_seleccionada);
             const idx = parseInt(texto) - 1;
             if (opciones[idx]) {
                 chat.fechaSeleccionada = opciones[idx].value; chat.fechaLabel = opciones[idx].label;
@@ -449,13 +588,39 @@ client.on('message', async (msg) => {
         if (chat.estado === 'AGENDAR_HORA') {
             const horaIngresada = texto.includes(':') ? texto : `${texto}:00`;
             if (chat.horariosLibres.includes(horaIngresada)) {
+                // Re-chequeo de choque EN VIVO justo antes de guardar — la lista de horarios
+                // libres se calculó cuando el paciente eligió el doctor, y pudo quedar vieja
+                // mientras escribía la hora (otro chat de WhatsApp, o alguien agendando desde
+                // el escritorio al mismo doctor/hora en el medio). Mismo chequeo que ya
+                // protege citasController.js del escritorio (crearCita/reagendarCita), que
+                // acá nunca corría — el bot solo confiaba ciegamente en la lista vieja.
+                const finIngresada = sumarMediaHora(horaIngresada);
+                const choque = await pool.request()
+                    .input('doc', sql.Int, chat.idDoctorSeleccionado)
+                    .input('f', sql.Date, chat.fechaSeleccionada)
+                    .input('inicioNuevo', horaIngresada)
+                    .input('finNuevo', finIngresada)
+                    .query(`
+                        SELECT TOP 1 ID_Cita FROM Citas
+                        WHERE ID_Doctor = @doc AND Fecha_Cita = @f AND Estado != 'Cancelada'
+                          AND LEFT(CAST(Hora_Inicio AS VARCHAR), 5) < @finNuevo
+                          AND LEFT(CAST(Hora_Fin AS VARCHAR), 5) > @inicioNuevo
+                    `);
+
+                if (choque.recordset.length > 0) {
+                    const libresFrescos = await obtenerHorariosLibres(pool, chat.id_clinica_seleccionada, chat.fechaSeleccionada, chat.idDoctorSeleccionado);
+                    chat.horariosLibres = libresFrescos;
+                    sesionesConversacion.set(msg.from, chat);
+                    return await msg.reply(`⚠️ Justo se ocupó ese horario con otro paciente.\n\n🕒 *DISPONIBLES AHORA:*\n${libresFrescos.join(' | ') || 'Ninguno — elija otra fecha con 0.'}\n\nEscriba otra hora:`);
+                }
+
                 // ✅ FIX: Usar el ID_Doctor real seleccionado por el paciente
                 await pool.request().input('idP', chat.idPacienteRegistrado).input('idC', chat.id_clinica_seleccionada)
                     .input('idDoc', sql.Int, chat.idDoctorSeleccionado)
                     .input('f', chat.fechaSeleccionada).input('h', `${horaIngresada}:00`)
-                    .query(`INSERT INTO Citas (ID_Paciente, ID_Doctor, ID_Clinica, Fecha_Cita, Hora_Inicio, Hora_Fin, Estado, Asunto, Fecha_Registro) 
+                    .query(`INSERT INTO Citas (ID_Paciente, ID_Doctor, ID_Clinica, Fecha_Cita, Hora_Inicio, Hora_Fin, Estado, Asunto, Fecha_Registro)
                             VALUES (@idP, @idDoc, @idC, @f, CAST(@h AS TIME), DATEADD(MINUTE, 30, CAST(@h AS TIME)), 'Pendiente', 'WhatsApp', GETDATE())`);
-                
+
                 await msg.reply(`✅ *CITA RESERVADA*\n📍 Sede: ${chat.nombre_clinica}\n👨‍⚕️ ${chat.nombreDoctor}\n📅 ${chat.fechaLabel}\n🕒 ${horaIngresada}\n\nEnviando ubicación...`);
                 await client.sendMessage(msg.from, new Location(chat.lat || CLINICA_LAT_DEF, chat.lng || CLINICA_LNG_DEF, chat.nombre_clinica, "MedicinaEcuador Pro"));
                 chat.estado = 'MENU'; sesionesConversacion.set(msg.from, chat);
@@ -498,19 +663,39 @@ client.on('message', async (msg) => {
 
         if (chat.estado === 'MENU') {
             switch (texto) {
-                case "1": return await msg.reply("🕒 *HORARIOS:*\n\n☀️ Lun-Vie: 09:00 - 19:00\n🌤️ Sáb: 09:00 - 15:30\n🌙 Dom: Bajo previa cita" + navFooter);
+                case "1": {
+                    const horariosRes = await pool.request()
+                        .input('cli', chat.id_clinica_seleccionada)
+                        .query("SELECT Dia_Semana, Hora_Apertura, Hora_Cierre, Cerrado FROM Clinica_Horarios WHERE ID_Clinica = @cli ORDER BY Dia_Semana ASC");
+                    return await msg.reply(`🕒 *HORARIOS:*\n\n${formatearHorarios(horariosRes.recordset)}` + navFooter);
+                }
                 case "2":
                     const prest = await pool.request().query("SELECT Nombre_Prestacion FROM PRESTACIONES WHERE Activo = 1 ORDER BY Nombre_Prestacion ASC");
-                    return await msg.reply(`🦷 *ESPECIALIDADES:*\n\n${prest.recordset.map(r => '• ' + r.Nombre_Prestacion).join('\n')}${navFooter}`);
-                case "3":
+                    return await msg.reply(`🦷 *SERVICIOS:*\n\n${prest.recordset.map(r => '• ' + r.Nombre_Prestacion).join('\n')}${navFooter}`);
+                case "3": {
+                    const espRes = await pool.request()
+                        .input('cli', chat.id_clinica_seleccionada)
+                        .query(`
+                            SELECT E.Nombre_Especialidad
+                            FROM Clinica_Especialidades CE
+                            INNER JOIN Especialidades E ON CE.ID_Especialidad = E.ID_Especialidad
+                            WHERE CE.ID_Clinica = @cli AND E.Activo = 1
+                            ORDER BY E.Nombre_Especialidad ASC
+                        `);
+                    const textoEsp = espRes.recordset.length
+                        ? espRes.recordset.map(r => '• ' + r.Nombre_Especialidad).join('\n')
+                        : 'Esta sede aún no configuró sus especialidades.';
+                    return await msg.reply(`🩺 *ESPECIALIDADES:*\n\n${textoEsp}${navFooter}`);
+                }
+                case "4":
                     const resC = await pool.request().query("SELECT Ciudad FROM CLINICAS WHERE Activo = 1");
                     chat.estado = 'SELECCIONAR_CLINICA'; sesionesConversacion.set(msg.from, chat);
                     return await msg.reply(`🏥 *SELECCIONE CIUDAD:*\n\n${resC.recordset.map((c,i) => `${i+1}️⃣ ${c.Ciudad}`).join('\n')}`);
-                case "4": 
+                case "5":
                     chat.estado = 'CHECK_CITA_DNI'; sesionesConversacion.set(msg.from, chat);
                     return await msg.reply("🔍 Ingrese su número de cédula:");
-                
-                case "5":
+
+                case "6":
                     const sedes = await pool.request().query("SELECT Nombre_Clinica, Direccion, Latitud, Longitud FROM CLINICAS WHERE Activo = 1");
                     let txtUbicaciones = "📍 *NUESTRAS SEDES:*\n";
                     for (const s of sedes.recordset) {
@@ -524,7 +709,7 @@ client.on('message', async (msg) => {
                     }
                     return await client.sendMessage(msg.from, txtUbicaciones + navFooter);
 
-                case "6":
+                case "7":
                     if (chat.id_rol === 1 || chat.id_rol === 3) {
                         const hoy = new Date().toISOString().split('T')[0];
                         const esAdmin = chat.id_rol === 1;
@@ -541,7 +726,7 @@ client.on('message', async (msg) => {
                     }
                     break;
 
-               case "7":
+               case "8":
                     if (chat.id_rol === 1 || chat.id_rol === 3) {
                         const esAdmin = chat.id_rol === 1;
                         const resCaja = await pool.request()
@@ -573,10 +758,10 @@ client.on('message', async (msg) => {
                     }
                     break;
 
-                case "8":
+                case "9":
     if (chat.id_rol === 1 || chat.id_rol === 3) {
         const esAdmin = chat.id_rol === 1;
-        
+
         // Ejecutamos SOLO el recordatorio de deudas de forma manual
         const deudores = await pool.request()
             .input('cli', chat.id_clinica_seleccionada)
@@ -595,7 +780,7 @@ client.on('message', async (msg) => {
     }
     break;
 
-               case "9":
+               case "10":
                     if (chat.id_rol === 1 || chat.id_rol === 3) {
                         // CAMBIO SUGERIDO: Limpiamos el objeto por completo por seguridad
                         const sesionLimpia = { 
@@ -609,6 +794,15 @@ client.on('message', async (msg) => {
                     break;
 
                 default:
+                    // Texto libre que no es una opción de menú, en el estado inicial de la
+                    // conversación (no está a mitad de un flujo como registro o login) — si
+                    // además llega fuera de horario, se trata como posible emergencia en vez
+                    // de simplemente decir "opción no válida".
+                    if (estaFueraDeHorario()) {
+                        dispararAlertaEmergencia(chat.id_clinica_seleccionada, numeroDB, textoOriginal)
+                            .catch(err => console.error('❌ [GUARDIA]: Error disparando alerta de emergencia:', err.message));
+                        return await msg.reply("🕒 En este momento nos encontramos fuera del horario de atención. Hemos recibido tu mensaje y te responderemos tan pronto retomemos nuestra jornada laboral. No es necesario volver a escribir. ¡Gracias por tu paciencia y comprensión! 😊" + navFooter);
+                    }
                     return await msg.reply("⚠️ Opción no válida. Escriba *Menu* o *0* para ver las opciones.");
             }
         }
@@ -653,8 +847,8 @@ function normalizarFechaSQL(fechaDb) {
 
 const cron = require('node-cron');
 
-// DISPARADOR AUTOMÁTICO: Todos los días a las 08:00 AM
-cron.schedule('0 8 * * *', async () => {
+// DISPARADOR AUTOMÁTICO: Todos los días a las 09:00 AM
+cron.schedule('0 9 * * *', async () => {
     console.log("🤖 Ejecutando recordatorio automático de citas...");
     try {
         const pool = await getConnection();
@@ -679,39 +873,146 @@ cron.schedule('0 8 * * *', async () => {
     }
 });
 
-// --- LIMPIEZA DE SINGLETON AL ARRANCAR ---
-// Chrome deja archivos Singleton bloqueados si se cae bruscamente.
-// Si no se limpian, el siguiente arranque falla silenciosamente.
-function limpiarSingleton() {
-    const sesDir = path.join(__dirname, '..', 'sessions');
-    if (!fs.existsSync(sesDir)) return;
-    const buscarYBorrar = (dir) => {
+// --- LIMPIEZA DE CHROME HUÉRFANO ---
+// Si el proceso anterior murió mal (corte de luz, crash, alguien detuvo el
+// servicio a la fuerza, o un intento previo de initialize() quedó a medias),
+// puede quedar un chrome.exe vivo apuntando al mismo perfil de sesión. Eso
+// hace que initialize() falle siempre con "The browser is already running..."
+// y el bot nunca vuelve a levantar solo.
+//
+// IMPORTANTE: esto se corre antes de CADA intento (no solo al arrancar en
+// frío). Si no, un primer fallo que deja a Chrome mal cerrado provoca que
+// todos los reintentos siguientes choquen contra el mismo bloqueo para
+// siempre — que es exactamente el loop de "browser is already running" que
+// veíamos en producción a pesar del backoff.
+//
+// Tras matar el proceso esperamos un poco: Stop-Process solo pide la
+// terminación, no garantiza que Windows ya haya liberado los archivos de
+// bloqueo (SingletonLock, etc.) en el instante en que retorna.
+//
+// Solo mata chrome.exe cuya línea de comando apunta exactamente a
+// SESSION_PROFILE_DIR, nunca toca otros navegadores del sistema.
+async function limpiarSesionHuerfana() {
+    if (process.platform === 'win32') {
         try {
-            for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
-                const fullPath = path.join(dir, item.name);
-                if (item.isDirectory()) buscarYBorrar(fullPath);
-                else if (item.name.startsWith('Singleton')) {
-                    try { fs.unlinkSync(fullPath); } catch {}
-                }
-            }
-        } catch {}
-    };
-    buscarYBorrar(sesDir);
+            const psScript = [
+                'Get-CimInstance Win32_Process -Filter "Name=\'chrome.exe\'"',
+                '| Where-Object { $_.CommandLine -like "*$env:AMETRA_SESSION_DIR*" }',
+                '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }'
+            ].join(' ');
+            execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], {
+                env: { ...process.env, AMETRA_SESSION_DIR: SESSION_PROFILE_DIR },
+                stdio: 'ignore'
+            });
+        } catch (e) { /* no había powershell disponible o nada que matar, seguimos */ }
+    } else {
+        // Mac/Linux: mata cualquier Chrome cuya línea de comando apunte a este
+        // perfil de sesión (equivalente al filtro de Win32_Process de arriba).
+        try {
+            execFileSync('pkill', ['-f', SESSION_PROFILE_DIR], { stdio: 'ignore' });
+        } catch (e) { /* pkill no encontró nada que matar, seguimos */ }
+    }
+
+    for (const archivo of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+        try { fs.unlinkSync(path.join(SESSION_PROFILE_DIR, archivo)); } catch (e) { /* no existía */ }
+    }
+
+    // Da tiempo a Windows de liberar los handles del proceso recién matado
+    // antes de que el próximo initialize() intente abrir el mismo perfil.
+    await delay(1500);
 }
 
-limpiarSingleton();
+// --- ARRANQUE ROBUSTO CON RECONEXIÓN AUTOMÁTICA ---
+// Tras un corte de luz, el servicio puede arrancar antes de que la red/DNS
+// esté lista, o la sesión de WhatsApp puede caerse justo en ese momento.
+// Antes, un fallo de arranque dejaba el bot "muerto" hasta reiniciar el
+// proceso a mano porque client.initialize() no tenía manejo de error ni
+// reintento, y nadie escuchaba 'disconnected'/'auth_failure'.
+let reintentosInit = 0;
+let iniciando = false;
 
-client.on('disconnected', (reason) => {
-    console.log('❌ [WhatsApp]: Desconectado ->', reason, '— reiniciando servicio...');
-    process.exit(1);
+async function iniciarBot() {
+    if (iniciando) return; // evita solapar arranques si dos eventos disparan iniciarBot() casi juntos
+    iniciando = true;
+    try {
+        await limpiarSesionHuerfana();
+        await client.initialize();
+    } catch (err) {
+        reintentosInit++;
+        const espera = Math.min(30000, 5000 * reintentosInit); // backoff hasta 30s
+        console.error(`❌ [WhatsApp]: Falló initialize() (intento ${reintentosInit}). Reintentando en ${espera / 1000}s...`, err.message);
+
+        // Si initialize() alcanzó a abrir Chrome antes de fallar, intentamos
+        // cerrarlo por su vía normal también; limpiarSesionHuerfana() en el
+        // próximo intento se encarga de forma segura si esto no alcanza.
+        try {
+            if (client.pupBrowser) await client.pupBrowser.close();
+        } catch (e) { /* ya estaba cerrado o no se pudo, seguimos igual */ }
+
+        iniciando = false;
+        setTimeout(iniciarBot, espera);
+        return;
+    }
+    iniciando = false;
+}
+
+client.on('ready', () => { reintentosInit = 0; });
+
+client.on('disconnected', (razon) => {
+    estadoBot = 'reconectando';
+    console.error('⚠️ [WhatsApp]: Sesión desconectada:', razon, '- Reintentando conexión en 5s...');
+    setTimeout(iniciarBot, 5000);
 });
 
 client.on('auth_failure', (msg) => {
-    console.error('❌ [WhatsApp]: Fallo de autenticación ->', msg);
-    process.exit(1);
+    estadoBot = 'reconectando';
+    console.error('❌ [WhatsApp]: Fallo de autenticación:', msg, '- Reintentando en 5s...');
+    setTimeout(iniciarBot, 5000);
 });
 
-// --- INICIALIZACIÓN ---
-client.initialize();
+// --- REINICIO MANUAL (desde el panel admin, sin entrar por AnyDesk) ---
+// Cubre tanto el caso del Chrome/frame atascado (ej. tras un corte de red o
+// un arranque en frío antes de que la DB esté lista) como una sesión
+// deslogueada: si hace falta un QR nuevo, iniciarBot() ya lo dispara solo y
+// queda reflejado en estadoBot = 'esperando_qr'.
+async function reiniciarBot() {
+    estadoBot = 'reiniciando';
+    ultimoQRDataURL = null;
+    try {
+        await client.destroy();
+    } catch (e) { /* ya podía estar caído */ }
+    reintentosInit = 0;
+    iniciando = false; // por si un intento anterior había quedado marcado en curso
+    iniciarBot(); // no se espera: initialize() puede tardar varios segundos
+}
 
-module.exports = { enviarMensaje, normalizarFechaSQL };
+function obtenerEstadoBot() {
+    return estadoBot;
+}
+
+function obtenerUltimoQR() {
+    return ultimoQRDataURL;
+}
+
+// --- CIERRE ORDENADO ---
+// Si detienen el servicio o el proceso con Ctrl+C, cerramos Chrome por su
+// vía normal (CDP) antes de salir, para que no quede huérfano reteniendo
+// el perfil la próxima vez que arranque.
+let cerrando = false;
+async function cerrarWhatsAppLimpio(señal) {
+    if (cerrando) return;
+    cerrando = true;
+    console.log(`\n🛑 [WhatsApp]: Señal ${señal} recibida, cerrando Chrome antes de salir...`);
+    try { await client.destroy(); } catch (e) { /* ya estaba cerrado */ }
+    process.exit(0);
+}
+process.on('SIGINT', () => cerrarWhatsAppLimpio('SIGINT'));
+process.on('SIGTERM', () => cerrarWhatsAppLimpio('SIGTERM'));
+
+// --- INICIALIZACIÓN ---
+// Pequeña espera inicial para dar tiempo a que la red esté lista tras un
+// arranque en frío (ej. justo después de que vuelve la luz). iniciarBot()
+// ya se encarga de limpiar cualquier Chrome huérfano antes de conectar.
+setTimeout(iniciarBot, 5000);
+
+module.exports = { enviarMensaje, normalizarFechaSQL, reiniciarBot, obtenerEstadoBot, obtenerUltimoQR };

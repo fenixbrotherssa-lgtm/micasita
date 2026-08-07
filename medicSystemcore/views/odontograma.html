@@ -202,9 +202,17 @@
             <h2 style="margin:0; color:var(--dark-slate);">Odontograma Pro</h2>
             <div id="paciente_nombre_odo" style="color:var(--medical-blue); font-weight:700;">Cargando...</div>
         </div>
-        <button class="btn-tool-odo" style="background:#f1f5f9; color: #475569;" onclick="window.router.load('pacientes')">
-            <i class="fas fa-times"></i> Salir
-        </button>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-tool-odo" style="background:#4f46e5" onclick="window.odontogramaModule.exportarAPlanTratamiento()" title="Genera un plan de tratamiento sugerido a partir de los hallazgos activos">
+                <i class="fas fa-file-medical"></i> Exportar a Tratamiento
+            </button>
+            <button class="btn-tool-odo" style="background:#0ea5e9" onclick="window.imprimirOdontograma()">
+                <i class="fas fa-print"></i> Imprimir
+            </button>
+            <button class="btn-tool-odo" style="background:#f1f5f9; color: #475569;" onclick="window.router.load('pacientes')">
+                <i class="fas fa-times"></i> Salir
+            </button>
+        </div>
     </div>
 
     <div class="toolbar-odo">
@@ -278,235 +286,31 @@
     <div id="odo-historial" style="margin-top:15px; display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; max-height:140px; overflow-y:auto; padding-right:5px; align-content:start;"></div>
 </div>
 
-<div id="visor-3d-container" style="width: 100%; height: 500px; background: #0f172a; border-radius: 20px; margin: 30px 0; position: relative; overflow: hidden; border: 1px solid #1e293b;">
+<div id="odo-sugerencias" style="display:none; background:#eef2ff; border:1px solid #c7d2fe; border-radius:20px; padding:20px; margin-top:25px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+        <div>
+            <h3 style="margin:0; font-size:15px; color:#4338ca;"><i class="fas fa-lightbulb"></i> Sugerencias por Pieza</h3>
+            <div style="font-size:12px; color:#6366f1;">Patologías activas detectadas en el odontograma, listas para planificar</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-tool-odo" style="background:#0ea5e9; padding:10px 16px;" onclick="window.odontogramaModule.irAPresupuesto()">
+                <i class="fas fa-file-invoice-dollar"></i> Enviar a Presupuesto
+            </button>
+            <button class="btn-tool-odo" style="background:#4f46e5; padding:10px 16px;" onclick="window.odontogramaModule.irATratamiento()">
+                <i class="fas fa-notes-medical"></i> Enviar a Tratamiento
+            </button>
+        </div>
+    </div>
+    <div id="odo-sugerencias-lista"></div>
+</div>
+
+<div id="visor-3d-container" style="width: 100%; height: 500px; background: #0f172a; border-radius: 20px; margin: 30px 0 6px; position: relative; overflow: hidden; border: 1px solid #1e293b;">
     <div id="loading-visor" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #3b82f6; font-family: 'Inter', sans-serif;">
         <i class="fas fa-spinner fa-spin"></i> CARGANDO VISTA CLÍNICA 3D...
     </div>
 </div>
+<div style="text-align:right; font-size:10px; color:#94a3b8; margin-bottom:20px;">
+    Modelo 3D reconstruido y segmentado por CasRodSoft Development
+</div>
 
 </div> 
-<script src="/js/three.min.js"></script>
-<script src="/js/GLTFLoader.js"></script>
-<script src="/js/OrbitControls.js"></script>
-
-<script>
-// ==========================================
-// ESTADO GLOBAL (HTML INLINE VERSION FALLBACK)
-// ==========================================
-window.odontogramaState = window.odontogramaState || { 
-    data: {}, 
-    currentTool: null, 
-    tipoPaciente: 'adulto' 
-};
-
-// Sincronizado con patologias de MSP Ecuador
-const HALLAZGOS_INICIALES = ['Caries', 'Fractura', 'Ausente', 'Raiz', 'Extraer', 'Periodontitis', 'Ortodoncia', 'Supernumerario'];
-
-window.odontogramaModule = window.odontogramaModule || {
-    init: async function(id) {
-        if (!id) return;
-        try {
-            window.odontogramaState.data = {};
-            const res = await window.api.get(`/odontograma/${id}`);
-            if (!res || !res.perfil) return;
-
-            document.getElementById('paciente_nombre_odo').innerText = `Paciente: ${res.perfil.Nombres} ${res.perfil.Apellidos || ""}`;
-            const edad = parseInt(res.perfil.Edad || 20);
-            window.odontogramaState.tipoPaciente = (edad < 12) ? 'nino' : 'adulto';
-
-            this.renderizar();
-            this.pintar(res.hallazgos);
-        } catch (e) { console.error("Error al iniciar odontograma:", e); }
-    },
-
-    renderizar: function() {
-        const t = window.odontogramaState.tipoPaciente;
-        const config = {
-            'cuadrante-1': t === 'nino' ? [55,54,53,52,51] : [18,17,16,15,14,13,12,11],
-            'cuadrante-2': t === 'nino' ? [61,62,63,64,65] : [21,22,23,24,25,26,27,28],
-            'cuadrante-3': t === 'nino' ? [71,72,73,74,75] : [31,32,33,34,35,36,37,38],
-            'cuadrante-4': t === 'nino' ? [85,84,83,82,81] : [48,47,46,45,44,43,42,41]
-        };
-        for (let c in config) {
-            const div = document.getElementById(c);
-            if (div) div.innerHTML = config[c].map(n => `
-                <div class="diente-unit" id="unit-${n}" onmouseenter="window.mostrarCardDiente('${n}')">
-                    <div class="diente-label">${n}</div>
-                    <div class="zona-raiz" data-cara="Raiz" onclick="window.marcarCara(this)" title="Raíz (R)">R</div>
-                    <div class="diente-capas">
-                        <img src="assets/dientes/${n}.png" class="diente-img" alt="Pieza ${n}" onerror="this.style.display='none'">
-                        <svg viewBox="0 0 100 100" class="diente-svg" data-diente-id="${n}">
-                            <polygon class="cara-odo" data-cara="Superior" points="0,0 100,0 75,25 25,25" onclick="window.marcarCara(this)" />
-                            <polygon class="cara-odo" data-cara="Derecha" points="100,0 100,100 75,75 75,25" onclick="window.marcarCara(this)" />
-                            <polygon class="cara-odo" data-cara="Inferior" points="100,100 0,100 25,75 75,75" onclick="window.marcarCara(this)" />
-                            <polygon class="cara-odo" data-cara="Izquierda" points="0,0 0,100 25,75 25,25" onclick="window.marcarCara(this)" />
-                            <polygon class="cara-odo" data-cara="Centro" points="25,25 75,25 75,75 25,75" onclick="window.marcarCara(this)" />
-                        </svg>
-                    </div>
-                </div>`).join('');
-        }
-    },
-
-   
-
-window.marcarCara = window.marcarCara || function(el) {
-    const tool = window.odontogramaState.currentTool;
-    const unit = el.closest('.diente-unit');
-    const svg = unit.querySelector('.diente-svg');
-    if (!tool || !svg) return;
-
-    const clase = tool.toLowerCase().replace(/ /g, '_');
-    const img = unit.querySelector('.diente-img');
-
-    if (tool === 'Limpiar') {
-        svg.classList.remove('ausente-total', 'ortodoncia-total');
-        unit.classList.remove('periodontitis-total', 'supernumerario-total');
-        svg.querySelectorAll('.cara-odo').forEach(c => c.setAttribute('class', 'cara-odo'));
-        unit.querySelectorAll('.zona-raiz').forEach(z => z.className = 'zona-raiz');
-        if(img) img.style.opacity = '1';
-
-        const numDiente = svg.getAttribute('data-diente-id');
-        const historial = window.odontogramaState.data[numDiente] || [];
-        historial.forEach(h => {
-             if (h.Estado === 'Ausente') {
-                svg.classList.add('ausente-total');
-                if(img) img.style.opacity = '0.15';
-             }
-        });
-
-    } else if (tool === 'Periodontitis') {
-        unit.classList.add('periodontitis-total');
-    } else if (tool === 'Supernumerario') {
-        unit.classList.add('supernumerario-total');
-    } else if (tool === 'Ausente' || tool === 'Ortodoncia') {
-        svg.classList.add(tool.toLowerCase() + '-total');
-        if (tool === 'Ausente' && img) img.style.opacity = '0.15';
-    } else {
-        svg.classList.remove('ausente-total', 'ortodoncia-total');
-        if(img) img.style.opacity = '1';
-
-        const esEvol = !HALLAZGOS_INICIALES.includes(tool);
-        
-        if (el.classList.contains('zona-raiz')) {
-            el.className = `zona-raiz ${clase} ${esEvol ? 'is-sanado' : ''}`;
-        } else {
-            el.setAttribute('class', `cara-odo ${clase} ${esEvol ? 'is-sanado' : ''}`);
-        }
-    }
-};
-
-window.setToolOdo = window.setToolOdo || function(tool, btn) {
-    window.odontogramaState.currentTool = tool;
-    document.querySelectorAll('.btn-tool-odo, .submenu-item').forEach(b => b.classList.remove('active-tool'));
-    if(btn) {
-        btn.classList.add('active-tool');
-        const parentGroup = btn.closest('.tool-group');
-        if (parentGroup) parentGroup.querySelector('.btn-tool-odo').classList.add('active-tool');
-    }
-};
-
-window.mostrarCardDiente = window.mostrarCardDiente || function(id) {
-    const card = document.getElementById('odo-card');
-    const historial = window.odontogramaState.data[id] || [];
-    card.classList.add('show');
-    document.getElementById('odo-title').innerText = `Pieza ${id}`;
-    
-    const tienePat = historial.some(h => HALLAZGOS_INICIALES.includes(h.Estado) && h.Tipo_Registro !== 'Evolucion');
-    const badge = document.getElementById('odo-badge');
-    badge.innerText = tienePat ? "PATOLOGÍA ACTIVA" : "PIEZA SANA";
-    badge.style.background = tienePat ? "var(--medical-red)" : "var(--medical-green)";
-
-    document.getElementById('odo-historial').innerHTML = historial.map(h => `
-        <div style="border-left:4px solid ${h.Tipo_Registro === 'Evolucion' ? 'var(--medical-blue)' : 'var(--medical-red)'}; padding:8px 12px; background:rgba(255,255,255,0.05); border-radius:8px;">
-            <div style="font-weight:bold; font-size:12px; color:#fff">${h.Estado.replace(/_/g, ' ')}</div>
-            <div style="font-size:10px; color:#94a3b8; margin-top:2px">${h.Cara_Diente} | ${h.Fecha ? new Date(h.Fecha).toLocaleDateString() : 'Nuevo Registro'}</div>
-        </div>`).join('') || '<div style="color:#64748b; font-size:12px; padding:10px">Sin antecedentes registrados.</div>';
-};
-
-window.guardarOdontograma = window.guardarOdontograma || function() {
-    const idPac = window.router?.currentPatientId;
-    const sesion = JSON.parse(localStorage.getItem('usuario_sesion') || '{}');
-    const idUser = sesion.ID_Usuario || 1;
-    const hallazgos = [];
-    
-    const estadosPosibles = ['caries', 'resina', 'carilla_resina', 'carilla_porcelana', 'corona', 'protesis_fija', 'protesis_removible', 'endodoncia', 'sellante', 'fractura', 'raiz', 'extraer'];
-
-    document.querySelectorAll('.diente-unit').forEach(unit => {
-        const svg = unit.querySelector('.diente-svg');
-        const num = svg.getAttribute('data-diente-id');
-
-        if (unit.classList.contains('periodontitis-total')) 
-            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Periodontitis', idUser));
-        
-        if (unit.classList.contains('supernumerario-total')) 
-            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Supernumerario', idUser));
-
-        if (svg.classList.contains('ausente-total')) 
-            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Ausente', idUser));
-        else if (svg.classList.contains('ortodoncia-total'))
-            hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Ortodoncia', idUser));
-        else {
-            svg.querySelectorAll('.cara-odo').forEach(cara => {
-                const cls = cara.getAttribute('class') || '';
-                const estFound = estadosPosibles.find(e => cls.includes(e));
-                if (estFound) {
-                    const estNom = estFound.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    const tipoReg = cls.includes('is-sanado') ? 'Evolucion' : 'Inicial';
-                    hallazgos.push({
-                        id_paciente: parseInt(idPac),
-                        numero_diente: parseInt(num),
-                        cara_diente: cara.getAttribute('data-cara'),
-                        estado: estNom,
-                        tipo_registro: tipoReg,
-                        id_usuario: idUser,
-                        observaciones: ""
-                    });
-                }
-            });
-
-            unit.querySelectorAll('.zona-raiz').forEach(z => {
-                const cls = z.className || '';
-                const estFound = estadosPosibles.find(e => cls.includes(e));
-                if (estFound) {
-                    const estNom = estFound.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    const tipoReg = cls.includes('is-sanado') ? 'Evolucion' : 'Inicial';
-                    hallazgos.push({
-                        id_paciente: parseInt(idPac),
-                        numero_diente: parseInt(num),
-                        cara_diente: 'Raiz',
-                        estado: estNom,
-                        tipo_registro: tipoReg,
-                        id_usuario: idUser,
-                        observaciones: ""
-                    });
-                }
-            });
-        }
-    });
-
-    if (!hallazgos.length) return Swal.fire("Atención", "No hay cambios para registrar.", "info");
-
-    window.api.post('/odontograma/guardar', { hallazgos }).then(res => {
-        if (res.status === "Success") {
-            Swal.fire("Éxito", "Odontograma actualizado correctamente", "success");
-            window.odontogramaModule.init(idPac);
-        }
-    }).catch((err) => Swal.fire("Error", "Error al sincronizar datos: " + err.message, "error"));
-};
-
-function crearObjetoHallazgo(idPac, num, cara, estado, idUser) {
-    return {
-        id_paciente: parseInt(idPac),
-        numero_diente: parseInt(num),
-        cara_diente: cara,
-        estado: estado,
-        tipo_registro: HALLAZGOS_INICIALES.includes(estado) ? 'Inicial' : 'Evolucion',
-        id_usuario: idUser,
-        observaciones: ""
-    };
-}
-
-if(window.router?.currentPatientId) {
-    window.odontogramaModule.init(window.router.currentPatientId);
-}
-</script>

@@ -1,22 +1,35 @@
 ﻿const { getConnection, sql } = require('../config/db');
 const { enviarMensaje } = require('../services/whatsappService');
+const { enviarPushAUsuario } = require('../services/pushService');
 
 // Función auxiliar para formatear fechas a español (Ecuador)
+// Acepta un Date ya construido o un string 'YYYY-MM-DD'. Si es string, se
+// parsea por componentes (año, mes, día) en vez de new Date(string), que
+// JS interpreta como medianoche UTC y desplaza un día al formatear en
+// hora local (Ecuador, UTC-5).
 const formatearFechaEcuador = (fecha) => {
-    let fechaLocal;
-    if (fecha instanceof Date) {
-        fechaLocal = fecha;
-    } else {
-        // Parsear manualmente: new Date('2026-06-16') interpreta UTC medianoche → día anterior en Ecuador
-        const [a, m, d] = String(fecha).split('T')[0].split('-');
-        fechaLocal = new Date(parseInt(a), parseInt(m) - 1, parseInt(d));
+    let fechaLocal = fecha;
+    if (typeof fecha === 'string') {
+        const [anio, mes, dia] = fecha.split('-');
+        fechaLocal = new Date(anio, mes - 1, dia);
     }
     return fechaLocal.toLocaleDateString('es-EC', {
-        timeZone: 'America/Guayaquil',
         weekday: 'long',
         day: 'numeric',
         month: 'long'
     }).toUpperCase();
+};
+
+// La MISMA trampa de arriba (string 'YYYY-MM-DD' -> new Date() = medianoche UTC) afecta
+// también a los parámetros sql.Date que se mandan al driver: con useUTC:false (config/db.js),
+// tedious serializa Date usando getFullYear/getMonth/getDate LOCALES — así que ese Date en
+// medianoche UTC se lee como el día ANTERIOR en Ecuador (UTC-5) y la fecha queda guardada
+// corrida un día. Construir el Date por componentes locales (igual que formatearFechaEcuador)
+// hace que esos mismos getters locales devuelvan el día correcto.
+const fechaComoLocal = (fecha) => {
+    if (fecha instanceof Date) return fecha;
+    const [anio, mes, dia] = String(fecha).split('-').map(Number);
+    return new Date(anio, mes - 1, dia);
 };
 
 const citasController = {
@@ -51,8 +64,8 @@ const citasController = {
 
             if (desde && hasta) {
                 query += ` AND c.Fecha_Cita BETWEEN @desde AND @hasta `;
-                request.input('desde', sql.Date, desde);
-                request.input('hasta', sql.Date, hasta);
+                request.input('desde', sql.Date, fechaComoLocal(desde));
+                request.input('hasta', sql.Date, fechaComoLocal(hasta));
             }
 
             query += ` ORDER BY c.Fecha_Cita DESC, c.Hora_Inicio ASC`;
@@ -84,7 +97,7 @@ const citasController = {
             const choque = await pool.request()
                 .input('id_d',  sql.Int,     parseInt(id_doctor))
                 .input('id_c',  sql.Int,     parseInt(id_clinica))
-                .input('fecha', sql.Date,    fecha)
+                .input('fecha', sql.Date,    fechaComoLocal(fecha))
                 .input('h_in',  sql.VarChar, h_inicio_safe)
                 .input('h_fi',  sql.VarChar, h_fin_safe || '23:59:59')
                 .query(`
@@ -122,7 +135,7 @@ const citasController = {
                 .input('id_p',  sql.Int,      parseInt(id_paciente))
                 .input('id_d',  sql.Int,      parseInt(id_doctor))
                 .input('id_c',  sql.Int,      parseInt(id_clinica))
-                .input('fecha', sql.Date,     fecha)
+                .input('fecha', sql.Date,     fechaComoLocal(fecha))
                 .input('h_in',  sql.VarChar,  h_inicio_safe)
                 .input('h_fi',  sql.VarChar,  h_fin_safe)
                 .input('asunto',sql.NVarChar, asunto || 'Consulta General')
@@ -158,8 +171,124 @@ const citasController = {
                 } catch (wsErr) { console.error("⚠️ Error WA Manual:", wsErr); }
             });
 
+            // Push inmediato al doctor asignado ("le llegó una cita nueva") — aparte del
+            // recordatorio de 30 min antes que ya manda agendaNotificationService.js.
+            setImmediate(async () => {
+                try {
+                    const infoPac = await pool.request()
+                        .input('idP', sql.Int, id_paciente)
+                        .query(`SELECT ISNULL(Nombres,'') + ' ' + ISNULL(Apellidos,'') AS Paciente FROM Pacientes WHERE ID_Paciente = @idP`);
+                    const paciente = infoPac.recordset[0]?.Paciente?.trim() || 'un paciente';
+                    const fechaLegible = formatearFechaEcuador(fecha);
+                    await enviarPushAUsuario(parseInt(id_doctor), {
+                        title: '🆕 Nueva cita agendada',
+                        body: `${paciente} — ${fechaLegible} a las ${h_inicio_safe.substring(0, 5)}`,
+                        data: { tipo: 'cita', id_cita: newId }
+                    });
+                } catch (pushErr) { console.error("⚠️ Error Push Nueva Cita:", pushErr); }
+            });
+
             res.json({ status: "Success", id_cita: newId });
         } catch (err) {
+            res.status(500).json({ status: "Error", message: err.message });
+        }
+    },
+
+    // 2B. REAGENDAR CITA (cambia fecha/hora/doctor/asunto de una cita existente)
+    // Misma validación de choque que crearCita, pero excluyendo la propia cita.
+    reagendarCita: async (req, res) => {
+        try {
+            const id_cita = parseInt(req.params.id_cita);
+            const { id_doctor, fecha, hora_inicio, hora_fin, asunto } = req.body;
+
+            const h_inicio_safe = hora_inicio.length === 5 ? `${hora_inicio}:00` : hora_inicio;
+            const h_fin_safe = (hora_fin && hora_fin.length === 5) ? `${hora_fin}:00` : (hora_fin || null);
+
+            const pool = await getConnection();
+
+            const choque = await pool.request()
+                .input('id_actual', sql.Int,     id_cita)
+                .input('id_d',      sql.Int,     parseInt(id_doctor))
+                .input('fecha',     sql.Date,    fechaComoLocal(fecha))
+                .input('h_in',      sql.VarChar, h_inicio_safe)
+                .input('h_fi',      sql.VarChar, h_fin_safe || '23:59:59')
+                .query(`
+                    SELECT TOP 1
+                        c.ID_Cita,
+                        LEFT(CAST(c.Hora_Inicio AS VARCHAR), 5) AS Hora_Inicio,
+                        LEFT(CAST(c.Hora_Fin   AS VARCHAR), 5) AS Hora_Fin,
+                        ISNULL(p.Nombres,'') + ' ' + ISNULL(p.Apellidos,'') AS Paciente_Nombre
+                    FROM Citas c
+                    INNER JOIN Pacientes p ON c.ID_Paciente = p.ID_Paciente
+                    WHERE c.ID_Doctor  = @id_d
+                      AND c.Fecha_Cita = @fecha
+                      AND c.Estado    != 'Cancelada'
+                      AND c.ID_Cita   != @id_actual
+                      AND c.Hora_Inicio < @h_fi
+                      AND c.Hora_Fin    > @h_in
+                `);
+
+            if (choque.recordset.length > 0) {
+                const cx = choque.recordset[0];
+                return res.status(409).json({
+                    status: "Choque",
+                    message: `El doctor ya tiene una cita de ${cx.Hora_Inicio} a ${cx.Hora_Fin} con ${cx.Paciente_Nombre}.`
+                });
+            }
+
+            await pool.request()
+                .input('id',     sql.Int,      id_cita)
+                .input('id_d',   sql.Int,      parseInt(id_doctor))
+                .input('fecha',  sql.Date,     fechaComoLocal(fecha))
+                .input('h_in',   sql.VarChar,  h_inicio_safe)
+                .input('h_fi',   sql.VarChar,  h_fin_safe)
+                .input('asunto', sql.NVarChar, asunto || 'Consulta General')
+                .query(`
+                    UPDATE Citas
+                    SET ID_Doctor = @id_d, Fecha_Cita = @fecha, Hora_Inicio = @h_in, Hora_Fin = @h_fi, Asunto = @asunto
+                    WHERE ID_Cita = @id
+                `);
+
+            // Notificación WhatsApp de reagendamiento
+            setImmediate(async () => {
+                try {
+                    const infoQuery = await pool.request().input('id', sql.Int, id_cita).query(`
+                        SELECT p.Nombres as Paciente, p.Telefono, cl.Nombre_Clinica
+                        FROM Citas c
+                        INNER JOIN Pacientes p ON c.ID_Paciente = p.ID_Paciente
+                        INNER JOIN Clinicas cl ON c.ID_Clinica = cl.ID_Clinica
+                        WHERE c.ID_Cita = @id
+                    `);
+                    const d = infoQuery.recordset[0];
+                    if (d && d.Telefono) {
+                        const fechaLegible = formatearFechaEcuador(fecha);
+                        const mensaje = `🔄 *CITA REAGENDADA*\n\nHola *${d.Paciente}*, tu cita en *${d.Nombre_Clinica}* fue reprogramada:\n\n📅 *${fechaLegible}*\n🕒 *${h_inicio_safe.substring(0, 5)}*\n\n🔔 Por favor, intenta llegar *10 minutos antes*. ¡Te esperamos!`;
+                        await enviarMensaje(d.Telefono, mensaje, true);
+                    }
+                } catch (wsErr) { console.error("⚠️ Error WA Reagendar:", wsErr); }
+            });
+
+            // Push inmediato al doctor (puede ser uno nuevo si se reasignó la cita).
+            setImmediate(async () => {
+                try {
+                    const infoPac = await pool.request().input('id', sql.Int, id_cita).query(`
+                        SELECT ISNULL(p.Nombres,'') + ' ' + ISNULL(p.Apellidos,'') AS Paciente
+                        FROM Citas c INNER JOIN Pacientes p ON c.ID_Paciente = p.ID_Paciente
+                        WHERE c.ID_Cita = @id
+                    `);
+                    const paciente = infoPac.recordset[0]?.Paciente?.trim() || 'un paciente';
+                    const fechaLegible = formatearFechaEcuador(fecha);
+                    await enviarPushAUsuario(parseInt(id_doctor), {
+                        title: '🔄 Cita reagendada',
+                        body: `${paciente} — ${fechaLegible} a las ${h_inicio_safe.substring(0, 5)}`,
+                        data: { tipo: 'cita', id_cita }
+                    });
+                } catch (pushErr) { console.error("⚠️ Error Push Reagendar:", pushErr); }
+            });
+
+            res.json({ status: "Success" });
+        } catch (err) {
+            console.error("❌ Error en reagendarCita:", err);
             res.status(500).json({ status: "Error", message: err.message });
         }
     },
@@ -168,10 +297,12 @@ const citasController = {
     // Soporta los estados nuevos del tablero: 'Llegó', 'En sillón'
     // Al pasar a 'Llegó' guarda la hora exacta en Hora_Llegada
     // WhatsApp solo se dispara al confirmar — idéntico al original
+    // `notas` es opcional (usado por la app móvil al "atender" una cita en campo) — si no
+    // se manda, Notas_Cita queda intacta, así que las llamadas viejas del escritorio no cambian.
     actualizarEstado: async (req, res) => {
         try {
             const id_cita = parseInt(req.params.id_cita);
-            const { estado } = req.body;
+            const { estado, notas } = req.body;
             const pool = await getConnection();
 
             if (estado === 'Llegó') {
@@ -180,6 +311,12 @@ const citasController = {
                     .input('id',     sql.Int,      id_cita)
                     .input('estado', sql.NVarChar, estado)
                     .query(`UPDATE Citas SET Estado = @estado, Hora_Llegada = GETDATE() WHERE ID_Cita = @id`);
+            } else if (notas !== undefined && notas !== null) {
+                await pool.request()
+                    .input('id',     sql.Int,      id_cita)
+                    .input('estado', sql.NVarChar, estado)
+                    .input('notas',  sql.NVarChar, notas)
+                    .query(`UPDATE Citas SET Estado = @estado, Notas_Cita = @notas WHERE ID_Cita = @id`);
             } else {
                 await pool.request()
                     .input('id',     sql.Int,      id_cita)
@@ -225,6 +362,22 @@ const citasController = {
         try {
             const id_cita = parseInt(req.params.id_cita);
             const pool = await getConnection();
+
+            // Una cita "Atendida" ya generó historial real (KPIs, CRM, y puede tener
+            // tratamientos/pagos vinculados) — borrarla desordena esos módulos sin dejar
+            // rastro de que la atención existió. No hay forma de deshacer esto, así que se
+            // bloquea acá en vez de confiar en que cada cliente (escritorio/móvil) lo valide.
+            const cita = await pool.request().input('id', sql.Int, id_cita).query(`SELECT Estado FROM Citas WHERE ID_Cita = @id`);
+            if (cita.recordset.length === 0) {
+                return res.status(404).json({ status: "Error", message: "La cita no existe." });
+            }
+            if (cita.recordset[0].Estado === 'Atendida') {
+                return res.status(403).json({
+                    status: "Error",
+                    message: "No se puede eliminar: la cita ya fue atendida y forma parte del historial (KPIs/CRM). Si fue un error, márcala como Cancelada en vez de borrarla."
+                });
+            }
+
             await pool.request().input('id', sql.Int, id_cita).query(`DELETE FROM Recordatorios_Citas WHERE ID_Cita = @id`);
             await pool.request().input('id', sql.Int, id_cita).query(`DELETE FROM Citas WHERE ID_Cita = @id`);
             res.json({ status: "Success" });
@@ -261,7 +414,7 @@ const citasController = {
             await pool.request()
                 .input('id_p', sql.Int,     id_p)
                 .input('id_c', sql.Int,     id_clinica)
-                .input('f',    sql.Date,    fecha)
+                .input('f',    sql.Date,    fechaComoLocal(fecha))
                 .input('h',    sql.VarChar, hora.length === 5 ? `${hora}:00` : hora)
                 .query(`INSERT INTO Citas (ID_Paciente, ID_Clinica, ID_Doctor, Fecha_Cita, Hora_Inicio, Estado, Asunto, Fecha_Registro) VALUES (@id_p, @id_c, 1, @f, @h, 'Pendiente', 'Solicitud WhatsApp', GETDATE())`);
 
@@ -288,6 +441,8 @@ const citasController = {
                 .query(`
                     SELECT
                         c.ID_Cita,
+                        c.ID_Paciente,
+                        FORMAT(c.Fecha_Cita, 'yyyy-MM-dd') AS Fecha_Cita,
                         LEFT(CAST(c.Hora_Inicio AS VARCHAR), 5) AS Hora_Inicio,
                         LEFT(CAST(c.Hora_Fin   AS VARCHAR), 5) AS Hora_Fin,
                         ISNULL(p.Nombres,'') + ' ' + ISNULL(p.Apellidos,'') AS Paciente_Nombre,

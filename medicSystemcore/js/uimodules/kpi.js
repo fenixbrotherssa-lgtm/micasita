@@ -85,6 +85,11 @@ window.kpiModule = {
                 this.llenarSelectorClinicas(data.clinicas, id_clinica);
             }
 
+            // Guardamos todo (datos + filtros usados) para poder armar el reporte imprimible
+            // sin tener que volver a pedirle nada al backend.
+            this.datosUltimoReporte = data;
+            this.filtrosUltimoReporte = { id_clinica, fIn, fFin };
+
             this.actualizarUI(data);
             this.renderTendencia(data.tendencia || {});
             this.renderMetodos(data.metodos_pago || []);
@@ -301,5 +306,157 @@ window.kpiModule = {
                 <span style="font-size:13px; font-weight:800; color:#dc2626; flex-shrink:0; margin-left:8px;">${this.fmt(d.Saldo)}</span>
             </div>
         `).join('');
+    },
+
+    // --- REPORTE ULTRADETALLADO IMPRIMIBLE ---
+    // Mismo patrón que gastos.js/caja.js: ventana nueva con vista previa real (diseño de marca),
+    // el usuario decide si lo imprime/guarda como PDF con el botón de arriba (Ctrl+P también sirve).
+    imprimirReporteDetallado: async function() {
+        if (!this.datosUltimoReporte) return Swal.fire('Atención', 'Todavía no hay datos cargados para imprimir.', 'info');
+
+        const data = this.datosUltimoReporte;
+        const fin = data.financiero || {};
+        const ope = data.operativo || {};
+        const { id_clinica, fIn, fFin } = this.filtrosUltimoReporte;
+
+        let clinica = { Nombre_Clinica: 'Todas las Sedes', Logo_Ruta: null };
+        try {
+            if (id_clinica) clinica = await window.api.get(`/clinicas/leer/${id_clinica}`) || clinica;
+        } catch (e) { /* si falla, seguimos con el nombre genérico */ }
+
+        const serverBase = window.api.baseURL.replace('/api', '').replace(/\/$/, '');
+        const logoUrl = clinica.Logo_Ruta ? `${serverBase}/uploads/logos/${clinica.Logo_Ruta}` : '';
+        const f = this.fmt;
+
+        const ventana = window.open('', '_blank');
+        ventana.document.write(`
+            <html>
+            <head>
+                <title>Reporte BI - ${clinica.Nombre_Clinica}</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+                    body { font-family: 'Inter', sans-serif; padding: 30px; color: #1e293b; line-height: 1.4; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1e293b; padding-bottom: 15px; margin-bottom: 20px; }
+                    .header img { max-height: 70px; max-width: 200px; object-fit: contain; }
+                    .header-info { text-align: right; }
+                    .header-info h2 { margin: 0; font-size: 1.4rem; font-weight: 800; }
+                    .header-info p { margin: 2px 0; font-size: 0.85rem; color: #64748b; font-weight: 700; }
+
+                    .resumen-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+                    .card { padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; text-align: center; }
+                    .card span { display: block; font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase; }
+                    .card strong { font-size: 1rem; color: #0f172a; }
+                    .card-dark { background: #1e293b !important; } .card-dark * { color: white !important; }
+
+                    h3 { font-size: 12px; text-transform: uppercase; border-left: 4px solid #1e293b; padding-left: 10px; margin: 25px 0 10px 0; color: #1e293b; font-weight: 800; }
+                    table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 15px; }
+                    th { background: #f1f5f9; text-align: left; padding: 8px; border-bottom: 2px solid #e2e8f0; color: #475569; font-weight: 800; }
+                    td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+                    .monto { font-weight: 700; text-align: right; }
+                    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+                    .no-print { text-align: center; margin-bottom: 20px; }
+                    .no-print button { padding: 10px 22px; background: #4f46e5; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+                    @media print { body { padding: 0; } .no-print { display: none; } }
+                </style>
+            </head>
+            <body>
+                <div class="no-print"><button onclick="window.print()"><i class="fas fa-print"></i> Imprimir / Guardar como PDF</button></div>
+
+                <div class="header">
+                    ${logoUrl ? `<img src="${logoUrl}" onerror="this.style.display='none'">` : '<div></div>'}
+                    <div class="header-info">
+                        <h2>REPORTE ULTRADETALLADO - BUSINESS INTELLIGENCE</h2>
+                        <p>${(clinica.Nombre_Clinica || '').toUpperCase()}</p>
+                        <p>PERIODO: ${fIn} al ${fFin}</p>
+                    </div>
+                </div>
+
+                <div class="resumen-grid">
+                    <div class="card"><span>Ingresos</span><strong>${f(fin.ingresos)}</strong></div>
+                    <div class="card"><span>Gastos</span><strong>${f(fin.gastos)}</strong></div>
+                    <div class="card card-dark"><span>Balance</span><strong>${f(fin.balance)}</strong></div>
+                    <div class="card"><span>Ticket Promedio</span><strong>${f(fin.ticket_promedio)}</strong></div>
+                    <div class="card"><span>Cartera Pendiente</span><strong>${f(fin.cartera_pendiente)}</strong></div>
+                </div>
+
+                <div class="resumen-grid">
+                    <div class="card"><span>Citas Totales</span><strong>${ope.citas_totales || 0}</strong></div>
+                    <div class="card"><span>Citas Atendidas</span><strong>${ope.citas_atendidas || 0}</strong></div>
+                    <div class="card"><span>Efectividad</span><strong>${ope.efectividad_citas || 0}%</strong></div>
+                    <div class="card"><span>Tasa Cancelación</span><strong>${ope.tasa_cancelacion || 0}%</strong></div>
+                    <div class="card"><span>Pacientes Nuevos</span><strong>${ope.pacientes_nuevos || 0}</strong></div>
+                </div>
+
+                <h3>1. Ranking de Doctores</h3>
+                <table>
+                    <thead><tr><th>Doctor</th><th style="text-align:right">Pacientes Únicos</th><th style="text-align:right">Citas Atendidas/Totales</th><th style="text-align:right">Ingresos Generados</th></tr></thead>
+                    <tbody>
+                        ${(data.doctores || []).length
+                            ? data.doctores.map(d => `<tr><td>Dr(a). ${d.Doctor || 'N/A'}</td><td class="monto">${d.Pacientes_Unicos || 0}</td><td class="monto">${d.Citas_Atendidas || 0} / ${d.Citas_Totales || 0}</td><td class="monto">${f(d.Ingresos_Generados)}</td></tr>`).join('')
+                            : '<tr><td colspan="4">Sin actividad de doctores en este rango.</td></tr>'}
+                    </tbody>
+                </table>
+
+                <div class="grid-2">
+                    <div>
+                        <h3>2. Top Servicios Rentables</h3>
+                        <table>
+                            <thead><tr><th>Servicio</th><th style="text-align:right">Veces</th><th style="text-align:right">Generado</th></tr></thead>
+                            <tbody>
+                                ${(data.top_servicios || []).length
+                                    ? data.top_servicios.map(s => `<tr><td>${s.Nombre_Tratamiento}</td><td class="monto">${s.Veces}</td><td class="monto">${f(s.Total_Generado)}</td></tr>`).join('')
+                                    : '<tr><td colspan="3">Sin datos.</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h3>3. Métodos de Pago</h3>
+                        <table>
+                            <thead><tr><th>Método</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Total</th></tr></thead>
+                            <tbody>
+                                ${(data.metodos_pago || []).length
+                                    ? data.metodos_pago.map(m => `<tr><td>${m.Metodo}</td><td class="monto">${m.Cantidad}</td><td class="monto">${f(m.Total)}</td></tr>`).join('')
+                                    : '<tr><td colspan="3">Sin datos.</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <h3>4. Top Deudores</h3>
+                <table>
+                    <thead><tr><th>Paciente</th><th style="text-align:right">Saldo</th></tr></thead>
+                    <tbody>
+                        ${(data.top_deudores || []).length
+                            ? data.top_deudores.map(d => `<tr><td>${d.Paciente}</td><td class="monto">${f(d.Saldo)}</td></tr>`).join('')
+                            : '<tr><td colspan="2">Sin cartera pendiente.</td></tr>'}
+                    </tbody>
+                </table>
+
+                <h3>5. Tendencia Diaria (Ingresos vs Gastos)</h3>
+                <table>
+                    <thead><tr><th>Día</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Gastos</th></tr></thead>
+                    <tbody>
+                        ${(() => {
+                            const ing = (data.tendencia && data.tendencia.ingresos_por_dia) || [];
+                            const gas = (data.tendencia && data.tendencia.gastos_por_dia) || [];
+                            const dias = [...new Set([...ing.map(i => i.Dia), ...gas.map(g => g.Dia)])].sort();
+                            if (!dias.length) return '<tr><td colspan="3">Sin movimientos en el período.</td></tr>';
+                            return dias.map(dia => {
+                                const i = ing.find(x => x.Dia === dia);
+                                const g = gas.find(x => x.Dia === dia);
+                                return `<tr><td>${new Date(dia).toLocaleDateString()}</td><td class="monto">${f(i ? i.Total : 0)}</td><td class="monto">${f(g ? g.Total : 0)}</td></tr>`;
+                            }).join('');
+                        })()}
+                    </tbody>
+                </table>
+
+                <div style="margin-top:30px; text-align:center; font-size:8px; color:#94a3b8;">
+                    Generado por Ametra OS - ${new Date().toLocaleString()}
+                </div>
+            </body>
+            </html>
+        `);
+        ventana.document.close();
     }
 };

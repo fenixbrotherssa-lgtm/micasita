@@ -34,7 +34,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ 
     storage: storage,
     fileFilter: fileFilter,
-    limits: { fileSize: 2 * 1024 * 1024 } // Límite de 2MB para el logo
+    limits: { fileSize: 10 * 1024 * 1024 } // Límite de 10MB para el logo
 });
 
 // --- RUTAS ---
@@ -51,5 +51,15 @@ router.get('/leer/:id', clinicaController.obtenerClinica);
  * El campo en el frontend debe llamarse 'logo_file'.
  */
 router.post('/guardar', upload.single('logo_file'), clinicaController.guardarClinica);
+
+// --- ESPECIALIDADES (catálogo global + asignación por sede) ---
+router.get('/especialidades/catalogo', clinicaController.listarEspecialidadesCatalogo);
+router.post('/especialidades/catalogo', clinicaController.crearEspecialidadCatalogo);
+router.get('/:id/especialidades', clinicaController.obtenerEspecialidadesClinica);
+router.put('/:id/especialidades', clinicaController.guardarEspecialidadesClinica);
+
+// --- HORARIOS DE ATENCIÓN POR SEDE ---
+router.get('/:id/horarios', clinicaController.obtenerHorariosClinica);
+router.put('/:id/horarios', clinicaController.guardarHorariosClinica);
 
 module.exports = router;

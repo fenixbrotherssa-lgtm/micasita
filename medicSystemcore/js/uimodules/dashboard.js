@@ -71,6 +71,15 @@ window.dashboardModule = {
                 if (elCit) elCit.innerText = res.operativo.citas_totales || 0;
                 
                 console.log(`✅ Dashboard filtrado para hoy: ${hoy}`);
+            } else if (res.status === "Error") {
+                // El dashboard carga solo al entrar — un popup por cada fallo sería
+                // molesto, así que se marca el estado directo en los contadores en vez de
+                // un Swal.fire, pero ya no se queda callado sin ninguna pista.
+                console.error("❌ Error del backend en dashboard-super-kpi:", res.message);
+                const elPac = document.getElementById('count-pacientes');
+                const elCit = document.getElementById('count-pendientes');
+                if (elPac) elPac.innerText = '—';
+                if (elCit) elCit.innerText = '—';
             }
         } catch (error) {
             console.error("❌ Error cargando estadísticas de hoy:", error);

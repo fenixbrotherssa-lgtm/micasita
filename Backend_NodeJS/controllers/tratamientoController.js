@@ -16,7 +16,15 @@ const mapaEstadosOdo = {
     'corona': 'Corona',
     'perno': 'Corona',
     'sellante': 'Sellante',
-    'carilla': 'Carilla Resina'
+    'carilla': 'Carilla Resina',
+    // Antes faltaban por completo — un tratamiento de prótesis/puente/implante en una pieza
+    // marcada "Ausente" nunca actualizaba el odontograma porque obtenerEstadoVisual() devolvía
+    // null para estos nombres reales del catálogo (PROTESIS ACRILICA, PROTESIS FLEX, Puente,
+    // IMPLANTES). Estos 3 estados ya existen en ESTADOS_REHABILITACION del frontend.
+    'protesis': 'Protesis',
+    'protésica': 'Protesis',
+    'puente': 'Puente',
+    'implante': 'Implante'
 };
 
 const obtenerEstadoVisual = (nombre) => {
@@ -27,6 +35,23 @@ const obtenerEstadoVisual = (nombre) => {
     }
     return null;
 };
+
+// El formulario manual de Tratamiento (checkboxes V/M/D/P/L/O, tanto en medicSystemcore como
+// en la app móvil) guarda la letra corta tal cual en Odontograma.Cara_Diente. Pero el visor
+// visual del Odontograma (medicSystemcore/js/uimodules/odontograma.js) busca las caras del SVG
+// por nombre completo (data-cara="Superior|Derecha|Inferior|Izquierda|Centro"), no por letra —
+// así que una cara guardada como "O" nunca calzaba con ningún <polygon> y quedaba sin pintar,
+// aunque el registro en la base de datos era correcto. Se normaliza acá, en el único lugar que
+// escribe en Odontograma para ambos clientes, en vez de duplicar esta tabla en cada frontend.
+const MAPA_CARA_A_NOMBRE_VISUAL = {
+    'V': 'Superior', 'Vestibular': 'Superior', 'Superior': 'Superior',
+    'P': 'Inferior', 'Palatino': 'Inferior', 'L': 'Inferior', 'Lingual': 'Inferior', 'Inferior': 'Inferior',
+    'D': 'Derecha', 'Distal': 'Derecha', 'Derecha': 'Derecha',
+    'M': 'Izquierda', 'Mesial': 'Izquierda', 'Izquierda': 'Izquierda',
+    'O': 'Centro', 'Oclusal': 'Centro', 'Centro': 'Centro',
+    'Raiz': 'Raiz'
+};
+const normalizarCaraVisual = (cara) => MAPA_CARA_A_NOMBRE_VISUAL[cara] || cara;
 
 /**
  * DETECCIÓN INTELIGENTE DE ESPECIALIDAD ODONTOLÓGICA
@@ -145,15 +170,19 @@ const guardarNuevaPrestacion = async (req, res) => {
 
 // 3. ASIGNAR TRATAMIENTOS EN LOTE + GUARDAR MSP-024
 const asignarTratamientosLote = async (req, res) => {
-    const { 
-        tratamientos, 
-        firma_paciente, 
-        consentimiento_aceptado, 
+    const {
+        tratamientos,
+        firma_paciente,
+        consentimiento_aceptado,
         consentimiento_revocatoria,
         especialidad,      // ← nuevo: especialidad (autodetectada/editable desde el front)
         observaciones,     // ← nuevo: observaciones libres del profesional
         representante,     // ← nuevo: { nombre, cedula, parentesco } (menor/no apto)
-        requiere_representante // ← nuevo: 1 si firma el representante legal
+        requiere_representante, // ← nuevo: 1 si firma el representante legal
+        id_presupuesto_origen // ← si esto viene de "Aprobar Presupuesto", se marca el presupuesto
+                               //   APROBADO en la MISMA transacción del plan (consentimiento,
+                               //   firma y médico incluidos) — antes "aprobar" insertaba el plan
+                               //   directo sin pasar por nada de esto, dejando un plan huérfano.
     } = req.body;
 
     if (!tratamientos || !Array.isArray(tratamientos) || tratamientos.length === 0) {
@@ -161,6 +190,40 @@ const asignarTratamientosLote = async (req, res) => {
     }
 
     const pool = await getConnection();
+
+    // ── DEDUPLICACIÓN: reintento de sincronización offline ──────────────────────────
+    // La app móvil guarda este mismo payload en una cola local (IndexedDB) cuando no hay
+    // señal, y lo reintenta hasta borrarlo de la cola tras una respuesta exitosa. Si el
+    // celular se queda sin batería/se cierra justo entre "el servidor ya insertó todo" y
+    // "se borró de la cola local", el siguiente reintento manda EXACTAMENTE el mismo
+    // payload de nuevo — sin esto, eso duplicaba el tratamiento (y el cobro) completo.
+    // `firma_paciente` (el PNG en base64 del trazo real) funciona como llave natural: dos
+    // firmas distintas de la misma persona nunca coinciden pixel a pixel, así que una
+    // coincidencia exacta para el mismo paciente en la última hora es, en la práctica,
+    // siempre el mismo envío repetido, no una coincidencia real.
+    if (firma_paciente && tratamientos[0]?.id_paciente) {
+        const dup = await pool.request()
+            .input('id_pac', sql.Int, tratamientos[0].id_paciente)
+            .input('firma',  sql.NVarChar(sql.MAX), firma_paciente)
+            .query(`
+                SELECT TOP 1 ID_Consentimiento, ID_Plan
+                FROM MSP_024_Consentimiento_Informado
+                WHERE ID_Paciente = @id_pac AND Firma_Paciente = @firma
+                  AND Fecha_Firma > DATEADD(HOUR, -1, GETDATE())
+                ORDER BY ID_Consentimiento DESC
+            `);
+        if (dup.recordset.length > 0) {
+            console.warn(`⚠️ Envío duplicado detectado (reintento de sync offline) para paciente ${tratamientos[0].id_paciente} — se ignora, ya existe Consentimiento #${dup.recordset[0].ID_Consentimiento}`);
+            return res.json({
+                status: "Success",
+                message: "Este plan ya había sido registrado (envío duplicado detectado y omitido).",
+                id_consentimiento: dup.recordset[0].ID_Consentimiento,
+                ids_plan: [dup.recordset[0].ID_Plan],
+                duplicado_omitido: true
+            });
+        }
+    }
+
     const transaction = new sql.Transaction(pool);
 
     try {
@@ -208,21 +271,48 @@ const asignarTratamientosLote = async (req, res) => {
             idsInsertados.push(nuevoIDPlan);
 
             // ── B. ESPEJAR EN ODONTOGRAMA (SI ES VISUAL) ────────────────
+            // Hay doctores que jamás abren el Odontograma y planifican directo acá — el sistema
+            // tiene que blindarlos igual, así que este espejo es la ÚNICA fuente de verdad que
+            // mantiene el Odontograma sincronizado para ellos. Por eso hay que cubrir bien los
+            // dos orígenes posibles de la cara:
+            //  - `t.cara` (singular): viene de "Sugerencias por Pieza" del propio Odontograma,
+            //    ya es una única letra real (V/P/I/D/M) tomada de un hallazgo existente.
+            //  - `t.caras` (plural, coma-separado): viene del formulario manual de Tratamiento
+            //    (checkboxes V/M/D/P/L/O) — ANTES se guardaba el string completo ("V,M") como
+            //    si fuera una sola cara, lo cual no calza con ninguna cara real del odontograma
+            //    y quedaba como un registro fantasma invisible. Ahora se inserta/actualiza UNA
+            //    fila por cada cara marcada.
             const estadoVisual = obtenerEstadoVisual(nombreReal);
             if (estadoVisual && t.numero_diente) {
-                await transaction.request()
-                    .input('pac_odo',    sql.Int, t.id_paciente)
-                    .input('die_odo',    sql.Int, t.numero_diente)
-                    .input('cara_odo',   sql.NVarChar(20), t.caras || 'Centro')
-                    .input('est_odo',    sql.NVarChar(50), estadoVisual)
-                    .input('user_odo',   sql.Int, t.id_usuario_medico || 1)
-                    .input('id_plan_odo',sql.Int, nuevoIDPlan)
-                    .query(`
-                        INSERT INTO Odontograma 
-                        (ID_Paciente, Numero_Diente, Cara_Diente, Estado, Tipo_Registro, ID_Doctor, Fecha, ID_Plan_Tratamiento)
-                        VALUES 
-                        (@pac_odo, @die_odo, @cara_odo, @est_odo, 'Evolucion', @user_odo, GETDATE(), @id_plan_odo)
-                    `);
+                const carasAEspejar = (t.cara
+                    ? [t.cara]
+                    : (t.caras ? t.caras.split(',').map(c => c.trim()).filter(Boolean) : ['Centro'])
+                ).map(normalizarCaraVisual);
+
+                for (const caraInd of (carasAEspejar.length ? carasAEspejar : ['Centro'])) {
+                    await transaction.request()
+                        .input('pac_odo',    sql.Int, t.id_paciente)
+                        .input('die_odo',    sql.Int, t.numero_diente)
+                        .input('cara_odo',   sql.NVarChar(20), caraInd)
+                        .input('est_odo',    sql.NVarChar(50), estadoVisual)
+                        .input('user_odo',   sql.Int, t.id_usuario_medico || 1)
+                        .input('id_plan_odo',sql.Int, nuevoIDPlan)
+                        .query(`
+                            IF EXISTS (SELECT 1 FROM Odontograma WHERE ID_Paciente = @pac_odo AND Numero_Diente = @die_odo AND Cara_Diente = @cara_odo AND Tipo_Registro = 'Evolucion')
+                            BEGIN
+                                UPDATE Odontograma SET
+                                    Estado = @est_odo, ID_Doctor = @user_odo, Fecha = GETDATE(), ID_Plan_Tratamiento = @id_plan_odo
+                                WHERE ID_Paciente = @pac_odo AND Numero_Diente = @die_odo AND Cara_Diente = @cara_odo AND Tipo_Registro = 'Evolucion'
+                            END
+                            ELSE
+                            BEGIN
+                                INSERT INTO Odontograma
+                                (ID_Paciente, Numero_Diente, Cara_Diente, Estado, Tipo_Registro, ID_Doctor, Fecha, ID_Plan_Tratamiento)
+                                VALUES
+                                (@pac_odo, @die_odo, @cara_odo, @est_odo, 'Evolucion', @user_odo, GETDATE(), @id_plan_odo)
+                            END
+                        `);
+                }
             }
         }
 
@@ -325,6 +415,16 @@ const asignarTratamientosLote = async (req, res) => {
             `);
 
         const idConsentimiento = mspResult.recordset[0].ID_Consentimiento;
+
+        // Si esto vino de "Aprobar Presupuesto", recién ahora — con el plan, consentimiento,
+        // firma y espejo del odontograma ya confirmados en la misma transacción — se marca el
+        // presupuesto como APROBADO. Si algo de lo anterior falla, el rollback también deshace
+        // esto, así que nunca queda un presupuesto "aprobado" sin su plan real detrás.
+        if (id_presupuesto_origen) {
+            await transaction.request()
+                .input('idp', sql.Int, id_presupuesto_origen)
+                .query("UPDATE Presupuestos SET Estado = 'APROBADO' WHERE ID_Presupuesto = @idp AND Estado = 'PENDIENTE'");
+        }
 
         await transaction.commit();
 
@@ -436,9 +536,26 @@ const eliminarTratamiento = async (req, res) => {
             });
         }
 
-        await pool.request()
-            .input('id', sql.Int, idPlan)
-            .query("DELETE FROM Tratamientos_Plan WHERE ID_Plan = @id");
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        try {
+            // El Odontograma debe reflejar lo REAL: si se borra el plan que "resolvía" una
+            // patología (el espejo con ID_Plan_Tratamiento = este plan), esa fila Evolucion
+            // también se borra — la pieza vuelve a mostrar su hallazgo Inicial pendiente en
+            // vez de seguir mostrando un tratamiento que ya no existe.
+            await transaction.request()
+                .input('id', sql.Int, idPlan)
+                .query("DELETE FROM Odontograma WHERE ID_Plan_Tratamiento = @id");
+
+            await transaction.request()
+                .input('id', sql.Int, idPlan)
+                .query("DELETE FROM Tratamientos_Plan WHERE ID_Plan = @id");
+
+            await transaction.commit();
+        } catch (err) {
+            await transaction.rollback();
+            throw err;
+        }
 
         res.json({ status: "Success", message: "Tratamiento eliminado correctamente." });
 
@@ -503,13 +620,14 @@ const getConsentimientosPorPaciente = async (req, res) => {
     }
 };
 
-module.exports = { 
-    getCatalogoCompleto, 
-    guardarOEditarPrestacion, 
+module.exports = {
+    getCatalogoCompleto,
+    guardarOEditarPrestacion,
     guardarNuevaPrestacion,
     asignarTratamientosLote,
     getTratamientosPorPaciente,
     eliminarTratamiento,
     eliminarPrestacionCatalogo,
-    getConsentimientosPorPaciente   // ← NUEVA
+    getConsentimientosPorPaciente,   // ← NUEVA
+    obtenerEstadoVisual   // exportado para que presupuestoController.js espeje igual en el Odontograma
 };

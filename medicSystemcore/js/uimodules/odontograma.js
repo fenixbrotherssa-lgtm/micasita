@@ -13,6 +13,39 @@ window.odontogramaState = {
 // Definición de patologías base para determinar el Tipo_Registro (Inicial vs Evolución)
 const HALLAZGOS_INICIALES = ['Caries', 'Fractura', 'Ausente', 'Raiz', 'Extraer', 'Periodontitis', 'Ortodoncia', 'Supernumerario'];
 
+// Estados que "rehabilitan" una pieza marcada Ausente (compartido entre el pintado 2D y el
+// visor 3D — antes vivía duplicado solo adentro de initVisor3D, y el 2D no tenía ninguna
+// lista equivalente para saber cuándo debía sacar el estado visual de "Ausente").
+const ESTADOS_REHABILITACION = ['Protesis', 'Protesis Fija', 'Protesis Removible', 'Implante', 'Puente', 'Corona', 'Corona Fija'];
+
+// La patología (Estado del odontograma) y el catálogo de PRESTACIONES (precios) son cosas
+// distintas y cada clínica nombra su catálogo distinto — buscar el nombre literal de la
+// patología dentro del nombre de la prestación (ej. "caries" dentro de "RESTAURACION SIMPLE")
+// casi nunca coincide, así que la sugerencia caía en un placeholder de $0 sin ID_Prestacion
+// real y el doctor tenía que borrarlo y agregar el procedimiento a mano. Este mapa da una
+// PRIMERA aproximación razonable por palabras clave típicas del procedimiento que resuelve
+// cada patología; igual queda editable con un <select> en la sección de sugerencias por si
+// el catálogo de la clínica usa otra nomenclatura.
+const MAPA_PATOLOGIA_KEYWORDS = {
+    'Caries': ['restauracion', 'resina', 'calza', 'obturacion'],
+    'Fractura': ['restauracion', 'resina', 'corona'],
+    'Ausente': ['protesis', 'puente', 'implante'],
+    'Raiz': ['endodoncia', 'conducto'],
+    'Extraer': ['extraccion', 'exodoncia'],
+    'Periodontitis': ['profilaxis', 'periodon', 'curetaje', 'raspado'],
+    'Ortodoncia': ['ortodoncia', 'bracket'],
+    'Supernumerario': ['extraccion', 'exodoncia']
+};
+
+function buscarPrestacionSugerida(catalog, estado) {
+    const keywords = MAPA_PATOLOGIA_KEYWORDS[estado] || [];
+    for (const kw of keywords) {
+        const match = catalog.find(c => c.Nombre_Prestacion.toLowerCase().includes(kw));
+        if (match) return match;
+    }
+    return null;
+}
+
 const NOMBRES_DIENTES = {
     18: "Tercer Molar Sup. Der.", 17: "Segundo Molar Sup. Der.", 16: "Primer Molar Sup. Der.", 15: "Segundo Premolar Sup. Der.", 14: "Primer Premolar Sup. Der.", 13: "Canino Sup. Der.", 12: "Incisivo Lateral Sup. Der.", 11: "Incisivo Central Sup. Der.",
     21: "Incisivo Central Sup. Izq.", 22: "Incisivo Lateral Sup. Izq.", 23: "Canino Sup. Izq.", 24: "Primer Premolar Sup. Izq.", 25: "Segundo Premolar Sup. Izq.", 26: "Primer Molar Sup. Izq.", 27: "Segundo Molar Sup. Izq.", 28: "Tercer Molar Sup. Izq.",
@@ -47,13 +80,14 @@ window.odontogramaModule = {
             const res = await window.api.get(`/odontograma/${id_paciente}`);
             
             if (!res || res.status !== "Success") {
-                throw new Error("No se pudo obtener la información del paciente");
+                throw new Error((res && res.message) || "No se pudo obtener la información del paciente");
             }
 
             const elNombre = document.getElementById('paciente_nombre_odo');
             if (elNombre) {
                 elNombre.innerText = `Paciente: ${res.perfil.Nombres} ${res.perfil.Apellidos || ""}`;
             }
+            window.odontogramaState.perfilPaciente = res.perfil; // para el reporte imprimible
 
             const edad = parseInt(res.perfil.Edad || 20);
             window.odontogramaState.tipoPaciente = (edad < 12) ? 'nino' : 'adulto';
@@ -69,7 +103,7 @@ window.odontogramaModule = {
             }, 500);
         } catch (err) {
             console.error("❌ Error en odontogramaModule.init:", err);
-            Swal.fire("Error", "No se pudo cargar el odontograma.", "error");
+            Swal.fire("Error", err.message || "No se pudo cargar el odontograma.", "error");
         }
     },
 
@@ -183,8 +217,19 @@ window.odontogramaModule = {
         const estadoClase = traductor[nombreUpper] || estadoOriginal.toLowerCase().replace(/ /g, '_');
         const esEvol = (h.Tipo_Registro === 'Evolucion' || h.Es_Sanado === 1);
 
+        // Los hallazgos llegan ordenados por fecha (ASC). Si esta pieza estaba marcada Ausente
+        // por un registro más viejo y ESTE hallazgo es una rehabilitación (prótesis/implante/
+        // corona/puente), hay que sacar el estado visual de "Ausente" — si no, el diente queda
+        // con opacidad 0.15 para siempre aunque ya no esté realmente ausente. El visor 3D ya
+        // hacía este chequeo (estadoRehabilita), acá nunca existió.
+        if (ESTADOS_REHABILITACION.includes(estadoOriginal)) {
+            svg.classList.remove('ausente-total');
+            const imgRehab = unit.querySelector('.diente-img');
+            if (imgRehab) imgRehab.style.opacity = '';
+        }
+
         // --- LÓGICA DE PINTADO COMPLETA ---
-        
+
         // 1. Casos Especiales (Afectan a todo el diente/SVG)
         if (nombreUpper === 'ORTODONCIA' || nombreUpper === 'BRACKETS') {
             svg.classList.add('ortodoncia-total'); // Dibuja los brackets
@@ -230,9 +275,27 @@ window.odontogramaModule = {
     });
 },
 
+    // ANTES: esto calculaba las sugerencias y de una abría el modal PESADO de Tratamiento
+    // (con firma de consentimiento, selección de médico, etc.) — no había forma de mandar lo
+    // mismo a un Presupuesto, y cortaba el flujo del doctor que solo quería ver qué se sugería.
+    // Ahora solo CALCULA y muestra una sección liviana acá mismo ("Sugerencias por Pieza"), con
+    // botones para mandar esas mismas sugerencias a Presupuesto o a Tratamiento — el cálculo se
+    // hace una sola vez y queda guardado en odontogramaState.sugerencias para toda la sesión.
     exportarAPlanTratamiento: async function() {
         const idPac = window.router?.currentPatientId;
         if (!idPac) return Swal.fire("Error", "No hay un paciente seleccionado.", "error");
+
+        // El catálogo de precios (Prestaciones) solo se carga cuando el doctor visita
+        // Tratamiento o Presupuesto primero — si entra directo al Odontograma llega vacío
+        // y el <select> de la sugerencia se ve sin opciones. Lo traemos acá también.
+        if (!window.router.catalogoPrestaciones || window.router.catalogoPrestaciones.length === 0) {
+            try {
+                const catalogoRes = await window.api.get('/tratamientos/catalogo');
+                window.router.catalogoPrestaciones = Array.isArray(catalogoRes) ? catalogoRes : [];
+            } catch (e) {
+                console.error("Error al recuperar catálogo de prestaciones:", e);
+            }
+        }
 
         const data = window.odontogramaState.data;
         const catalog = window.router.catalogoPrestaciones || [];
@@ -240,7 +303,7 @@ window.odontogramaModule = {
 
         Object.keys(data).forEach(numDiente => {
             const historial = data[numDiente];
-            const porSeccion = {}; 
+            const porSeccion = {};
             historial.forEach(h => {
                 const key = h.Cara_Diente;
                 if (!porSeccion[key]) porSeccion[key] = [];
@@ -253,9 +316,8 @@ window.odontogramaModule = {
                 const tratamiento = registros.some(r => r.Tipo_Registro === 'Evolucion');
 
                 if (patologia && !tratamiento) {
-                    const sugerencia = catalog.find(c => 
-                        c.Nombre_Prestacion.toLowerCase().includes(patologia.Estado.toLowerCase())
-                    ) || { ID_Prestacion: null, Nombre_Prestacion: `Tratamiento: ${patologia.Estado}`, Precio_Base: 0 };
+                    const sugerencia = buscarPrestacionSugerida(catalog, patologia.Estado) ||
+                        { ID_Prestacion: null, Nombre_Prestacion: `Seleccione un procedimiento`, Precio_Base: 0 };
 
                     itemsParaPlan.push({
                         id_paciente: idPac,
@@ -268,21 +330,113 @@ window.odontogramaModule = {
                         costo_total: sugerencia.Precio_Base,
                         saldo_pendiente: sugerencia.Precio_Base,
                         descuento: 0,
-                        id_usuario_medico: "" 
+                        id_usuario_medico: ""
                     });
                 }
             });
         });
 
-        if (itemsParaPlan.length === 0) {
-            return Swal.fire("Sin Pendientes", "No se encontraron patologías activas para planificar.", "info");
-        }
+        window.odontogramaState.sugerencias = itemsParaPlan;
+        this.renderSugerencias();
 
-        if (typeof window.modalNuevoTratamiento === 'function') {
-            window.modalNuevoTratamiento(itemsParaPlan);
-        } else {
-            console.error("El módulo de tratamientos.js no está cargado.");
+        if (itemsParaPlan.length === 0) {
+            Swal.fire("Sin Pendientes", "No se encontraron patologías activas para planificar.", "info");
         }
+    },
+
+    renderSugerencias: function() {
+        const cont = document.getElementById('odo-sugerencias');
+        if (!cont) return;
+        const items = window.odontogramaState.sugerencias || [];
+
+        if (items.length === 0) {
+            cont.style.display = 'none';
+            return;
+        }
+        cont.style.display = 'block';
+
+        const catalog = window.router.catalogoPrestaciones || [];
+        const optionsHtml = catalog.map(c =>
+            `<option value="${c.ID_Prestacion}" data-precio="${c.Precio_Base}">${c.Nombre_Prestacion} — $${parseFloat(c.Precio_Base).toFixed(2)}</option>`
+        ).join('');
+
+        document.getElementById('odo-sugerencias-lista').innerHTML = items.map((it, idx) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; background:white; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; margin-bottom:6px; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span style="background:#eef2ff; color:#4f46e5; padding:2px 8px; border-radius:6px; font-weight:800; font-size:11px;">Pieza ${it.numero_diente}</span>
+                    <span style="color:#b91c1c; font-size:11px;"><i class="fas fa-notes-medical"></i> ${it.hallazgo_origen}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <select onchange="window.odontogramaModule.actualizarSugerenciaServicio(${idx}, this)"
+                            style="font-size:12px; padding:6px 8px; border-radius:6px; border:1px solid #cbd5e1; max-width:280px; ${it.id_prestacion ? '' : 'border-color:#f59e0b;'}">
+                        <option value="" ${it.id_prestacion ? '' : 'selected'}>-- Seleccione un procedimiento --</option>
+                        ${catalog.map(c =>
+                            `<option value="${c.ID_Prestacion}" data-precio="${c.Precio_Base}" ${it.id_prestacion == c.ID_Prestacion ? 'selected' : ''}>${c.Nombre_Prestacion} — $${parseFloat(c.Precio_Base).toFixed(2)}</option>`
+                        ).join('')}
+                    </select>
+                    <span style="font-weight:800; color:#1e293b; font-size:12px; min-width:60px; text-align:right;">$${parseFloat(it.costo_total).toFixed(2)}</span>
+                </div>
+            </div>
+        `).join('');
+    },
+
+    // El doctor puede corregir en el propio dropdown el procedimiento del catálogo real
+    // (con su precio real) que se está asociando a la patología, en vez de tener que borrar
+    // el ítem precargado y agregarlo de cero desde el catálogo en Tratamiento/Presupuesto.
+    actualizarSugerenciaServicio: function(idx, selectEl) {
+        const items = window.odontogramaState.sugerencias || [];
+        const item = items[idx];
+        if (!item) return;
+        const opt = selectEl.options[selectEl.selectedIndex];
+        const precio = parseFloat(opt.dataset.precio) || 0;
+
+        item.id_prestacion = selectEl.value ? parseInt(selectEl.value) : null;
+        item.nombre = selectEl.value ? opt.textContent.split(' — $')[0] : 'Seleccione un procedimiento';
+        item.precio_lista = precio;
+        item.costo_total = precio;
+        item.saldo_pendiente = precio;
+
+        this.renderSugerencias();
+    },
+
+    irAPresupuesto: function() {
+        const items = window.odontogramaState.sugerencias || [];
+        if (!items.length) return;
+        this._confirmarYEnviar(items, () => {
+            if (typeof window.abrirModalPresupuesto === 'function') {
+                window.abrirModalPresupuesto(items);
+            } else {
+                console.error("El módulo de presupuestos (historia.js) no está cargado.");
+            }
+        });
+    },
+
+    irATratamiento: function() {
+        const items = window.odontogramaState.sugerencias || [];
+        if (!items.length) return;
+        this._confirmarYEnviar(items, () => {
+            if (typeof window.modalNuevoTratamiento === 'function') {
+                window.modalNuevoTratamiento(items);
+            } else {
+                console.error("El módulo de tratamientos.js no está cargado.");
+            }
+        });
+    },
+
+    // Si alguna sugerencia se quedó sin procedimiento del catálogo asignado, confirma antes
+    // de continuar en vez de mandarla en silencio con precio $0.
+    _confirmarYEnviar: function(items, callback) {
+        const sinAsignar = items.filter(it => !it.id_prestacion).length;
+        if (sinAsignar === 0) return callback();
+
+        Swal.fire({
+            title: "Procedimientos sin asignar",
+            html: `${sinAsignar} pieza(s) todavía no tienen un procedimiento del catálogo seleccionado (quedarán con precio $0). ¿Deseas continuar de todas formas?`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Continuar de todas formas",
+            cancelButtonText: "Volver a revisar"
+        }).then(r => { if (r.isConfirmed) callback(); });
     }
 };
 
@@ -326,11 +480,12 @@ window.mostrarCardDiente = function(id) {
             <div style="border-left:4px solid ${colorBorde}; background: rgba(255,255,255,0.05); padding: 12px; margin-bottom: 10px; border-radius: 10px; position: relative;">
                 <span style="position: absolute; top: 8px; right: 10px; font-size: 9px; font-weight: 900; color: ${colorBorde}; opacity: 0.8;">${textoTipo}</span>
                 <div style="font-weight: 800; font-size: 13px; color: #fff; text-transform: uppercase; margin-bottom: 4px;">${h.Estado.replace(/_/g, ' ')}</div>
-                <div style="display: flex; gap: 15px; align-items: center;">
+                <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                     <div style="font-size: 11px; color: #94a3b8;">
                         <i class="fas fa-th"></i> Cara: <b style="color: #fff;">${nombreTecnico}</b>
                     </div>
                     <div style="font-size: 11px; color: #94a3b8;"><i class="far fa-calendar-alt"></i> ${fecha}</div>
+                    ${h.ID_Plan_Tratamiento ? `<div style="font-size: 10px; background: rgba(79,70,229,0.25); color: #a5b4fc; padding: 2px 8px; border-radius: 6px; font-weight: 800;"><i class="fas fa-link"></i> Plan #${h.ID_Plan_Tratamiento}</div>` : ''}
                 </div>
             </div>
         `;
@@ -353,31 +508,37 @@ window.marcarCara = function(el) {
     const estadoClase = tool.toLowerCase().replace(/ /g, '_');
 
     if (tool === 'Limpiar') {
-        svg.classList.remove('ausente-total', 'ortodoncia-total');
-        unit.classList.remove('periodontitis-total', 'supernumerario-total');
-        svg.querySelectorAll('.cara-odo').forEach(c => c.setAttribute('class', 'cara-odo'));
-        unit.querySelectorAll('.zona-raiz').forEach(z => z.className = 'zona-raiz');
+        // ANTES: esto solo limpiaba las clases visuales y de inmediato las volvía a pintar desde
+        // window.odontogramaState.data (el historial ya guardado en BD) — o sea que un hallazgo
+        // ya persistido se "auto-restauraba" al instante y nunca se podía borrar de verdad. El
+        // endpoint de borrado (POST /odontograma/eliminar) ya existía en el backend pero nunca se
+        // llamaba desde acá. Ahora primero se confirma, se borra en BD, y recién con eso limpio
+        // también el estado en memoria para que no se vuelva a repintar solo.
+        const idPac = window.router?.currentPatientId;
+        if (!idPac) return;
 
-        const historial = window.odontogramaState.data[numDiente] || [];
-        historial.forEach(h => {
-            if (h.Estado === 'Periodontitis') unit.classList.add('periodontitis-total');
-            else if (h.Estado === 'Supernumerario') unit.classList.add('supernumerario-total');
-            else if (h.Estado === 'Ausente') svg.classList.add('ausente-total');
-            else if (h.Estado === 'Ortodoncia') svg.classList.add('ortodoncia-total');
-            else {
-                const esEvol = (h.Tipo_Registro === 'Evolucion');
-                const cls = h.Estado.toLowerCase().replace(/ /g, '_');
-                
-                if (h.Cara_Diente === 'Raiz') {
-                    const zonaRaiz = unit.querySelector('.zona-raiz');
-                    if (zonaRaiz) zonaRaiz.className = `zona-raiz ${cls} ${esEvol ? 'is-sanado' : ''}`;
-                } else {
-                    const caraPoligono = svg.querySelector(`[data-cara="${h.Cara_Diente}"]`);
-                    if (caraPoligono) {
-                        caraPoligono.setAttribute('class', `cara-odo ${cls} ${esEvol ? 'is-sanado' : ''}`);
-                    }
-                }
-            }
+        Swal.fire({
+            title: `¿Borrar todos los hallazgos de la pieza ${numDiente}?`,
+            text: 'Esto elimina permanentemente lo ya guardado para este diente, no solo lo visual.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, borrar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+
+            window.api.eliminarHallazgo({ id_paciente: parseInt(idPac), numero_diente: parseInt(numDiente) })
+                .then((res) => {
+                    if (res.status !== 'Success') throw new Error(res.message || 'No se pudo borrar.');
+
+                    window.odontogramaState.data[numDiente] = []; // ya no queda nada que re-pintar
+
+                    svg.classList.remove('ausente-total', 'ortodoncia-total');
+                    unit.classList.remove('periodontitis-total', 'supernumerario-total');
+                    svg.querySelectorAll('.cara-odo').forEach(c => c.setAttribute('class', 'cara-odo'));
+                    unit.querySelectorAll('.zona-raiz').forEach(z => z.className = 'zona-raiz');
+                })
+                .catch(err => Swal.fire('Error', err.message, 'error'));
         });
         return;
     }
@@ -544,20 +705,19 @@ window.initVisor3D = function () {
         'Ausente'
     ];
 
-    const ESTADOS_REHABILITAR = [
-        'Protesis',
-        'Protesis Fija',
-        'Protesis Removible',
-        'Implante',
-        'Puente',
-        'Corona',
-        'Corona Fija'
-    ];
+    // Compartida con pintarHallazgos() (2D) — ver ESTADOS_REHABILITACION al inicio del archivo.
+    const ESTADOS_REHABILITAR = ESTADOS_REHABILITACION;
 
+    // FIX de precisión clínica: antes "Centro" (que el tooltip ya llama "Oclusal") pintaba la
+    // cara Vestibular del modelo 3D, y "Superior"/"Inferior" (dos zonas distintas en el diagrama
+    // 2D) pintaban la MISMA cara 3D ('I'), dejando la cara Palatina/Lingual del modelo
+    // completamente inalcanzable desde la interfaz. Con el diagrama "flor" de 5 zonas que ya usa
+    // el 2D, la correspondencia clínica correcta es: Centro=Oclusal, Superior=Vestibular (hacia
+    // afuera/mejilla), Inferior=Palatino/Lingual (hacia adentro/lengua).
     const MAPA_CARAS = {
-        Superior: 'I',
-        Inferior: 'I',
-        Centro: 'V',
+        Superior: 'V',
+        Inferior: 'P',
+        Centro: 'I',
         Derecha: 'D',
         Izquierda: 'M',
         General: null,
@@ -774,6 +934,38 @@ window.initVisor3D = function () {
                 mesh.material.metalness = 0.8;
                 break;
 
+            // Antes: estos 6 estados caían en el "default" y se veían IGUAL que un diente sano
+            // en 3D, aunque el 2D sí los distingue con colores propios. Se usan los mismos
+            // colores del 2D (views/odontograma.html) para que ambas vistas coincidan.
+            case 'Resina':
+                mesh.material.color.set(0x3b82f6); // --medical-blue
+                break;
+
+            case 'Carilla Resina':
+                mesh.material.color.set(0x93c5fd);
+                mesh.material.roughness = 0.2;
+                break;
+
+            case 'Carilla Porcelana':
+                mesh.material.color.set(0xe0f2fe);
+                mesh.material.metalness = 0.2;
+                mesh.material.roughness = 0.15;
+                break;
+
+            case 'Sellante':
+                mesh.material.color.set(0x22d3ee); // --medical-cyan
+                break;
+
+            case 'Extraer':
+                mesh.material.color.set(0x18181b); // casi negro, misma convención que el 2D
+                break;
+
+            case 'Ortodoncia':
+                mesh.material.color.set(0x6366f1); // indigo, mismo tono del brillo del 2D
+                mesh.material.metalness = 0.7;
+                mesh.material.roughness = 0.3;
+                break;
+
             default:
                 mesh.material.color.set(0x10b981);
         }
@@ -825,10 +1017,15 @@ window.initVisor3D = function () {
                 return;
             }
 
-            const hallazgoCara = historial.find(h => {
+            // .find() devolvía el PRIMER hallazgo que matcheaba esa cara — con el historial
+            // completo (Inicial + Evolución) eso significaba mostrar siempre el más VIEJO (ej. la
+            // Caries original) en vez del estado actual (ej. la Resina que la sanó). Ahora se
+            // filtran todos los que matchean esa cara puntual y se pinta el más reciente.
+            const hallazgosDeEstaCara = historial.filter(h => {
                 const caraRaw = (h.Cara_Diente || '').trim();
                 return MAPA_CARAS[caraRaw] === caraMesh;
             });
+            const hallazgoCara = obtenerUltimoEstado(hallazgosDeEstaCara);
 
             if (hallazgoCara) {
                 aplicarColorClinico(
@@ -839,8 +1036,8 @@ window.initVisor3D = function () {
                 return;
             }
 
-            const general = historial.find(h =>
-                (h.Cara_Diente || '').trim() === 'General'
+            const general = obtenerUltimoEstado(
+                historial.filter(h => (h.Cara_Diente || '').trim() === 'General')
             );
 
             if (general) {
@@ -1037,4 +1234,85 @@ loader.load(
     };
 
     animate();
+};
+
+// --- IMPRESIÓN DEL ODONTOGRAMA (mismo patrón de ventana con vista previa que ya usan
+// gastos.js/caja.js/CRM: window.open + document.write, con el diseño de marca de la clínica) ---
+window.imprimirOdontograma = async function() {
+    const idPac = window.router?.currentPatientId;
+    const perfil = window.odontogramaState?.perfilPaciente;
+    if (!idPac || !perfil) return Swal.fire('Atención', 'Cargá primero un paciente.', 'info');
+
+    let clinica = { Nombre_Clinica: 'Clínica', Logo_Ruta: null };
+    try {
+        const idClinica = perfil.ID_Clinica;
+        if (idClinica) clinica = await window.api.get(`/clinicas/leer/${idClinica}`) || clinica;
+    } catch (e) { /* seguimos con nombre genérico si falla */ }
+
+    const serverBase = window.api.baseURL.replace('/api', '').replace(/\/$/, '');
+    const logoUrl = clinica.Logo_Ruta ? `${serverBase}/uploads/logos/${clinica.Logo_Ruta}` : '';
+
+    const data = window.odontogramaState.data || {};
+    const filas = [];
+    Object.keys(data).sort((a, b) => parseInt(a) - parseInt(b)).forEach(numDiente => {
+        (data[numDiente] || []).forEach(h => {
+            filas.push({
+                diente: numDiente,
+                nombreDiente: NOMBRES_DIENTES[numDiente] || '',
+                cara: h.Cara_Diente,
+                estado: h.Estado,
+                tipo: h.Tipo_Registro,
+                fecha: h.Fecha ? new Date(h.Fecha).toLocaleDateString() : ''
+            });
+        });
+    });
+
+    const ventana = window.open('', '_blank');
+    ventana.document.write(`
+        <html>
+        <head>
+            <title>Odontograma - ${perfil.Nombres} ${perfil.Apellidos || ''}</title>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+                body { font-family: 'Inter', sans-serif; padding: 30px; color: #1e293b; }
+                .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1e293b; padding-bottom: 15px; margin-bottom: 20px; }
+                .header img { max-height: 70px; max-width: 200px; object-fit: contain; }
+                .header-info { text-align: right; }
+                .header-info h2 { margin: 0; font-size: 1.3rem; font-weight: 800; }
+                .header-info p { margin: 2px 0; font-size: 0.85rem; color: #64748b; font-weight: 700; }
+                table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+                th { background: #f1f5f9; text-align: left; padding: 8px; border-bottom: 2px solid #e2e8f0; color: #475569; font-weight: 800; }
+                td { padding: 7px 8px; border-bottom: 1px solid #f1f5f9; }
+                .badge-inicial { color: #b91c1c; font-weight: 700; }
+                .badge-evolucion { color: #15803d; font-weight: 700; }
+                .no-print { text-align: center; margin-bottom: 20px; }
+                .no-print button { padding: 10px 22px; background: #4f46e5; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+                @media print { .no-print { display: none; } }
+            </style>
+        </head>
+        <body>
+            <div class="no-print"><button onclick="window.print()"><i class="fas fa-print"></i> Imprimir / Guardar como PDF</button></div>
+            <div class="header">
+                ${logoUrl ? `<img src="${logoUrl}" onerror="this.style.display='none'">` : '<div></div>'}
+                <div class="header-info">
+                    <h2>ODONTOGRAMA CLÍNICO</h2>
+                    <p>${(clinica.Nombre_Clinica || '').toUpperCase()}</p>
+                    <p>PACIENTE: ${perfil.Nombres} ${perfil.Apellidos || ''} · ${new Date().toLocaleDateString()}</p>
+                </div>
+            </div>
+            <table>
+                <thead><tr><th>Pieza</th><th>Descripción</th><th>Cara</th><th>Hallazgo</th><th>Tipo</th><th>Fecha</th></tr></thead>
+                <tbody>
+                    ${filas.length
+                        ? filas.map(f => `<tr><td><strong>${f.diente}</strong></td><td>${f.nombreDiente}</td><td>${f.cara}</td><td>${f.estado}</td><td class="${f.tipo === 'Inicial' ? 'badge-inicial' : 'badge-evolucion'}">${f.tipo}</td><td>${f.fecha}</td></tr>`).join('')
+                        : '<tr><td colspan="6" style="text-align:center; color:#94a3b8;">Sin hallazgos registrados.</td></tr>'}
+                </tbody>
+            </table>
+            <div style="margin-top:30px; text-align:center; font-size:8px; color:#94a3b8;">
+                Generado por Ametra OS - ${new Date().toLocaleString()}
+            </div>
+        </body>
+        </html>
+    `);
+    ventana.document.close();
 };

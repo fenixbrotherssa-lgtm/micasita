@@ -329,6 +329,8 @@ window.inventarioModule = {
                     'success');
                 this.cerrarModal();
                 this.cargarInventario();
+            } else {
+                Swal.fire('Error', res.message || 'No se pudo guardar la información', 'error');
             }
         } catch (e) { Swal.fire('Error', 'No se pudo guardar la información', 'error'); }
     },
@@ -681,6 +683,8 @@ window.inventarioModule = {
                 if (res.status === 'Success') {
                     this.cargarInventario();
                     Swal.fire('Movimiento Registrado', `Se descontaron ${formValues.cantidad} unidades.`, 'success');
+                } else {
+                    Swal.fire('Error', res.message || 'No se pudo registrar la salida.', 'error');
                 }
             } catch (e) {
                 Swal.fire('Error', 'Fallo en la comunicación con el servidor', 'error');

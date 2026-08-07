@@ -1,4 +1,5 @@
 ﻿const { getConnection, sql } = require('../config/db');
+const { obtenerEstadoVisual } = require('./tratamientoController');
 
 // 1. GUARDAR PRESUPUESTO (CORREGIDO: Eliminada columna Email de Clinicas)
 const guardarPresupuesto = async (req, res) => {
@@ -129,7 +130,7 @@ const aprobarPresupuesto = async (req, res) => {
             const descuentoUnitario = descuentoTotal / cantidadReal;
 
             for (let i = 0; i < cantidadReal; i++) {
-                await transaction.request()
+                const resultPlan = await transaction.request()
                     .input('paciente', sql.Int, presupuesto.ID_Paciente)
                     .input('presta', sql.Int, item.id_prestacion)
                     .input('nombre_t', sql.NVarChar, item.nombre)
@@ -139,12 +140,54 @@ const aprobarPresupuesto = async (req, res) => {
                     .input('desc', sql.Decimal(9, 2), descuentoUnitario)
                     .input('total', sql.Decimal(9, 2), costoUnitario)
                     .query(`
-                        INSERT INTO Tratamientos_Plan 
-                        (ID_Paciente, ID_Prestacion, Nombre_Tratamiento, ID_Medico, Numero_Diente, 
+                        INSERT INTO Tratamientos_Plan
+                        (ID_Paciente, ID_Prestacion, Nombre_Tratamiento, ID_Medico, Numero_Diente,
                          Precio_Lista, Descuento, Costo_Total, Saldo_Pendiente, Estado_Tratamiento, Fecha_Inicio)
-                        VALUES 
-                        (@paciente, @presta, @nombre_t, @medico, @diente, @p_lista, @desc, @total, @total, 'PENDIENTE', GETDATE())
+                        VALUES
+                        (@paciente, @presta, @nombre_t, @medico, @diente, @p_lista, @desc, @total, @total, 'PENDIENTE', GETDATE());
+
+                        SELECT SCOPE_IDENTITY() AS ID_Plan_Generado;
                     `);
+
+                const nuevoIDPlan = resultPlan.recordset[0].ID_Plan_Generado;
+
+                // ── ESPEJAR EN ODONTOGRAMA (SI ES VISUAL) ───────────────────
+                // Los presupuestos aprobados NUNCA sincronizaban el Odontograma (a diferencia
+                // de "asignarTratamientosLote"), así que un ítem enviado a Presupuesto desde
+                // "Sugerencias por Pieza" y luego aprobado se quedaba invisible para el
+                // Odontograma. Se espeja igual que en tratamientoController.js: una fila por
+                // cada cara real (o 'Centro' si el ítem no tenía pieza/cara asociada).
+                const estadoVisual = obtenerEstadoVisual(item.nombre);
+                if (estadoVisual && item.numero_diente) {
+                    const carasAEspejar = item.cara
+                        ? [item.cara]
+                        : (item.caras ? item.caras.split(',').map(c => c.trim()).filter(Boolean) : ['Centro']);
+
+                    for (const caraInd of (carasAEspejar.length ? carasAEspejar : ['Centro'])) {
+                        await transaction.request()
+                            .input('pac_odo', sql.Int, presupuesto.ID_Paciente)
+                            .input('die_odo', sql.Int, item.numero_diente)
+                            .input('cara_odo', sql.NVarChar(20), caraInd)
+                            .input('est_odo', sql.NVarChar(50), estadoVisual)
+                            .input('user_odo', sql.Int, presupuesto.ID_Usuario)
+                            .input('id_plan_odo', sql.Int, nuevoIDPlan)
+                            .query(`
+                                IF EXISTS (SELECT 1 FROM Odontograma WHERE ID_Paciente = @pac_odo AND Numero_Diente = @die_odo AND Cara_Diente = @cara_odo AND Tipo_Registro = 'Evolucion')
+                                BEGIN
+                                    UPDATE Odontograma SET
+                                        Estado = @est_odo, ID_Doctor = @user_odo, Fecha = GETDATE(), ID_Plan_Tratamiento = @id_plan_odo
+                                    WHERE ID_Paciente = @pac_odo AND Numero_Diente = @die_odo AND Cara_Diente = @cara_odo AND Tipo_Registro = 'Evolucion'
+                                END
+                                ELSE
+                                BEGIN
+                                    INSERT INTO Odontograma
+                                    (ID_Paciente, Numero_Diente, Cara_Diente, Estado, Tipo_Registro, ID_Doctor, Fecha, ID_Plan_Tratamiento)
+                                    VALUES
+                                    (@pac_odo, @die_odo, @cara_odo, @est_odo, 'Evolucion', @user_odo, GETDATE(), @id_plan_odo)
+                                END
+                            `);
+                    }
+                }
             }
         }
 

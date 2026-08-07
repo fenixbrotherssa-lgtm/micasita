@@ -437,22 +437,28 @@ window.gastosModule = {
         const { value: nombre } = await Swal.fire({ title: 'Nombre del nuevo Rubro', input: 'text', showCancelButton: true });
         if (nombre) {
             try {
-                await window.api.post('/gastos/categorias/guardar', { nombre: nombre.toUpperCase() });
-                this.gestionarCatalogo(); 
-            } catch (e) { }
+                const res = await window.api.post('/gastos/categorias/guardar', { nombre: nombre.toUpperCase() });
+                if (res && res.status === 'Error') {
+                    return Swal.fire('Error', res.message || 'No se pudo crear el rubro.', 'error');
+                }
+                this.gestionarCatalogo();
+            } catch (e) { Swal.fire('Error', 'No se pudo crear el rubro.', 'error'); }
         }
     },
 
     editarRubro: async function(id, nombreActual) {
-        const { value: nuevoNombre } = await Swal.fire({ 
-            title: 'Editar Rubro', 
-            input: 'text', 
+        const { value: nuevoNombre } = await Swal.fire({
+            title: 'Editar Rubro',
+            input: 'text',
             inputValue: nombreActual,
-            showCancelButton: true 
+            showCancelButton: true
         });
         if (nuevoNombre && nuevoNombre !== nombreActual) {
             try {
-                await window.api.post('/gastos/categorias/guardar', { id: id, nombre: nuevoNombre.toUpperCase() });
+                const res = await window.api.post('/gastos/categorias/guardar', { id: id, nombre: nuevoNombre.toUpperCase() });
+                if (res && res.status === 'Error') {
+                    return Swal.fire('Error', res.message || 'No se pudo actualizar', 'error');
+                }
                 this.gestionarCatalogo();
             } catch (e) { Swal.fire('Error', 'No se pudo actualizar', 'error'); }
         }
@@ -468,9 +474,12 @@ window.gastosModule = {
         });
         if (isConfirmed) {
             try {
-                await window.api.get(`/gastos/categorias/eliminar/${id}`);
+                const res = await window.api.get(`/gastos/categorias/eliminar/${id}`);
+                if (res && res.status === 'Error') {
+                    return Swal.fire('Error', res.message || 'No se pudo desactivar el rubro.', 'error');
+                }
                 this.gestionarCatalogo();
-            } catch (e) { }
+            } catch (e) { Swal.fire('Error', 'No se pudo desactivar el rubro.', 'error'); }
         }
     },
 

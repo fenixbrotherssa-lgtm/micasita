@@ -12,6 +12,14 @@
     <script src="assets/vendor/chartjs/chart.umd.js"></script>
     <script src="./node_modules/signature_pad/dist/signature_pad.umd.min.js"></script>
 
+    <!-- Visor DICOM (resonancias/RX) — orden fijo: dicomParser y cornerstone deben existir
+         como globales ANTES de cargar cornerstoneWADOImageLoader, que los busca en
+         window.dicomParser / window.cornerstone al vuelo (no vienen incluidos en su bundle). -->
+    <script src="./node_modules/dicom-parser/dist/dicomParser.min.js"></script>
+    <script src="./node_modules/cornerstone-core/dist/cornerstone.min.js"></script>
+    <script src="./node_modules/cornerstone-math/dist/cornerstoneMath.min.js"></script>
+    <script src="./node_modules/cornerstone-wado-image-loader/dist/cornerstoneWADOImageLoaderNoWebWorkers.bundle.min.js"></script>
+
     <style>
         :root {
             --primary: #4f46e5;
@@ -121,6 +129,7 @@
         window.gastosModule = window.gastosModule || { init: () => {}, abrirModalRegistro: () => {}, gestionarCatalogo: () => {} };
         window.historiaModule = window.historiaModule || { init: () => {} };
         window.sucursalesModule = window.sucursalesModule || { init: () => {} };
+        window.crmModule = window.crmModule || { init: () => {} };
 
         function toggleChat() {
             const chat = document.getElementById('chat-window');
@@ -262,7 +271,9 @@
                 "js/uimodules/inventario.js",
                 "js/uimodules/citas.js",
                 "js/uimodules/kpi.js",
-                "js/uimodules/facturacion.js"
+                "js/uimodules/facturacion.js",
+                "js/uimodules/crm.js",
+                "js/uimodules/manual.js"
             ];
 
             // Carga una lista de scripts EN ORDEN (async=false), sin frenarse si uno falla.

@@ -62,10 +62,18 @@ const facturacionController = {
             }
 
             const pool = await getConnection();
-            const passwordHash = Buffer.from(password_p12).toString('base64'); 
+            const passwordHash = Buffer.from(password_p12).toString('base64');
 
             const fechaVencimiento = new Date();
             fechaVencimiento.setFullYear(fechaVencimiento.getFullYear() + 1);
+
+            // Desactiva los certificados anteriores de esta clínica antes de insertar el
+            // nuevo: solo puede haber uno Activo=1 por clínica a la vez (ver getConnection
+            // de arriba). Sin esto quedaban varias filas activas y el SELECT TOP 1 de
+            // autorizarComprobanteSRI podía traer un certificado viejo al azar.
+            await pool.request()
+                .input('id_clinica', sql.Int, id_clinica)
+                .query(`UPDATE Facturacion_Certificados SET Activo = 0 WHERE ID_Clinica = @id_clinica AND Activo = 1`);
 
             await pool.request()
                 .input('id_clinica', sql.Int, id_clinica)
@@ -75,9 +83,9 @@ const facturacionController = {
                 .input('pass', sql.NVarChar, passwordHash)
                 .input('vencimiento', sql.DateTime, fechaVencimiento)
                 .query(`
-                    INSERT INTO Facturacion_Certificados 
+                    INSERT INTO Facturacion_Certificados
                     (ID_Clinica, ID_Usuario, Nombre_Certificado, Ruta_Archivo_P12, Password_P12_Encrypted, Fecha_Vencimiento, Fecha_Carga, Activo)
-                    VALUES 
+                    VALUES
                     (@id_clinica, @id_usuario, @nombre, @ruta, @pass, @vencimiento, GETDATE(), 1)
                 `);
 
@@ -406,9 +414,11 @@ const facturacionController = {
 
             const d = query.recordset[0];
 
-            // 2. OBTENER EL CERTIFICADO DIGITAL ACTIVO
+            // 2. OBTENER EL CERTIFICADO DIGITAL ACTIVO (de ESTA clínica, el más reciente si
+            // hubiera más de uno marcado Activo=1 por datos viejos)
             const certQuery = await pool.request()
-                .query(`SELECT TOP 1 Ruta_Archivo_P12, Password_P12_Encrypted FROM Facturacion_Certificados WHERE Activo = 1`);
+                .input('id_clinica_cert', sql.Int, d.ID_Clinica)
+                .query(`SELECT TOP 1 Ruta_Archivo_P12, Password_P12_Encrypted FROM Facturacion_Certificados WHERE Activo = 1 AND ID_Clinica = @id_clinica_cert ORDER BY Fecha_Carga DESC`);
 
             if (certQuery.recordset.length === 0) {
                 return res.status(400).json({ status: "Error", mensaje: "No hay certificado digital activo." });

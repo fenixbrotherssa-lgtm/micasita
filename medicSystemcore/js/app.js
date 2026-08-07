@@ -37,7 +37,7 @@ window.router = {
             this.aplicarPermisosInterfaz(idRol);
 
             // 2. BLOQUEO DE NAVEGACIÓN (Seguridad)
-            const vistasSoloAdmin = ['usuarios', 'sucursales', 'gastos', 'kpi', 'reportes'];
+            const vistasSoloAdmin = ['usuarios', 'sucursales', 'gastos', 'kpi', 'reportes', 'crm'];
             if (idRol !== 1 && vistasSoloAdmin.includes(view)) {
                 console.warn("🚫 Acceso denegado a:", view);
                 return this.load('dashboard'); 
@@ -48,6 +48,20 @@ window.router = {
         var self = this;
         var root = document.getElementById('app-root');
         if (!root) return;
+
+        // Guarda de dónde veníamos ANTES de pisarlo, para que vistas como Historia Clínica
+        // puedan volver con router.volver() a lo que el usuario estaba haciendo (ej. un
+        // segmento de CRM ya armado) en vez de mandarlo siempre a un destino fijo.
+        // OJO: si esta navegación es en sí un volver() (ej. Pagos → Ficha), NO hay que volver
+        // a grabar "Pagos" como vistaAnterior — volver() ya la limpió a propósito. Sin este
+        // guard, load() la pisaba de nuevo con la vista que se estaba dejando, y al salir de
+        // la Ficha después el doctor terminaba regresando a Pagos en vez de a donde quería.
+        if (this.currentView && this.currentView !== view && !this._navegandoAtras) {
+            this.vistaAnterior = { view: this.currentView, params: this.paramsActuales || {} };
+        }
+        this._navegandoAtras = false;
+        this.currentView = view;
+        this.paramsActuales = params;
 
         if (params.id_paciente) {
             this.currentPatientId = params.id_paciente;
@@ -76,6 +90,19 @@ window.router = {
                 console.error('🔴 Error:', err);
                 if (view !== 'dashboard') self.load('dashboard');
             });
+    },
+
+    // Vuelve a la vista desde la que se navegó (ej. Historia Clínica → CRM en vez de
+    // siempre a Pacientes), o al dashboard si no hay ninguna registrada.
+    volver: function() {
+        if (this.vistaAnterior) {
+            const destino = this.vistaAnterior;
+            this.vistaAnterior = null; // evita ida-y-vuelta infinita si el destino también "vuelve"
+            this._navegandoAtras = true; // le avisa a load() que no vuelva a grabar esta salida
+            this.load(destino.view, destino.params);
+        } else {
+            this.load('dashboard');
+        }
     },
 
     // Nueva función para ocultar botones del menú lateral según el Rol
@@ -119,6 +146,8 @@ window.router = {
             case 'reportes': if(window.kpiModule) window.kpiModule.init(); break;
             case 'pagos': if(window.cargarDatosDePago) window.cargarDatosDePago(id, params.plan); break;
             case 'facturacion': if(window.facturacionModule) window.facturacionModule.init(); break;
+            case 'crm': if(window.crmModule) window.crmModule.init(); break;
+            case 'manual': if(window.manualModule) window.manualModule.init(); break;
         }
     },
 
@@ -239,12 +268,37 @@ window.cerrarSesion = function() {
             return setTimeout(conectar, 1500);
         }
 
+        window.socketRT = socket; // expuesto para que otros módulos (ej. Firmar desde el celular) reusen esta misma conexión
+
         socket.on('connect', () => {
+            // Sin esto, este socket nunca entra a la sala 'clinica-X' del backend — el
+            // celular sí se unía (core/socket.js) y por eso "solicitar-firma" SÍ le llegaba,
+            // pero "firma-recibida" es un broadcast A esa sala, y el escritorio nunca estaba
+            // adentro para recibirlo de vuelta. Quedaba pegado en "Esperando firma..." aunque
+            // el celular ya hubiera firmado.
+            try {
+                const sesion = JSON.parse(localStorage.getItem('usuario_sesion') || '{}');
+                // El backend verifica este MISMO token y saca la clínica de ahí — no confía
+                // en un id_clinica suelto (ver server.js).
+                if (sesion.token) socket.emit('unirse-clinica', sesion.token);
+            } catch (e) {}
+
             console.log("🌐 [RealTime]: Conectado al servidor de actualizaciones.");
         });
 
         socket.on('connect_error', () => {
             // Backend frío o caído: socket.io reintenta solo, no hacemos nada.
+        });
+
+        // Antes, si el token de esta sesión ya había vencido, el backend se lo tragaba
+        // en silencio: el socket quedaba "conectado" pero sin unirse a ninguna sala, y
+        // "Enviar a Firma (celular)" se quedaba pegado en "Esperando firma..." para
+        // siempre, sin ningún error visible (así fue el bug de hoy). Ahora el backend
+        // avisa explícitamente y acá forzamos un relogin en vez de quedar colgado.
+        socket.on('clinica-error', () => {
+            console.warn("🔐 [RealTime]: Sesión vencida o inválida, cerrando sesión...");
+            alert('Tu sesión venció. Volvé a iniciar sesión para seguir usando "Enviar a Firma (celular)" y las actualizaciones en tiempo real.');
+            if (typeof window.cerrarSesion === 'function') window.cerrarSesion();
         });
 
         socket.on('db-update', (data) => {

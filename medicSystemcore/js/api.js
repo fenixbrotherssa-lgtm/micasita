@@ -28,6 +28,14 @@ window.api = {
     },
 
     // --- NÚCLEO DE COMUNICACIÓN ---
+    // OJO: las 4 funciones de abajo (get/post/delete/postFormData) ANTES lanzaban
+    // `Error HTTP: ${status}` en cuanto la respuesta no era 2xx, SIN leer el cuerpo —
+    // así que el mensaje real que el backend sí manda (ej. "Contraseña incorrecta" en el
+    // login, o "La cita ya fue atendida" al eliminar) se perdía siempre, y cualquier
+    // pantalla que mostrara `res.message` terminaba mostrando el genérico "Error HTTP: 401"
+    // en vez del motivo real. Ahora se lee el cuerpo SIEMPRE (haya salido bien o mal) y se
+    // usa su `.message` cuando existe; el genérico queda solo como último recurso (ej. el
+    // servidor cayó y ni siquiera devolvió JSON).
     get: async function(path) {
         try {
             const headers = {};
@@ -35,8 +43,9 @@ window.api = {
             if (token) headers['Authorization'] = `Bearer ${token}`; // 🛡️ Inyección del Token
 
             const response = await fetch(this.baseURL + path, { headers });
-            if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-            return await response.json();
+            const data = await response.json().catch(() => null);
+            if (!response.ok) throw new Error((data && data.message) || `Error HTTP: ${response.status}`);
+            return data;
         } catch (err) {
             console.error("🔴 Error GET:", err);
             return { status: "Error", message: err.message };
@@ -54,10 +63,31 @@ window.api = {
                 headers: headers,
                 body: JSON.stringify(data)
             });
-            if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-            return await response.json();
+            const resBody = await response.json().catch(() => null);
+            if (!response.ok) throw new Error((resBody && resBody.message) || `Error HTTP: ${response.status}`);
+            return resBody;
         } catch (err) {
             console.error("🔴 Error POST:", err);
+            return { status: 'Error', message: err.message };
+        }
+    },
+
+    put: async function(path, data) {
+        try {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = this.getToken();
+            if (token) headers['Authorization'] = `Bearer ${token}`; // 🛡️ Inyección del Token
+
+            const response = await fetch(this.baseURL + path, {
+                method: 'PUT',
+                headers: headers,
+                body: JSON.stringify(data)
+            });
+            const resBody = await response.json().catch(() => null);
+            if (!response.ok) throw new Error((resBody && resBody.message) || `Error HTTP: ${response.status}`);
+            return resBody;
+        } catch (err) {
+            console.error("🔴 Error PUT:", err);
             return { status: 'Error', message: err.message };
         }
     },
@@ -73,8 +103,9 @@ window.api = {
                 method: 'DELETE',
                 headers: headers
             });
-            if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-            return await response.json();
+            const data = await response.json().catch(() => null);
+            if (!response.ok) throw new Error((data && data.message) || `Error HTTP: ${response.status}`);
+            return data;
         } catch (err) {
             console.error("🔴 Error DELETE:", err);
             return { status: 'Error', message: err.message };
@@ -92,10 +123,11 @@ window.api = {
             const response = await fetch(this.baseURL + path, {
                 method: 'POST',
                 headers: headers,
-                body: formData 
+                body: formData
             });
-            if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-            return await response.json();
+            const data = await response.json().catch(() => null);
+            if (!response.ok) throw new Error((data && data.message) || `Error HTTP: ${response.status}`);
+            return data;
         } catch (err) {
             console.error("🔴 Error POST FormData:", err);
             return { status: 'Error', message: err.message };
@@ -279,5 +311,76 @@ window.api = {
     getURLPublica: function() {
         if (!this.baseURL) return "";
         return this.baseURL.split('/api')[0];
+    },
+
+    // --- 🤖 BOT DE WHATSAPP ---
+
+    getEstadoBot: function() {
+        return this.get('/whatsapp/estado');
+    },
+
+    reiniciarBot: function() {
+        return this.post('/whatsapp/reiniciar', {});
+    },
+
+    // --- 📊 CRM ---
+
+    getCrmResumen: function(id_clinica, fechaInicio, fechaFin) {
+        const rango = (fechaInicio && fechaFin) ? `&fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}` : '';
+        return this.get(`/crm/resumen?id_clinica=${id_clinica}${rango}`);
+    },
+
+    getCrmRecurrencia: function(id_clinica) {
+        return this.get(`/crm/recurrencia?id_clinica=${id_clinica}`);
+    },
+
+    getCrmCanalesOrigen: function(id_clinica, fechaInicio, fechaFin) {
+        const rango = (fechaInicio && fechaFin) ? `&fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}` : '';
+        return this.get(`/crm/canales-origen?id_clinica=${id_clinica}${rango}`);
+    },
+
+    getCrmDemografia: function(id_clinica) {
+        return this.get(`/crm/demografia?id_clinica=${id_clinica}`);
+    },
+
+    getCrmPatologiasZona: function(id_clinica) {
+        return this.get(`/crm/patologias-zona?id_clinica=${id_clinica}`);
+    },
+
+    getCrmPacienteDetalle: function(id_paciente) {
+        return this.get(`/crm/paciente/${id_paciente}`);
+    },
+
+    enviarMensajeCrm: function(id_paciente, mensaje, canal, asunto_email) {
+        return this.post('/crm/mensaje', { id_paciente, mensaje, canal, asunto_email });
+    },
+
+    getCrmSegmento: function(id_clinica, filtros) {
+        const params = new URLSearchParams({ id_clinica, ...filtros });
+        return this.get(`/crm/segmento?${params.toString()}`);
+    },
+
+    enviarCampanaCrm: function(id_pacientes, mensaje, canal, asunto_email) {
+        return this.post('/crm/campana', { id_pacientes, mensaje, canal, asunto_email });
+    },
+
+    getCrmCampanaEstado: function(campaignId) {
+        return this.get(`/crm/campana-estado/${campaignId}`);
+    },
+
+    getCrmRetencionMedicos: function(id_clinica) {
+        return this.get(`/crm/retencion-medicos?id_clinica=${id_clinica}`);
+    },
+
+    getCrmPacientes: function(id_clinica, busqueda) {
+        return this.get(`/crm/pacientes?id_clinica=${id_clinica}&busqueda=${encodeURIComponent(busqueda || '')}`);
+    },
+
+    getCrmCumpleanieros: function(id_clinica, dias) {
+        return this.get(`/crm/cumpleanieros?id_clinica=${id_clinica}&dias=${dias || 0}`);
+    },
+
+    enviarFelicitacionCrm: function(id_paciente) {
+        return this.post('/crm/felicitar', { id_paciente });
     }
 };

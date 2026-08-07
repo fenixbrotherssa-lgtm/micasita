@@ -25,6 +25,30 @@
 </div>
 
 <div class="main-container-fluid">
+    <div class="content-card shadow-sm bot-status-card">
+        <div class="bot-status-info">
+            <div class="icon-box" style="background:#25D366;"><i class="fab fa-whatsapp"></i></div>
+            <div>
+                <h3 style="margin:0;">Bot de WhatsApp</h3>
+                <p style="margin:2px 0 0;" id="bot-estado-texto">
+                    <span class="bot-dot bot-dot-gris"></span> Consultando estado...
+                </p>
+                <small id="bot-db-texto" class="status-text"></small>
+            </div>
+        </div>
+        <button class="btn-secondary-outline" id="btn-reiniciar-bot" onclick="window.reiniciarBotWhatsapp()">
+            <i class="fas fa-rotate-right"></i> Reiniciar Bot
+        </button>
+    </div>
+
+    <div class="content-card shadow-sm bot-qr-card" id="bot-qr-card" style="display:none;">
+        <img id="bot-qr-img" alt="Código QR de WhatsApp">
+        <div>
+            <h3 style="margin:0 0 6px;">Escanea el QR para reconectar</h3>
+            <p style="margin:0; color:#64748b;">Abre WhatsApp en el celular vinculado de la clínica → <strong>Dispositivos vinculados</strong> → <strong>Vincular un dispositivo</strong>, y apunta la cámara aquí.</p>
+        </div>
+    </div>
+
     <div class="content-card shadow-sm">
         <div class="table-responsive">
             <table class="data-table">
@@ -97,7 +121,11 @@
 
                 <div class="form-group full-width">
                     <label><i class="fas fa-tag"></i> Régimen Impositivo (RIMPE)</label>
-                    <input type="text" id="s_regimen_rimpe" placeholder="Ej. CONTRIBUYENTE RÉGIMEN RIMPE">
+                    <select id="s_regimen_rimpe" class="form-control-select">
+                        <option value="">No aplica (Régimen General)</option>
+                        <option value="CONTRIBUYENTE RÉGIMEN RIMPE">CONTRIBUYENTE RÉGIMEN RIMPE</option>
+                        <option value="CONTRIBUYENTE NEGOCIO POPULAR - RÉGIMEN RIMPE">CONTRIBUYENTE NEGOCIO POPULAR - RÉGIMEN RIMPE</option>
+                    </select>
                 </div>
 
                 <div class="form-group full-width">
@@ -128,6 +156,26 @@
                         </div>
                         <input type="file" id="input-logo" style="display:none" accept="image/*" onchange="window.previewImagen(this)">
                     </div>
+                </div>
+
+                <!-- Servicios y Especialidades: antes el bot de WhatsApp los mostraba fijos en
+                     el código; ahora se configuran acá por sede y el bot solo los lee. -->
+                <div class="form-group full-width">
+                    <label><i class="fas fa-stethoscope"></i> Especialidades de esta sede</label>
+                    <div id="s-especialidades-lista" class="chips-lista">
+                        <small style="color:#94a3b8">Cargando catálogo...</small>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:10px;">
+                        <input type="text" id="s-especialidad-nueva" placeholder="Ej. Ortodoncia (si no está en la lista)" style="flex:1;">
+                        <button type="button" class="btn-secondary-outline" onclick="window.agregarEspecialidadNueva()">
+                            <i class="fas fa-plus"></i> Agregar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group full-width">
+                    <label><i class="fas fa-clock"></i> Horarios de Atención</label>
+                    <div id="s-horarios-grid" class="horarios-grid"></div>
                 </div>
             </div>
         </div>
@@ -171,8 +219,37 @@
     #logo-preview { width: 50px; height: 50px; object-fit: contain; background: white; border-radius: 8px; border: 1px solid #e2e8f0; }
     
     .modal-footer { padding: 20px 25px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; }
-    
+
+    /* ESPECIALIDADES (chips) */
+    .chips-lista { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border: 1.5px solid #e2e8f0; border-radius: 10px; background: #f8fafc; min-height: 44px; }
+    .chip-especialidad { display: flex; align-items: center; gap: 6px; background: white; border: 1.5px solid #e2e8f0; border-radius: 20px; padding: 6px 12px; font-size: 0.82rem; cursor: pointer; user-select: none; }
+    .chip-especialidad input { margin: 0; cursor: pointer; }
+    .chip-especialidad.activo { background: #eef2ff; border-color: #4f46e5; color: #4f46e5; font-weight: 600; }
+
+    /* HORARIOS (grilla semanal) */
+    .horarios-grid { border: 1.5px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+    .horario-fila { display: grid; grid-template-columns: 90px 1fr 1fr 90px; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+    .horario-fila:last-child { border-bottom: none; }
+    .horario-fila:nth-child(odd) { background: #fafbfc; }
+    .horario-fila .dia-nombre { font-weight: 600; color: #334155; }
+    .horario-fila input[type="time"] { width: 100%; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.82rem; }
+    .horario-fila input[type="time"]:disabled { background: #f1f5f9; color: #cbd5e1; }
+    .horario-fila label.cerrado-toggle { display: flex; align-items: center; gap: 5px; font-size: 0.78rem; color: #64748b; cursor: pointer; }
+
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ESTADO DEL BOT DE WHATSAPP */
+    .bot-status-card { margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; padding: 20px 25px; }
+    .bot-status-info { display: flex; align-items: center; gap: 15px; }
+    .bot-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+    .bot-dot-verde { background: #22c55e; }
+    .bot-dot-amarillo { background: #f59e0b; }
+    .bot-dot-rojo { background: #ef4444; }
+    .bot-dot-gris { background: #94a3b8; }
+    #btn-reiniciar-bot:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .bot-qr-card { margin-bottom: 20px; display: flex; align-items: center; gap: 25px; padding: 20px 25px; }
+    #bot-qr-img { width: 160px; height: 160px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: white; }
 </style>
 
 <script>

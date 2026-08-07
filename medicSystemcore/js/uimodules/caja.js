@@ -45,9 +45,14 @@
 
                 this.actualizarInterfazSistema();
                 this.calcularDiferenciaGlobal();
+            } else {
+                // ANTES: un error real del backend dejaba la pantalla en su estado
+                // vacío/por defecto sin ninguna explicación de por qué no cargó la caja.
+                Swal.fire('Error', res.message || 'No se pudo cargar el estado de caja.', 'error');
             }
         } catch (err) {
             console.error("❌ Error cargando datos de caja:", err);
+            Swal.fire('Error', 'No se pudo cargar el estado de caja.', 'error');
         }
     },
 

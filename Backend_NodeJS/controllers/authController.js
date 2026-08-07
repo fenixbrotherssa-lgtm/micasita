@@ -86,4 +86,19 @@ const login = async (req, res) => {
     }
 };
 
-module.exports = { login };
+// Sesión deslizante: mientras la app siga en uso (llamando esto antes de que el token
+// de 12h muera), se emite un token nuevo con las mismas 12h de vida. verificarToken ya
+// rechaza tokens vencidos antes de llegar acá, así que solo se puede "renovar" un token
+// que todavía es válido — si la app estuvo cerrada/la PC apagada más de 12h sin refrescar,
+// esto no revive nada y hace falta un login real de nuevo (correcto: no es un bug).
+const refrescarToken = (req, res) => {
+    const { id_usuario, id_rol, id_clinica } = req.usuarioAuth;
+    const token = jwt.sign(
+        { id_usuario, id_rol, id_clinica },
+        JWT_SECRET,
+        { expiresIn: '12h' }
+    );
+    return res.json({ status: "Success", token });
+};
+
+module.exports = { login, refrescarToken };

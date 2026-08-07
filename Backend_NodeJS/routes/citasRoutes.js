@@ -13,6 +13,9 @@ router.get('/listar/:id_clinica', citasController.listarCitas);
 // Ahora valida choque de horario — responde 409 si el doctor ya está ocupado
 router.post('/guardar', citasController.crearCita);
 
+// Reagendar cita existente (fecha/hora/doctor/asunto) — valida choque igual que /guardar
+router.post('/reagendar/:id_cita', citasController.reagendarCita);
+
 // Actualizar estado — acepta: Pendiente, Confirmada, Llegó, En sillón, Atendida, Cancelada
 router.post('/estado/:id_cita', citasController.actualizarEstado);
 

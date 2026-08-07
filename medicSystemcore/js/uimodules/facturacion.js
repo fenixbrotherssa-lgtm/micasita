@@ -32,6 +32,9 @@ window.facturacionModule = {
                 const ultimoPago = res.data[0];
                 const idRef = ultimoPago.ID_Pago || ultimoPago.ID_Facturacion;
                 this.reimprimirDocumento(idRef);
+            } else if (res.status === "Error") {
+                // Un error real del backend se veía igual que "no hay recibos".
+                Swal.fire('Error', res.message || 'No se pudo consultar el historial de recibos.', 'error');
             } else {
                 Swal.fire('Aviso', 'No hay recibos recientes para imprimir.', 'info');
             }
@@ -133,7 +136,7 @@ window.facturacionModule = {
                     Swal.fire('Error', 'Motor de impresión no detectado.', 'error');
                 }
             } else {
-                Swal.fire('Error', 'No se encontró el registro en SQL Server.', 'error');
+                Swal.fire('Error', res.message || 'No se encontró el registro en SQL Server.', 'error');
             }
         } catch (error) {
             Swal.fire('Error', 'Fallo de red al intentar imprimir.', 'error');
@@ -162,7 +165,7 @@ window.facturacionModule = {
                 Swal.close();
                 this.llenarFormularioEmisionSRI(res.datos || res.data, idPago);
             } else {
-                Swal.fire('Error', 'No se pudieron recuperar los detalles del pago.', 'error');
+                Swal.fire('Error', res.message || 'No se pudieron recuperar los detalles del pago.', 'error');
             }
         } catch (error) {
             Swal.fire('Error', 'Error de comunicación con el servidor local.', 'error');

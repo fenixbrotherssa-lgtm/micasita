@@ -26,6 +26,18 @@ const guardarHallazgo = async (req, res) => {
                 
                 const tipoReg = patologias.includes(h.estado) ? 'Inicial' : 'Evolucion';
 
+                // ANTES: esto era un UPSERT puro por (paciente, diente, cara) — un único registro
+                // por cara. Cuando una patología (ej. Caries, tipo 'Inicial') se trataba (ej. se
+                // marcaba Resina, tipo 'Evolucion'), el UPDATE pisaba la MISMA fila y el hallazgo
+                // inicial desaparecía sin dejar rastro — la tarjetita de "Caries" se perdía apenas
+                // se sanaba la pieza. El resto del sistema (ej. obtenerUltimoEstado() en el visor
+                // 3D) ya esperaba poder recibir VARIOS registros por cara ordenados por fecha, o
+                // sea que la intención siempre fue guardar historial, no solo el estado actual.
+                //
+                // Ahora: si ya existe una Evolución para esa cara, se actualiza en el lugar (evita
+                // duplicar en cada "Guardar" repetido). Si no, pero SÍ existe una Inicial con un
+                // estado distinto y lo que llega es una Evolución, se INSERTA una fila nueva —
+                // preservando la Inicial intacta. Cualquier otro caso se comporta como antes.
                 await transaction.request()
                     .input('paciente', sql.Int, h.id_paciente)
                     .input('diente', sql.Int, h.numero_diente)
@@ -37,28 +49,52 @@ const guardarHallazgo = async (req, res) => {
                     .input('obs', sql.NVarChar(sql.MAX), h.observaciones || '')
                     .input('user', sql.Int, h.id_usuario || 1)
                     .query(`
-                        IF EXISTS (SELECT 1 FROM Odontograma WHERE ID_Paciente = @paciente AND Numero_Diente = @diente AND Cara_Diente = @cara)
+                        IF EXISTS (SELECT 1 FROM Odontograma WHERE ID_Paciente = @paciente AND Numero_Diente = @diente AND Cara_Diente = @cara AND Tipo_Registro = 'Evolucion')
                         BEGIN
-                            UPDATE Odontograma SET 
-                                Estado = @estado, 
-                                Tipo_Registro = @tipo, 
+                            UPDATE Odontograma SET
+                                Estado = @estado,
                                 Lado_Cara = @lado,
-                                ID_Plan_Tratamiento = @plan, 
-                                Observaciones = @obs, 
-                                ID_Doctor = @user, 
+                                ID_Plan_Tratamiento = @plan,
+                                Observaciones = @obs,
+                                ID_Doctor = @user,
+                                Fecha = GETDATE()
+                            WHERE ID_Paciente = @paciente AND Numero_Diente = @diente AND Cara_Diente = @cara AND Tipo_Registro = 'Evolucion'
+                        END
+                        ELSE IF @tipo = 'Evolucion' AND EXISTS (SELECT 1 FROM Odontograma WHERE ID_Paciente = @paciente AND Numero_Diente = @diente AND Cara_Diente = @cara AND Tipo_Registro = 'Inicial')
+                        BEGIN
+                            INSERT INTO Odontograma (
+                                ID_Paciente, Numero_Diente, Cara_Diente, Estado,
+                                Tipo_Registro, Lado_Cara, ID_Plan_Tratamiento,
+                                Observaciones, ID_Doctor, Fecha
+                            )
+                            VALUES (
+                                @paciente, @diente, @cara, @estado,
+                                @tipo, @lado, @plan,
+                                @obs, @user, GETDATE()
+                            )
+                        END
+                        ELSE IF EXISTS (SELECT 1 FROM Odontograma WHERE ID_Paciente = @paciente AND Numero_Diente = @diente AND Cara_Diente = @cara)
+                        BEGIN
+                            UPDATE Odontograma SET
+                                Estado = @estado,
+                                Tipo_Registro = @tipo,
+                                Lado_Cara = @lado,
+                                ID_Plan_Tratamiento = @plan,
+                                Observaciones = @obs,
+                                ID_Doctor = @user,
                                 Fecha = GETDATE()
                             WHERE ID_Paciente = @paciente AND Numero_Diente = @diente AND Cara_Diente = @cara
                         END
                         ELSE
                         BEGIN
                             INSERT INTO Odontograma (
-                                ID_Paciente, Numero_Diente, Cara_Diente, Estado, 
-                                Tipo_Registro, Lado_Cara, ID_Plan_Tratamiento, 
+                                ID_Paciente, Numero_Diente, Cara_Diente, Estado,
+                                Tipo_Registro, Lado_Cara, ID_Plan_Tratamiento,
                                 Observaciones, ID_Doctor, Fecha
                             )
                             VALUES (
-                                @paciente, @diente, @cara, @estado, 
-                                @tipo, @lado, @plan, 
+                                @paciente, @diente, @cara, @estado,
+                                @tipo, @lado, @plan,
                                 @obs, @user, GETDATE()
                             )
                         END
@@ -106,6 +142,7 @@ const getOdontogramaPaciente = async (req, res) => {
                     ELSE 0 
                 END AS Es_Sanado
                 FROM Odontograma WHERE ID_Paciente = @id
+                ORDER BY Fecha ASC
             `)
         ]);
 
@@ -126,23 +163,30 @@ const getOdontogramaPaciente = async (req, res) => {
 
 /**
  * 3. ELIMINAR HALLAZGO
+ * cara_diente es opcional: si no se envía, borra TODOS los hallazgos de esa pieza
+ * (usado por la herramienta "Limpiar" del odontograma, que limpia el diente completo).
  */
 const eliminarHallazgo = async (req, res) => {
     const { id_paciente, numero_diente, cara_diente } = req.body;
-    
-    if (!id_paciente || !numero_diente || !cara_diente) {
+
+    if (!id_paciente || !numero_diente) {
         return res.status(400).json({ status: "Error", message: "Faltan parámetros para la eliminación." });
     }
 
     try {
         const pool = await getConnection();
-        await pool.request()
+        const request = pool.request()
             .input('pac', sql.Int, id_paciente)
-            .input('die', sql.Int, numero_diente)
-            .input('cara', sql.VarChar(20), cara_diente)
-            .query("DELETE FROM Odontograma WHERE ID_Paciente = @pac AND Numero_Diente = @die AND Cara_Diente = @cara");
-            
-        res.json({ status: "Success", message: "Registro eliminado correctamente" });
+            .input('die', sql.Int, numero_diente);
+
+        let query = "DELETE FROM Odontograma WHERE ID_Paciente = @pac AND Numero_Diente = @die";
+        if (cara_diente) {
+            request.input('cara', sql.VarChar(20), cara_diente);
+            query += " AND Cara_Diente = @cara";
+        }
+
+        await request.query(query);
+        res.json({ status: "Success", message: "Registro(s) eliminado(s) correctamente" });
     } catch (error) {
         console.error("❌ Error en eliminarHallazgo:", error.message);
         res.status(500).json({ status: "Error", message: error.message });
