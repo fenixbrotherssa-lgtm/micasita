@@ -8,7 +8,12 @@ PLIST="/Library/LaunchDaemons/${LABEL}.plist"
 if [ -f "$PLIST" ]; then
     echo "[AmetraOS] Deteniendo servicio anterior..."
     launchctl unload "$PLIST" 2>/dev/null || true
+    sleep 2
 fi
+
+# Matar Chrome huérfano para que el nuevo arranque no falle con "browser already running"
+pkill -f "Google Chrome" 2>/dev/null || true
+sleep 1
 
 # Preservar sesión de WhatsApp durante actualizaciones
 SESSION_SRC="/Library/AmetraOS/backend/sessions"

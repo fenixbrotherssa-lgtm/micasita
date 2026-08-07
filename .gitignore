@@ -7,6 +7,8 @@
 **/.env.local
 **/.env.production
 # (si quieres subir un ejemplo sin datos reales, crea .env.example)
+Backend_NodeJS/secrets/
+Backend_NodeJS/installer/mac/respaldo-cloud.conf
 
 # ─── Outputs de compilación ─────────────────────────────────
 Backend_NodeJS/dist/

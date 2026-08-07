@@ -1,0 +1,15 @@
+# Copiar a /Library/AmetraOS/respaldo-cloud.conf en el Mac del cliente
+# (o a la ruta que indique $AMETRA_BACKUP_CONFIG) y completar con los
+# valores reales. Este archivo NUNCA debe llevar credenciales reales ni
+# commitearse — solo sirve de plantilla.
+
+DB_NAME="SistemaOdonto_Pro"
+FOLDER_ID="ID_DE_CARPETA_DRIVE"
+HORA_RESPALDO="21"   # hora en formato 24h
+USER_SQL="sa"
+PASS_SQL="CONTRASEÑA_SQL_DEL_CLIENTE"
+
+# GOOGLE OAUTH (proyecto de Google Cloud para el backup a Drive)
+CLIENT_ID="TU_CLIENT_ID.apps.googleusercontent.com"
+CLIENT_SECRET="TU_CLIENT_SECRET"
+REFRESH_TOKEN="TU_REFRESH_TOKEN"
