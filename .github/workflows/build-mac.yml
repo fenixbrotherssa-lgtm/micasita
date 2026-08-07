@@ -45,6 +45,7 @@ jobs:
           cp -r controllers  dist-src/
           cp -r middlewares  dist-src/
           cp -r routes       dist-src/
+          cp -r scripts      dist-src/
           cp -r services     dist-src/
 
       - name: Ofuscar dist-src/ → dist/ (mantiene jerarquía)
@@ -124,6 +125,9 @@ jobs:
 
           # Assets estáticos (three.js, GLTFLoader, pdf.js, qrcode, etc.)
           cp -r Backend_NodeJS/assets pkg-root/Library/AmetraOS/backend/
+
+          # Datos de OCR (modelos entrenados de Tesseract, no son JS: no pasan por el ofuscador)
+          cp -r Backend_NodeJS/ocr-data pkg-root/Library/AmetraOS/backend/
 
           # Estructura vacía de uploads (el servidor la crea si no existe, pero la dejamos)
           mkdir -p pkg-root/Library/AmetraOS/backend/uploads
