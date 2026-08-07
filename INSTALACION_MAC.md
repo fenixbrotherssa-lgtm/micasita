@@ -14,6 +14,30 @@ Cada descarga llega como `.zip`. Descomprimirlo para obtener el `.pkg` o `.dmg` 
 
 ---
 
+## Instalación automatizada (recomendado)
+
+Para un cliente nuevo, en vez de seguir todos los pasos manuales de abajo, armar una carpeta con:
+
+```
+AmetraOS-Backend-Mac/*.pkg
+AmetraOS-Desktop-Mac/*.dmg       (arm64 y/o Intel, detecta el chip solo)
+secrets/firebase-service-account.json
+*.bak                             (backup de la base del cliente)
+BASE_MAESTRA_NACIONAL.csv
+```
+
+y correr, parado adentro de esa carpeta:
+
+```bash
+sudo bash Backend_NodeJS/installer/mac/instalar-cliente-mac.sh
+```
+
+Instala Homebrew, Node, OrbStack, crea y configura el contenedor de SQL Server, restaura el backup, instala el backend y el frontend, y deja el inicio automático configurado — pidiendo por prompt solo lo que no se puede automatizar (contraseña SQL, escaneo de WhatsApp). Es idempotente: correrlo de nuevo sobre una instalación existente no rompe nada, solo salta lo que ya está.
+
+Los pasos manuales de abajo quedan como referencia/diagnóstico para cuando algo puntual falla.
+
+---
+
 ## Requisitos previos (instalar una sola vez)
 
 ### 1. Node.js 24
@@ -52,14 +76,14 @@ Con OrbStack corriendo, abrir **Terminal** y pegar este comando completo:
 ```bash
 docker run -d --name ametra-db \
   -e "ACCEPT_EULA=Y" \
-  -e "SA_PASSWORD=Daviana06101988!" \
+  -e "SA_PASSWORD=<TU_CONTRASEÑA_SQL>" \
   -e "MSSQL_PID=Express" \
   -p 1433:1433 \
   --restart always \
   mcr.microsoft.com/mssql/server:2025-latest
 ```
 
-> **Nota sobre la contraseña:** En Mac, SQL Server exige contraseñas con mayúsculas, minúsculas, números y un símbolo especial. Se usa `Daviana06101988!` (con D mayúscula y ! al final). Esta contraseña se configura también en el archivo .env del backend.
+> **Nota sobre la contraseña:** SQL Server exige mayúsculas, minúsculas, números y un símbolo especial. Elegir una acá y usar la misma en el archivo `.env` del backend (el script automatizado la pide una sola vez y completa ambos lugares solo).
 
 Verificar que el contenedor arrancó:
 ```bash
@@ -102,7 +126,7 @@ El Mac pide contraseña de administrador. Editar los valores:
 ```
 PORT=8000
 DB_USER=sa
-DB_PASSWORD=Daviana06101988!
+DB_PASSWORD=<TU_CONTRASEÑA_SQL>
 DB_SERVER=127.0.0.1
 DB_NAME=SistemaOdonto_Pro
 POLITICA_API_KEY=<pegar la clave de Gemini>
@@ -135,7 +159,7 @@ docker cp ~/Desktop/SistemaOdonto_Pro_PROD_v1.bak ametra-db:/tmp/
 ```bash
 # 2. Restaurar la base de datos (tarda unos minutos según el tamaño)
 docker exec -it ametra-db /opt/mssql-tools18/bin/sqlcmd \
-  -S localhost -U sa -P "Daviana06101988!" -No \
+  -S localhost -U sa -P "<TU_CONTRASEÑA_SQL>" -No \
   -Q "RESTORE DATABASE [SistemaOdonto_Pro] FROM DISK = '/tmp/SistemaOdonto_Pro_PROD_v1.bak' WITH REPLACE"
 ```
 
@@ -272,7 +296,7 @@ OrbStack usa significativamente menos RAM que Docker Desktop (gestión automáti
 
 ```bash
 docker exec -it ametra-db /opt/mssql-tools18/bin/sqlcmd \
-  -S localhost -U sa -P "Daviana06101988!" -No \
+  -S localhost -U sa -P "<TU_CONTRASEÑA_SQL>" -No \
   -Q "EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'max server memory (MB)', 1024; RECONFIGURE;"
 ```
 
