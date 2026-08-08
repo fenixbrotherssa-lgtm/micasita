@@ -3,6 +3,10 @@ name: Build macOS
 on:
   push:
     branches: [main]
+    paths:
+      - 'Backend_NodeJS/**'
+      - 'medicSystemcore/**'
+      - '.github/workflows/build-mac.yml'
   workflow_dispatch:
 
 env:
