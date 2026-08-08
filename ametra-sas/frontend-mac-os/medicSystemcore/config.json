@@ -1,6 +1,6 @@
 {
   "URL_PRODUCCION": "https://ametra.casrodsoft.com/api",
   "URL_DESARROLLO": "http://127.0.0.1:8000/api",
-  "PUBLIC_DOMAIN": "https://ametra.casrodsoft.com",
+  "PUBLIC_DOMAIN": "https://recetas.casrodsoft.com",
   "MODO_DEBUG": false
 }
