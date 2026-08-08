@@ -11,8 +11,10 @@ Backend_NodeJS/secrets/
 Backend_NodeJS/installer/mac/respaldo-cloud.conf
 
 # ─── Outputs de compilación ─────────────────────────────────
-Backend_NodeJS/dist/
-medicSystemcore/dist/
+# Recursivo a propósito: cubre Backend_NodeJS/dist, medicSystemcore/dist, y también
+# ametra-sas/frontend-mac-os/medicSystemcore/dist y ametra-sas/ametra-mobile/dist sin
+# tener que enumerar cada ubicación a mano.
+**/dist/
 
 # ─── Chrome de Puppeteer (se descarga al correr el servidor) ─
 Backend_NodeJS/.cache/
@@ -51,3 +53,24 @@ desktop.ini
 
 # ─── Logs ───────────────────────────────────────────────────
 *.log
+
+# ─── Copia de referencia descartable (no es parte del proyecto) ─
+verison-windows-onpremise/
+
+# ─── ametra-sas: nuevo proyecto SaaS (mismas reglas que arriba) ─
+ametra-sas/Backend_NodeJS/secrets/
+ametra-sas/Backend_NodeJS/secure_storage/
+ametra-sas/Backend_NodeJS/uploads/
+ametra-sas/Backend_NodeJS/sessions/
+ametra-sas/Backend_NodeJS/.wwebjs_cache/
+ametra-sas/Backend_NodeJS/.wwebjs_auth/
+ametra-sas/Backend_NodeJS/BASE_MAESTRA_NACIONAL.csv
+ametra-sas/templates/
+ametra-sas/*.bak
+
+# ─── Carpeta de armado manual para instalar en clientes Mac (INSTRUCCIONES.md) ──────
+# Trae un backup REAL de producción (.bak), secrets/ (firebase-service-account.json) y
+# los .pkg/.dmg bajados de GitHub Actions — nada de esto es código fuente, y el .bak en
+# particular tiene datos reales de pacientes. Nunca va al repo.
+ultimaversion/
+ultimaversion.zip

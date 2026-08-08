@@ -1,0 +1,137 @@
+<div class="view-container" style="padding: 20px; height: 100%; box-sizing: border-box;">
+    <header class="view-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <button onclick="window.router.load('dashboard')" 
+    style="background: #4f46e5; color: white; border: none; width: 50px; height: 50px; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);"
+    onmouseover="this.style.transform='translateY(-2px)';" 
+    onmouseout="this.style.transform='translateY(0)';"
+    title="Regresar al Dashboard">
+    <i class="fas fa-arrow-left" style="font-size: 1.2rem;"></i>
+</button>
+            
+            <div style="border-left: 3px solid #3b82f6; padding-left: 20px;">
+                <h1 style="margin: 0; color: #4f46e5; font-size: 1.6rem; letter-spacing: -0.5px;"><i class="fas fa-user-md"></i> Gestión de Personal</h1>
+                <p style="margin: 5px 0; color: #64748b; font-size: 0.95rem; font-weight: 500;">Control total de accesos y perfiles del sistema.</p>
+            </div>
+        </div>
+
+        <button class="btn-action" style="background: #4f46e5; color: white; padding: 10px 22px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);" id="btn-nuevo-usuario">
+            <i class="fas fa-plus-circle"></i> NUEVO USUARIO
+        </button>
+    </header>
+
+    <div class="table-card" style="background: white; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #e2e8f0;">
+        <table id="tabla-usuarios" style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
+                <tr>
+                    <th style="padding: 18px 15px; color: #1e293b; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Cédula</th>
+                    <th style="padding: 18px 15px; color: #1e293b; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Apellidos y Nombres</th>
+                    <th style="padding: 18px 15px; color: #1e293b; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Usuario</th>
+                    <th style="padding: 18px 15px; color: #1e293b; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Rol</th>
+                    <th style="padding: 18px 15px; color: #1e293b; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Clínica</th>
+                    <th style="padding: 18px 15px; color: #1e293b; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Estado</th>
+                    <th style="padding: 18px 15px; color: #1e293b; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="lista-usuarios-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modal-usuario" class="modal" style="display:none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 9999; align-items: center; justify-content: center;">
+    <div class="modal-content" style="background: white; padding: 30px; border-radius: 16px; width: 550px; max-width: 95%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); position: relative; max-height: 90vh; overflow-y: auto;">
+        <h2 id="modal-titulo" style="margin-top: 0; color: #0f172a; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; font-size: 1.4rem; font-weight: 800;">Configuración de Usuario</h2>
+        
+        <form id="form-usuario" style="margin-top: 20px;">
+            <input type="hidden" id="user-id">
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #334155; font-size: 0.85rem;">Número de Cédula</label>
+                    <input type="text" id="user-cedula" required placeholder="Ej. 1712345678" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; outline: none; font-weight: 600;">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #4f46e5; font-size: 0.85rem;"><i class="fas fa-id-card-alt"></i> Registro Sanitario / MSP</label>
+                    <input type="text" id="user-registro" placeholder="Opcional para médicos" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; box-sizing: border-box; outline: none; font-weight: 600;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #334155; font-size: 0.85rem;">Nombres</label>
+                    <input type="text" id="user-nombres" required placeholder="Ej. Juan Manuel" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #334155; font-size: 0.85rem;">Apellidos</label>
+                    <input type="text" id="user-apellidos" required placeholder="Ej. Pérez Castro" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #334155; font-size: 0.85rem;">Nombre de Usuario</label>
+                    <input type="text" id="user-username" required placeholder="Usuario login" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #334155; font-size: 0.85rem;">Contraseña</label>
+                    <input type="password" id="user-pass" placeholder="Nueva o actual" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #334155; font-size: 0.85rem;">Rol de Acceso</label>
+                    <select id="user-rol" required style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; background: white; box-sizing: border-box; cursor: pointer;">
+                        <option value="1">Administrador Global</option>
+                        <option value="2">Asistente Administrativo</option>
+                        <option value="3">Médico / Especialista</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; font-weight: 700; margin-bottom: 5px; color: #334155; font-size: 0.85rem;">Sede Asignada</label>
+                    <select id="user-clinica" required style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; background: white; box-sizing: border-box; cursor: pointer;">
+                        </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #1e293b;">
+                    <input type="checkbox" id="user-activo" checked style="width: 18px; height: 18px; accent-color: #10b981;"> 
+                    <span style="font-size: 0.9rem; font-weight: 600;">Estado de cuenta Activo</span>
+                </label>
+            </div>
+
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 12px; border-top: 2px solid #f1f5f9; padding-top: 20px;">
+                <button type="button" class="btn-action" style="background: #64748b; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;" onclick="window.usuariosModule.cerrarModal()">CANCELAR</button>
+                <button type="submit" class="btn-action" style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-save"></i> GUARDAR USUARIO
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    #tabla-usuarios td {
+        padding: 14px 15px;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.9rem;
+        color: #334155;
+        vertical-align: middle;
+    }
+    .btn-action {
+        transition: all 0.2s ease;
+    }
+    .btn-action:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .btn-action:active {
+        transform: translateY(0);
+    }
+    input:focus, select:focus {
+        border-color: #4f46e5 !important;
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+</style>

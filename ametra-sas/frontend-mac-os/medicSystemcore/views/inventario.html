@@ -1,0 +1,201 @@
+<div class="inventario-wrapper" style="padding: 25px; animation: fadeIn 0.4s ease; background: #f8fafc; min-height: 100vh; font-family: 'Inter', sans-serif;">
+    
+    <div class="nav-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div class="nav-left" onclick="window.router.load('dashboard')" style="cursor:pointer; display: flex; align-items: center; gap: 12px;">
+            <div style="background: #4f46e5; color: white; padding: 10px; border-radius: 10px;">
+                <i class="fas fa-arrow-left"></i>
+            </div>
+            <div>
+                <span style="font-weight: 800; color: #1e293b; font-size: 1.2rem; display: block;">INVENTARIO ESTRATÉGICO</span>
+                <span id="display-usuario-nombre" style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase;">CARGANDO RESPONSABLE...</span>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <select id="inv-filter-sede" onchange="window.inventarioModule.cargarInventario()" style="padding: 10px 15px; border-radius: 12px; border: 1px solid #e2e8f0; font-weight: 700; color: #1e293b; background: #f8fafc; cursor: pointer;">
+                <option value="">CARGANDO SEDES...</option>
+            </select>
+            
+            <!-- Reporte PDF: visible para todos los roles -->
+            <button id="btn-reporte-pdf" onclick="window.inventarioModule.descargarReporte()" style="background: #ffffff; color: #ef4444; border: 1px solid #fee2e2; padding: 12px 20px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.3s;">
+                <i class="fas fa-file-pdf"></i> REPORTE PDF
+            </button>
+
+            <!-- NUEVO INGRESO: solo visible para admin (rol 1). El JS lo oculta en init() -->
+            <button id="btn-nuevo-ingreso" onclick="window.inventarioModule.abrirModal()" style="background: #1e293b; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(30,41,59,0.3);">
+                <i class="fas fa-plus"></i> NUEVO INGRESO
+            </button>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 300px 1fr; gap: 25px;">
+        <div class="sidebar-filters">
+            <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; position: sticky; top: 20px;">
+                <p style="margin: 0 0 15px 0; color: #64748b; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;">Clasificación de Activos</p>
+                
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button class="inv-tab-btn active-tab" id="btn-tab-activo" onclick="window.inventarioModule.switchTab('ACTIVO', this)" style="display: flex; align-items: center; justify-content: space-between; padding: 18px; border: none; border-radius: 16px; font-weight: 700; cursor: pointer; transition: 0.3s;">
+                        <span><i class="fas fa-couch" style="margin-right:10px;"></i> Activos Fijos</span>
+                        <i class="fas fa-chevron-right" style="font-size: 10px; opacity: 0.5;"></i>
+                    </button>
+                    
+                    <button class="inv-tab-btn" id="btn-tab-pasivo" onclick="window.inventarioModule.switchTab('PASIVO', this)" style="display: flex; align-items: center; justify-content: space-between; padding: 18px; border: none; border-radius: 16px; font-weight: 700; cursor: pointer; transition: 0.3s;">
+                        <span><i class="fas fa-box-open" style="margin-right:10px;"></i> Insumos</span>
+                        <i class="fas fa-chevron-right" style="font-size: 10px; opacity: 0.5;"></i>
+                    </button>
+                </div>
+
+                <!-- Alertas críticas: solo relevante para admin. El JS lo oculta si es doctor -->
+                <div id="box-alertas-criticas" style="margin-top: 30px; padding: 20px; background: #fff1f2; border-radius: 18px; border: 1px solid #ffe4e6; text-align: center;">
+                    <span style="display:block; color: #be123c; font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">Alertas Críticas</span>
+                    <h3 id="count-alertas" style="margin: 5px 0; color: #9f1239; font-size: 2.2rem; font-weight: 900;">0</h3>
+                    <p style="margin:0; font-size: 11px; color: #be123c; font-weight: 600;">Items requieren reposición</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="background: white; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; overflow: hidden; min-height: 500px;">
+            <div id="contenedor-tabla-inventario"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL: NUEVO INGRESO / EDICIÓN / REPOSICIÓN
+     Solo accesible para admin — el botón que lo abre
+     ya queda oculto para doctores desde init()
+     ══════════════════════════════════════════════════════ -->
+<div id="modal-inventario-pro" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: white; width: 650px; border-radius: 28px; padding: 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); animation: zoomIn 0.3s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div>
+                <h2 id="modal-titulo" style="margin:0; font-weight:900; color:#1e293b; font-size:1.6rem; letter-spacing: -0.5px;">Nuevo Registro</h2>
+                <p style="margin:0; font-size:13px; color:#64748b; font-weight: 500;">Gestión de activos e insumos para auditoría.</p>
+            </div>
+            <button onclick="window.inventarioModule.cerrarModal()" style="background: #f1f5f9; border: none; width: 40px; height: 40px; border-radius: 14px; cursor: pointer; color: #64748b;"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <form id="form-registro-inv" onsubmit="event.preventDefault(); window.inventarioModule.guardar();" style="display: flex; flex-direction: column; gap: 20px;">
+            <input type="hidden" id="inv-id-edit" value="">
+
+            <!-- Selector de sede: visible solo para admin (rol 1), controlado en cargarClinicas() -->
+            <div id="wrapper-seleccionar-sede-modal" style="display:none; padding: 15px; background: #fff7ed; border-radius: 16px; border: 1px solid #ffedd5;">
+                <label style="display:block; font-size:11px; font-weight:800; color:#c2410c; margin-bottom:8px; text-transform:uppercase;">Asignar a Sede / Sucursal</label>
+                <select id="inv-id-clinica-modal" style="width:100%; padding:12px; border-radius:12px; border:2px solid #fdba74; font-weight:700; background: white; outline: none;">
+                </select>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:800; color:#475569; margin-bottom:8px; text-transform:uppercase;">Tipo de Recurso *</label>
+                    <select id="inv-tipo" onchange="window.inventarioModule.toggleCampos()" style="width:100%; padding:14px; border-radius:14px; border:2px solid #f1f5f9; font-weight:700; background: #f8fafc; outline: none;">
+                        <option value="ACTIVO">ACTIVO FIJO (Muebles / Equipos)</option>
+                        <option value="PASIVO">INSUMO (Material Gastable)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:800; color:#475569; margin-bottom:8px; text-transform:uppercase;">Nombre del Item *</label>
+                    <input type="text" id="inv-nombre" required placeholder="Ej: Resina 3M A2" style="width:92%; padding:14px; border-radius:14px; border:2px solid #f1f5f9; font-weight: 600; outline: none;">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:800; color:#475569; margin-bottom:8px;">COSTO UNITARIO ($)</label>
+                    <input type="number" step="0.01" id="inv-precio" required placeholder="0.00" style="width:82%; padding:14px; border-radius:14px; border:2px solid #f1f5f9; font-weight: 700; color: #059669;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:800; color:#475569; margin-bottom:8px;">CANTIDAD</label>
+                    <input type="number" id="inv-cantidad" required placeholder="1" style="width:82%; padding:14px; border-radius:14px; border:2px solid #f1f5f9; font-weight: 700;">
+                </div>
+                <!-- Stock mínimo: solo aplica a PASIVO. toggleCampos() lo muestra/oculta -->
+                <div id="box-stock-min">
+                    <label style="display:block; font-size:11px; font-weight:800; color:#ef4444; margin-bottom:8px;">ALERTA MÍNIMA</label>
+                    <input type="number" id="inv-minimo" value="5" style="width:82%; padding:14px; border-radius:14px; border:2px solid #fee2e2; background: #fff1f2; font-weight: 700; color: #b91c1c;">
+                </div>
+            </div>
+
+            <!-- Sección auditoría: solo visible para ACTIVO. toggleCampos() la muestra/oculta -->
+            <div id="seccion-activo" style="padding: 20px; background: #f8fafc; border-radius: 18px; border: 1px dashed #cbd5e1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label style="display:block; font-size:10px; font-weight:800; color:#64748b; margin-bottom:8px; text-transform:uppercase;">Documento / Factura</label>
+                    <input type="text" id="inv-factura" placeholder="Ej: FAC-8829" style="width:88%; padding:12px; border-radius:12px; border:1px solid #cbd5e1;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:10px; font-weight:800; color:#64748b; margin-bottom:8px; text-transform:uppercase;">Fecha de Compra</label>
+                    <input type="date" id="inv-fecha-compra" style="width:88%; padding:12px; border-radius:12px; border:1px solid #cbd5e1;">
+                </div>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <button type="submit" style="width: 100%; background:#4f46e5; color:white; border:none; padding:18px; border-radius:18px; font-weight:800; cursor:pointer; font-size:1rem; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4); transition: 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                    <i class="fas fa-check-circle"></i> GUARDAR EN INVENTARIO
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes zoomIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    
+    .inv-tab-btn { background: transparent; color: #64748b; border: none; }
+    .inv-tab-btn.active-tab { 
+        background: #eff6ff !important; 
+        color: #1e40af !important; 
+        border-left: 4px solid #1e40af !important; 
+    }
+    
+    input:focus, select:focus { 
+        border-color: #4f46e5 !important; 
+        background: white !important; 
+        outline: none;
+    }
+    
+    #contenedor-tabla-inventario tr { transition: all 0.2s ease; }
+    #contenedor-tabla-inventario tr:hover { 
+        transform: scale(1.002); 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+    }
+
+    @media print { .no-print { display: none !important; } }
+</style>
+
+<script>
+    // ══════════════════════════════════════════════════════════════════════
+    // INICIALIZACIÓN DEL MÓDULO
+    // Espera a que el DOM esté listo y llama a inventarioModule.init()
+    // init() lee el rol de la sesión y:
+    //   - Oculta #btn-nuevo-ingreso si el usuario NO es admin (rol !== '1')
+    //   - Oculta #box-alertas-criticas para doctores
+    //   - Renderiza el panel de stock personal del doctor
+    //   - Restringe botones de editar/eliminar en la tabla (lógica en renderizar())
+    // ══════════════════════════════════════════════════════════════════════
+    (function () {
+        function arrancar() {
+            if (!window.inventarioModule) {
+                return setTimeout(arrancar, 80);
+            }
+
+            window.inventarioModule.init().then(function () {
+                const sesionRaw = localStorage.getItem('usuario_sesion');
+                if (!sesionRaw) return;
+                const sesion = JSON.parse(sesionRaw);
+                const idRol  = String(sesion.ID_Rol || sesion.id_rol || '');
+                const esAdmin = idRol === '1';
+
+                // Ocultar "NUEVO INGRESO" para doctores
+                const btnNuevo = document.getElementById('btn-nuevo-ingreso');
+                if (btnNuevo) btnNuevo.style.display = esAdmin ? 'flex' : 'none';
+
+                // Ocultar bloque de alertas críticas para doctores
+                // (no tiene sentido de negocio mostrarle al doctor cuántos ítems
+                //  hay por reponer en el inventario general)
+                const boxAlertas = document.getElementById('box-alertas-criticas');
+                if (boxAlertas) boxAlertas.style.display = esAdmin ? 'block' : 'none';
+            });
+        }
+        arrancar();
+    })();
+</script>
