@@ -417,6 +417,7 @@ window._reimprimir024 = async function(idConsentimiento, idPaciente) {
             clinica,
             especialidad:           ci.Especialidad        || '',   // ← NUEVO
             observaciones:          ci.Observaciones       || '',   // ← NUEVO
+            motivo_consulta:        ci.Motivo_Consulta     || '',
             representante,                                           // ← NUEVO
             requiere_representante: tieneRepresentante ? 1 : 0,     // ← NUEVO
             consentimiento: {
@@ -2180,7 +2181,18 @@ function svgPieza(num) {
         </g>` : ''}
 
       ${esOrtodoncia ? `<rect x="2" y="19" width="${w-4}" height="3" fill="#6366f1" opacity="0.6"/><rect x="2" y="${h-7}" width="${w-4}" height="3" fill="#6366f1" opacity="0.6"/>` : ''}
+      ${marcasPiezaSVG(lista)}
     </g>`;
+}
+
+// Endodoncia (triángulo MSP-033), perno/núcleo e implante — mismas marcas que el odontograma 2D.
+function marcasPiezaSVG(lista) {
+    const tiene = (est) => lista.some(x => x.Estado === est);
+    let g = '';
+    if (tiene('Implante')) g += `<rect x="39" y="8" width="22" height="84" rx="5" fill="#cbd5e1" stroke="#475569" stroke-width="3"/><path d="M33 22 H67 M33 34 H67 M33 46 H67 M33 58 H67 M33 70 H67 M35 82 H65" stroke="#475569" stroke-width="4"/>`;
+    if (tiene('Perno')) g += `<rect x="45" y="6" width="10" height="66" rx="2" fill="#334155"/><rect x="35" y="36" width="30" height="24" rx="3" fill="#94a3b8" stroke="#1e293b" stroke-width="3"/>`;
+    if (tiene('Endodoncia')) g += `<polygon points="50,18 80,74 20,74" fill="none" stroke="#7c3aed" stroke-width="8" stroke-linejoin="round"/>`;
+    return g ? `<g transform="translate(4,19) scale(0.44,0.39)">${g}</g>` : '';
 }
 
 function generarFila(nums, xStart) {
@@ -2227,7 +2239,9 @@ const svgOdontograma = `
         const leyendaItems = [
             { color: COLORES.caries,             label: 'Caries' },
             { color: COLORES.resina,             label: 'Resina' },
-            { color: COLORES.endodoncia,         label: 'Endodoncia' },
+            { color: COLORES.endodoncia,         label: 'Endodoncia (▲)' },
+            { color: '#334155',                  label: 'Perno / núcleo' },
+            { color: '#cbd5e1',                  label: 'Implante' },
             { color: COLORES.corona,             label: 'Corona' },
             { color: COLORES.protesis_fija,      label: 'Prótesis Fija' },
             { color: COLORES.protesis_removible, label: 'Prótesis Removible' },

@@ -32,6 +32,7 @@ else
     rm -rf "$INSTALL_DIR/backend/services"
     rm -rf "$INSTALL_DIR/backend/node_modules"
     rm -f  "$INSTALL_DIR/backend/server.js"
+    rm -f  "$INSTALL_DIR/backend/arranque.js"
     rm -f  "$INSTALL_DIR/backend/package.json"
     echo "[AmetraOS] Código eliminado. Los datos (uploads, .env) se conservaron en $INSTALL_DIR"
 fi

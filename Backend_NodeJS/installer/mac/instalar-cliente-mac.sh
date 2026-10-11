@@ -8,6 +8,7 @@
 #   AmetraOS-Backend-Mac/*.pkg
 #   AmetraOS-Desktop-Mac/*.dmg       (arm64 y/o Intel — se detecta el chip solo)
 #   secrets/firebase-service-account.json
+#   secrets/ametra-checkin.key   (opcional: registro de instalaciones)
 #   *.bak                             (backup de la base de datos del cliente)
 #   BASE_MAESTRA_NACIONAL.csv
 #
@@ -213,6 +214,19 @@ if [ -n "$FIREBASE_FILE" ]; then
     echo "✓ Credencial de Firebase copiada."
 else
     echo "AVISO: no encontré secrets/firebase-service-account.json — el módulo de notificaciones push no va a arrancar hasta agregarla."
+fi
+
+# Clave del registro de instalaciones (casrodsoft.com/admin/instalaciones). Sin ella el
+# sistema funciona igual, solo no se reporta en el panel.
+CHECKIN_FILE=$(find "$INPUT_DIR" -maxdepth 3 -iname "ametra-checkin.key" 2>/dev/null | head -1)
+if [ -n "$CHECKIN_FILE" ]; then
+    mkdir -p "$INSTALL_DIR/secrets"
+    cp "$CHECKIN_FILE" "$INSTALL_DIR/secrets/ametra-checkin.key"
+    chown root:wheel "$INSTALL_DIR/secrets/ametra-checkin.key"
+    chmod 600 "$INSTALL_DIR/secrets/ametra-checkin.key"
+    echo "✓ Clave del registro de instalaciones copiada."
+else
+    echo "AVISO: no encontré secrets/ametra-checkin.key — esta instalación no aparecerá en el panel de instalaciones."
 fi
 
 # ── 9. Reiniciar y verificar backend ─────────────────────────────────────────

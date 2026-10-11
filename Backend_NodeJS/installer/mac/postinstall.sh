@@ -86,7 +86,7 @@ cat > "$PLIST_DEST" << PLISTEOF
     <key>ProgramArguments</key>
     <array>
         <string>${NODE_BIN}</string>
-        <string>${INSTALL_DIR}/server.js</string>
+        <string>${INSTALL_DIR}/arranque.js</string>
     </array>
     <key>WorkingDirectory</key>
     <string>${INSTALL_DIR}</string>

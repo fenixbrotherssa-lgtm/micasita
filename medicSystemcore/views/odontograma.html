@@ -194,6 +194,15 @@
 .zona-raiz.fractura { background: var(--medical-red); border: 2px dashed #fff; color: transparent; }
 .zona-raiz.endodoncia { background: var(--medical-purple); border: none; color: transparent; }
 .zona-raiz.raiz { background: #7c2d12; border: none; color: transparent; }
+
+/* MARCAS DE PIEZA COMPLETA (endodoncia / perno / implante) — capa encima del diagrama,
+   no captura clics (los clics siguen llegando a las caras del SVG de abajo). */
+.diente-marcas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+.diente-marcas g { display: none; }
+.tiene-endo .marca-endo,
+.tiene-perno .marca-perno,
+.tiene-implante .marca-implante { display: inline; }
+.tiene-implante .zona-raiz { background: repeating-linear-gradient(90deg, #94a3b8 0 3px, #475569 3px 5px); border: none; color: transparent; }
 </style>
 
 <div class="odo-container">
@@ -246,7 +255,9 @@
             </div>
         </div>
 
-        <button class="btn-tool-odo" style="background:var(--medical-purple)" onclick="setToolOdo('Endodoncia',this)">Endo.</button>
+        <button class="btn-tool-odo" style="background:var(--medical-purple)" onclick="setToolOdo('Endodoncia',this)" title="Endodoncia (pieza completa): triángulo MSP-033 + conducto en 3D">Endo.</button>
+        <button class="btn-tool-odo" style="background:#475569" onclick="setToolOdo('Perno',this)" title="Perno / núcleo intrarradicular (pieza completa)">Perno</button>
+        <button class="btn-tool-odo" style="background:#64748b; border:2px solid #cbd5e1" onclick="setToolOdo('Implante',this)" title="Implante (reemplaza la raíz; rehabilita una pieza ausente)">Implante</button>
         <button class="btn-tool-odo" style="background:var(--medical-cyan)" onclick="setToolOdo('Sellante',this)">Sellante</button>
         <button class="btn-tool-odo" style="background:var(--medical-red); opacity:0.8" onclick="setToolOdo('Periodontitis',this)">Periodon.</button>
         <button class="btn-tool-odo" style="background:var(--medical-green); border:2px solid white" onclick="setToolOdo('Supernumerario',this)">Supern.</button>

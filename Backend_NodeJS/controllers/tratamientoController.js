@@ -6,6 +6,10 @@ const crypto = require('crypto'); // nativo de Node, no requiere npm install
  * Estas constantes y funciones detectan si un tratamiento debe pintar el dibujo
  */
 const mapaEstadosOdo = {
+    // Implante y perno van primero: "Corona sobre implante" o "Perno y corona" deben
+    // marcar el implante/perno (lo específico), no solo una corona.
+    'implante': 'Implante',
+    'perno': 'Perno',
     'resina': 'Resina',
     'calza': 'Resina',
     'restauracion': 'Resina',
@@ -14,7 +18,6 @@ const mapaEstadosOdo = {
     'conducto': 'Endodoncia',
     'endodoncia': 'Endodoncia',
     'corona': 'Corona',
-    'perno': 'Corona',
     'sellante': 'Sellante',
     'carilla': 'Carilla Resina',
     // Antes faltaban por completo — un tratamiento de prótesis/puente/implante en una pieza
@@ -23,8 +26,7 @@ const mapaEstadosOdo = {
     // IMPLANTES). Estos 3 estados ya existen en ESTADOS_REHABILITACION del frontend.
     'protesis': 'Protesis',
     'protésica': 'Protesis',
-    'puente': 'Puente',
-    'implante': 'Implante'
+    'puente': 'Puente'
 };
 
 const obtenerEstadoVisual = (nombre) => {
@@ -35,6 +37,12 @@ const obtenerEstadoVisual = (nombre) => {
     }
     return null;
 };
+
+// Endodoncia, perno e implante son de la pieza completa, no de una cara: cada uno tiene su
+// propia "cara" fija en el Odontograma (así una pieza puede tener endodoncia + perno + corona
+// a la vez sin que un registro pise al otro). Devuelve null para el resto de estados.
+const CARA_FIJA_POR_ESTADO = { 'Endodoncia': 'Raiz', 'Perno': 'Perno', 'Implante': 'Implante' };
+const caraFijaPorEstado = (estado) => CARA_FIJA_POR_ESTADO[estado] || null;
 
 // El formulario manual de Tratamiento (checkboxes V/M/D/P/L/O, tanto en medicSystemcore como
 // en la app móvil) guarda la letra corta tal cual en Odontograma.Cara_Diente. Pero el visor
@@ -177,7 +185,8 @@ const asignarTratamientosLote = async (req, res) => {
         consentimiento_revocatoria,
         especialidad,      // ← nuevo: especialidad (autodetectada/editable desde el front)
         observaciones,     // ← nuevo: observaciones libres del profesional
-        representante,     // ← nuevo: { nombre, cedula, parentesco } (menor/no apto)
+        motivo_consulta,   // ← nuevo: motivo de la consulta (sale en el MSP-024)
+        representante,    // ← nuevo: { nombre, cedula, parentesco } (menor/no apto)
         requiere_representante, // ← nuevo: 1 si firma el representante legal
         id_presupuesto_origen // ← si esto viene de "Aprobar Presupuesto", se marca el presupuesto
                                //   APROBADO en la MISMA transacción del plan (consentimiento,
@@ -284,7 +293,7 @@ const asignarTratamientosLote = async (req, res) => {
             //    fila por cada cara marcada.
             const estadoVisual = obtenerEstadoVisual(nombreReal);
             if (estadoVisual && t.numero_diente) {
-                const carasAEspejar = (t.cara
+                const carasAEspejar = caraFijaPorEstado(estadoVisual) ? [caraFijaPorEstado(estadoVisual)] : (t.cara
                     ? [t.cara]
                     : (t.caras ? t.caras.split(',').map(c => c.trim()).filter(Boolean) : ['Centro'])
                 ).map(normalizarCaraVisual);
@@ -370,6 +379,18 @@ const asignarTratamientosLote = async (req, res) => {
         const observacionesFinal = (observaciones && observaciones.trim() !== '')
             ? observaciones.trim()
             : null;
+        const motivoConsultaFinal = (motivo_consulta && motivo_consulta.trim() !== '')
+            ? motivo_consulta.trim()
+            : null;
+
+        // La especialidad del MSP-024 queda también en cada plan: con ella se calcula
+        // el % de comisión del doctor (ver comisionController.js).
+        if (idsInsertados.length) {
+            await transaction.request()
+                .input('esp', sql.NVarChar(100), especialidadFinal)
+                .query(`UPDATE Tratamientos_Plan SET Especialidad = @esp
+                        WHERE ID_Plan IN (${idsInsertados.map(id => parseInt(id)).join(',')})`);
+        }
 
         // ── F3. REPRESENTANTE LEGAL (solo si aplica: menor / no apto) ──
         const rep = representante || {};
@@ -395,7 +416,8 @@ const asignarTratamientosLote = async (req, res) => {
             .input('CIE10_Descripcion',   sql.NVarChar(500),        tratamientos[0].cie_texto || null)
             .input('Especialidad',        sql.VarChar(60),          especialidadFinal)
             .input('Observaciones',       sql.NVarChar(sql.MAX),    observacionesFinal)
-            .input('Rep_Nombre',          sql.NVarChar(150),        repNombre)
+            .input('Motivo_Consulta',     sql.NVarChar(sql.MAX),    motivoConsultaFinal)
+            .input('Rep_Nombre',         sql.NVarChar(150),        repNombre)
             .input('Rep_Cedula',          sql.VarChar(20),          repCedula)
             .input('Rep_Parentesco',      sql.VarChar(50),          repParentesco)
             .query(`
@@ -404,14 +426,14 @@ const asignarTratamientosLote = async (req, res) => {
                      Hash_Digital, Firma_Paciente, ID_Medico, Nombre_Medico_Snap,
                      Registro_MSP_Snap, Tipo_Seccion, Procedimientos_JSON,
                      CIE10_Codigo, CIE10_Descripcion, Especialidad, Observaciones,
-                     Rep_Nombre, Rep_Cedula, Rep_Parentesco)
+                     Motivo_Consulta, Rep_Nombre, Rep_Cedula, Rep_Parentesco)
                 OUTPUT INSERTED.ID_Consentimiento
                 VALUES
                     (@ID_Paciente, @ID_Plan, @Aceptado, GETDATE(), @Revocatoria,
                      @Hash_Digital, @Firma_Paciente, @ID_Medico, @Nombre_Medico_Snap,
                      @Registro_MSP_Snap, @Tipo_Seccion, @Procedimientos_JSON,
                      @CIE10_Codigo, @CIE10_Descripcion, @Especialidad, @Observaciones,
-                     @Rep_Nombre, @Rep_Cedula, @Rep_Parentesco)
+                     @Motivo_Consulta, @Rep_Nombre, @Rep_Cedula, @Rep_Parentesco)
             `);
 
         const idConsentimiento = mspResult.recordset[0].ID_Consentimiento;
@@ -436,7 +458,8 @@ const asignarTratamientosLote = async (req, res) => {
             hash_digital:      hashDigital,
             especialidad:      especialidadFinal,
             observaciones:     observacionesFinal,
-            representante:     aplicaRep ? { nombre: repNombre, cedula: repCedula, parentesco: repParentesco } : null,
+            motivo_consulta:   motivoConsultaFinal,
+            representante:    aplicaRep ? { nombre: repNombre, cedula: repCedula, parentesco: repParentesco } : null,
             requiere_representante: aplicaRep ? 1 : 0,
             // El frontend usa esto para mostrar el médico en el PDF sin otra llamada
             medico: {
@@ -600,6 +623,7 @@ const getConsentimientosPorPaciente = async (req, res) => {
                     ci.CIE10_Descripcion,
                     ci.Especialidad,
                     ci.Observaciones,
+                    ci.Motivo_Consulta,
                     ci.Rep_Nombre,
                     ci.Rep_Cedula,
                     ci.Rep_Parentesco,
@@ -629,5 +653,8 @@ module.exports = {
     eliminarTratamiento,
     eliminarPrestacionCatalogo,
     getConsentimientosPorPaciente,   // ← NUEVA
-    obtenerEstadoVisual   // exportado para que presupuestoController.js espeje igual en el Odontograma
+    obtenerEstadoVisual,  // exportado para que presupuestoController.js espeje igual en el Odontograma
+    caraFijaPorEstado,
+    detectarEspecialidad, // usado por comisionController.js para planes sin especialidad guardada
+    mapaEspecialidades
 };

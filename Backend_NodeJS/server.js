@@ -186,7 +186,10 @@ app.use('/api/presupuestos', verificarToken, require('./routes/presupuestos'));
 app.use('/api/tratamientos', verificarToken, require('./routes/routestratamientoRoutes'));
 app.use('/api/inventario', verificarToken, require('./routes/inventarioRoutes'));
 app.use('/api/citas', verificarToken, require('./routes/citasRoutes'));
-app.use('/api/kpi', verificarToken, require('./routes/kpiRoutes')); 
+app.use('/api/kpi', verificarToken, require('./routes/kpiRoutes'));
+app.use('/api/comisiones', verificarToken, require('./routes/comisionRoutes'));
+app.use('/api/personal', verificarToken, require('./routes/personalRoutes'));
+app.use('/api/sistema', verificarToken, require('./routes/sistemaRoutes'));
 app.use('/api/ia', verificarToken, require('./routes/iaRoutes'));
 app.use('/api/facturacion', verificarToken, require('./routes/facturacionRoutes'));
 app.use('/api/whatsapp', verificarToken, require('./routes/whatsappRoutes'));
@@ -239,6 +242,8 @@ const connectWithRetry = async () => {
         if (pool) {
             console.log("✅ [DB]: Conexión establecida con éxito.");
             await ensureSchemaExtendida(pool);
+            // Registro de instalación + actualizaciones automáticas (solo en instalaciones reales)
+            require('./services/actualizadorService').iniciar();
         } else {
             throw new Error("Pool de conexión nulo.");
         }

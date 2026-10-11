@@ -138,7 +138,7 @@ const getOdontogramaPaciente = async (req, res) => {
             pool.request().input('id', sql.Int, id_paciente).query(`
                 SELECT Numero_Diente, Cara_Diente, Estado, Tipo_Registro, Lado_Cara, ID_Plan_Tratamiento, Observaciones, Fecha,
                 CASE 
-                    WHEN Estado IN ('Resina', 'Corona', 'Obturado', 'Protesis', 'Sellante', 'Endodoncia') THEN 1 
+                    WHEN Estado IN ('Resina', 'Corona', 'Obturado', 'Protesis', 'Sellante', 'Endodoncia', 'Perno', 'Implante') THEN 1
                     ELSE 0 
                 END AS Es_Sanado
                 FROM Odontograma WHERE ID_Paciente = @id

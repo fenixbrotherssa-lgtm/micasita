@@ -9,7 +9,88 @@ window.kpiModule = {
         this.clinicasCargadas = false;
         this.establecerFechasDefault();
         this.verificarRolAdmin();
+        this.activarDetalleTarjetas();
         setTimeout(() => this.cargarMetricas(), 150);
+    },
+
+    // --- DRILL-DOWN: cada tarjeta abre el detalle de lo que suma ---
+    activarDetalleTarjetas: function() {
+        const mapa = {
+            'kpi-ingresos': 'ingresos', 'kpi-gastos': 'gastos', 'kpi-balance': 'balance',
+            'kpi-ticket': 'ticket', 'kpi-citas': 'citas', 'kpi-cancelacion': 'canceladas',
+            'kpi-cartera': 'cartera', 'kpi-pacientes': 'pacientes', 'kpi-stock': 'stock'
+        };
+        Object.entries(mapa).forEach(([id, tipo]) => {
+            const card = document.getElementById(id)?.closest('.metric-card');
+            if (!card) return;
+            card.style.cursor = 'pointer';
+            card.title = 'Clic para ver el detalle';
+            card.onclick = () => this.detalle(tipo);
+            card.insertAdjacentHTML('beforeend',
+                '<p style="margin:6px 0 0 0; font-size:10px; color:#94a3b8; font-weight:600;"><i class="fas fa-search-plus"></i> ver detalle</p>');
+        });
+    },
+
+    detalle: async function(tipo, valor = '') {
+        const filtros = this.filtrosUltimoReporte;
+        if (!filtros) return;
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const celda = (v, t) => {
+            if (v === null || v === undefined || v === '') return '—';
+            if (t === 'money') return this.fmt(v);
+            if (t === 'number') return Number(v).toLocaleString('en-US');
+            if (t === 'date') return new Date(v).toLocaleDateString('es-EC');
+            if (t === 'datetime') return new Date(v).toLocaleString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            if (t === 'time') return new Date(v).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' });
+            return esc(v);
+        };
+
+        try {
+            Swal.fire({ title: 'Cargando detalle...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const qs = new URLSearchParams({
+                tipo, valor, id_clinica: filtros.id_clinica, fecha_inicio: filtros.fIn, fecha_fin: filtros.fFin
+            }).toString();
+            const res = await window.api.get(`/kpi/detalle?${qs}`);
+            if (!res || res.status !== 'Success') throw new Error(res?.message || 'Sin respuesta');
+
+            const cols = res.columnas || [];
+            const filas = res.filas || [];
+            const alinear = (t) => (t === 'money' || t === 'number') ? 'right' : 'left';
+
+            const thead = cols.map(c => `<th style="text-align:${alinear(c.tipo)}; padding:8px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:10px; text-transform:uppercase; position:sticky; top:0; background:#f8fafc;">${c.label}</th>`).join('');
+            const tbody = filas.map(f => `<tr style="border-bottom:1px solid #f1f5f9;">${
+                cols.map(c => `<td style="text-align:${alinear(c.tipo)}; padding:7px 8px;${c.tipo === 'money' && Number(f[c.key]) < 0 ? ' color:#dc2626;' : ''}">${celda(f[c.key], c.tipo)}</td>`).join('')
+            }</tr>`).join('');
+
+            // Fila de totales para las columnas de dinero
+            const hayMoney = cols.some(c => c.tipo === 'money');
+            const totales = hayMoney ? `<tr style="background:#f1f5f9; font-weight:800;">${
+                cols.map((c, i) => c.tipo === 'money'
+                    ? `<td style="text-align:right; padding:8px;">${this.fmt(filas.reduce((s, f) => s + (parseFloat(f[c.key]) || 0), 0))}</td>`
+                    : `<td style="padding:8px;">${i === 0 ? 'TOTAL' : ''}</td>`).join('')
+            }</tr>` : '';
+
+            Swal.fire({
+                title: esc(res.titulo),
+                width: 900,
+                html: `
+                    <div style="font-size:11px; color:#64748b; margin-bottom:8px; text-align:left;">
+                        Período: <b>${filtros.fIn}</b> al <b>${filtros.fFin}</b> · ${filas.length} registro(s)${filas.length >= 1000 ? ' (se muestran los primeros 1000)' : ''}
+                    </div>
+                    <div style="max-height:60vh; overflow:auto; border:1px solid #e2e8f0; border-radius:8px;">
+                        <table style="width:100%; border-collapse:collapse; font-size:12px; font-family:'Inter';">
+                            <thead><tr>${thead}</tr></thead>
+                            <tbody>${tbody || `<tr><td colspan="${cols.length}" style="text-align:center; padding:20px; color:#94a3b8;">Sin datos en este período.</td></tr>`}</tbody>
+                            ${filas.length ? `<tfoot>${totales}</tfoot>` : ''}
+                        </table>
+                    </div>`,
+                confirmButtonText: 'Cerrar',
+                confirmButtonColor: '#4f46e5'
+            });
+        } catch (e) {
+            console.error('🔴 Error detalle KPI:', e);
+            Swal.fire('Error', 'No se pudo cargar el detalle.', 'error');
+        }
     },
 
     establecerFechasDefault: function() {
@@ -180,6 +261,9 @@ window.kpiModule = {
                 responsive: true, maintainAspectRatio: false,
                 animation: { duration: 1200, easing: 'easeOutQuart' },
                 interaction: { mode: 'index', intersect: false },
+                // Clic en un día → movimientos (ingresos y gastos) de ese día
+                onClick: (evt, els) => { if (els.length && fechas[els[0].index]) this.detalle('dia', fechas[els[0].index]); },
+                onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
                 plugins: { legend: { position: 'bottom' } },
                 scales: { y: { beginAtZero: true } }
             }
@@ -212,6 +296,8 @@ window.kpiModule = {
             options: {
                 responsive: true, maintainAspectRatio: false, cutout: '65%',
                 animation: { animateScale: true, animateRotate: true, duration: 1000 },
+                onClick: (evt, els) => { if (els.length && labels[els[0].index]) this.detalle('metodo', labels[els[0].index]); },
+                onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
@@ -247,6 +333,8 @@ window.kpiModule = {
             options: {
                 responsive: true, maintainAspectRatio: false, indexAxis: 'y',
                 animation: { duration: 1000, easing: 'easeOutBounce' },
+                onClick: (evt, els) => { if (els.length && labels[els[0].index]) this.detalle('servicio', labels[els[0].index]); },
+                onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -272,7 +360,7 @@ window.kpiModule = {
 
         const medallas = ['🥇', '🥈', '🥉'];
         tbody.innerHTML = doctores.map((d, i) => `
-            <tr style="border-top: 1px solid #f1f5f9; transition: background 0.3s;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
+            <tr style="border-top: 1px solid #f1f5f9; transition: background 0.3s; cursor:pointer;" title="Clic para ver los ingresos de este doctor" onclick="window.kpiModule.detalle('doctor', '${d.ID_Usuario}')" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
                 <td style="padding:12px 8px; font-weight:800; color:#4f46e5; font-size:1.1rem;">${medallas[i] || (i + 1)}</td>
                 <td style="padding:12px 8px; font-weight:600; color:#1e293b;">Dr(a). ${d.Doctor || 'N/A'}</td>
                 <td style="padding:12px 8px; text-align:center; color:#334155; font-weight:700;">${d.Pacientes_Unicos || 0}</td>
@@ -296,7 +384,7 @@ window.kpiModule = {
         }
 
         cont.innerHTML = deudores.map(d => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:1px solid #f1f5f9; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(5px)'" onmouseout="this.style.transform='translateX(0)'">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:1px solid #f1f5f9; transition: transform 0.2s; cursor:pointer;" title="Clic para ver sus saldos" onclick="window.kpiModule.detalle('deudor', '${d.ID_Paciente}')" onmouseover="this.style.transform='translateX(5px)'" onmouseout="this.style.transform='translateX(0)'">
                 <div style="display:flex; align-items:center; gap:10px; min-width:0;">
                     <div style="width:34px; height:34px; border-radius:50%; background:#fee2e2; color:#dc2626; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">
                         ${(d.Paciente || '?').charAt(0).toUpperCase()}

@@ -37,7 +37,7 @@ window.router = {
             this.aplicarPermisosInterfaz(idRol);
 
             // 2. BLOQUEO DE NAVEGACIÓN (Seguridad)
-            const vistasSoloAdmin = ['usuarios', 'sucursales', 'gastos', 'kpi', 'reportes', 'crm'];
+            const vistasSoloAdmin = ['usuarios', 'sucursales', 'gastos', 'kpi', 'reportes', 'crm', 'comisiones', 'nomina'];
             if (idRol !== 1 && vistasSoloAdmin.includes(view)) {
                 console.warn("🚫 Acceso denegado a:", view);
                 return this.load('dashboard'); 
@@ -147,6 +147,8 @@ window.router = {
             case 'pagos': if(window.cargarDatosDePago) window.cargarDatosDePago(id, params.plan); break;
             case 'facturacion': if(window.facturacionModule) window.facturacionModule.init(); break;
             case 'crm': if(window.crmModule) window.crmModule.init(); break;
+            case 'comisiones': if(window.comisionesModule) window.comisionesModule.init(); break;
+            case 'nomina': if(window.personalModule) window.personalModule.init(); break;
             case 'manual': if(window.manualModule) window.manualModule.init(); break;
         }
     },

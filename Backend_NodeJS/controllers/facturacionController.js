@@ -12,6 +12,10 @@ const nodemailer = require('nodemailer');
 const readline = require('readline');
 const execPromise = util.promisify(exec);
 
+// Proveedor del sistema de facturación (va en <infoAdicional> de cada comprobante)
+const RUC_PROVEEDOR_SISTEMA = '1760666147001';
+const NOMBRE_PROVEEDOR_SISTEMA = 'CASRODSOFT DEVELOPMENT';
+
 // ===============================================
 // CATÁLOGO SRI - FORMAS DE PAGO (Tabla 24)
 // ===============================================
@@ -553,10 +557,11 @@ const facturacionController = {
                 </infoFactura>
                 <detalles>${detallesXml}
                 </detalles>
-                ${d.Regimen_Rimpe ? `
                 <infoAdicional>
-                    <campoAdicional nombre="Régimen">CONTRIBUYENTE RÉGIMEN RIMPE</campoAdicional>
-                </infoAdicional>` : ''}
+                    ${d.Regimen_Rimpe ? '<campoAdicional nombre="Régimen">CONTRIBUYENTE RÉGIMEN RIMPE</campoAdicional>' : ''}
+                    <campoAdicional nombre="RUC Proveedor">${RUC_PROVEEDOR_SISTEMA}</campoAdicional>
+                    <campoAdicional nombre="Nombre Proveedor">${NOMBRE_PROVEEDOR_SISTEMA}</campoAdicional>
+                </infoAdicional>
             </factura>`;
 
             // ==========================================
@@ -581,7 +586,7 @@ const facturacionController = {
             // En Windows usa JDK bundled. En Mac usa JDK bundled si existe, si no el del sistema.
             const javaBin = fs.existsSync(javaBinBundled) ? javaBinBundled : (!esWin ? 'java' : null);
             const jarPath = path.join(process.cwd(), 'services', 'firmadormedico', 'sri.jar');
-
+            
             const p12Path = path.resolve(cert.Ruta_Archivo_P12);
             const p12Pass = Buffer.from(cert.Password_P12_Encrypted, 'base64').toString('utf8');
 

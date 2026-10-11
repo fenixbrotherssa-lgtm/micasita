@@ -1,5 +1,5 @@
 ﻿const { getConnection, sql } = require('../config/db');
-const { obtenerEstadoVisual } = require('./tratamientoController');
+const { obtenerEstadoVisual, caraFijaPorEstado } = require('./tratamientoController');
 
 // 1. GUARDAR PRESUPUESTO (CORREGIDO: Eliminada columna Email de Clinicas)
 const guardarPresupuesto = async (req, res) => {
@@ -159,9 +159,9 @@ const aprobarPresupuesto = async (req, res) => {
                 // cada cara real (o 'Centro' si el ítem no tenía pieza/cara asociada).
                 const estadoVisual = obtenerEstadoVisual(item.nombre);
                 if (estadoVisual && item.numero_diente) {
-                    const carasAEspejar = item.cara
+                    const carasAEspejar = caraFijaPorEstado(estadoVisual) ? [caraFijaPorEstado(estadoVisual)] : (item.cara
                         ? [item.cara]
-                        : (item.caras ? item.caras.split(',').map(c => c.trim()).filter(Boolean) : ['Centro']);
+                        : (item.caras ? item.caras.split(',').map(c => c.trim()).filter(Boolean) : ['Centro']));
 
                     for (const caraInd of (carasAEspejar.length ? carasAEspejar : ['Centro'])) {
                         await transaction.request()

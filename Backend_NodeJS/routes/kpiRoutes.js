@@ -15,4 +15,7 @@ const kpiController = require('../controllers/kpiController');
  */
 router.get('/dashboard-super-kpi', kpiController.getDashboardSuperKPI);
 
+// Detalle al hacer clic en una métrica (drill-down)
+router.get('/detalle', kpiController.getDetalleKPI);
+
 module.exports = router;

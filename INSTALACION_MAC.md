@@ -22,6 +22,7 @@ Para un cliente nuevo, en vez de seguir todos los pasos manuales de abajo, armar
 AmetraOS-Backend-Mac/*.pkg
 AmetraOS-Desktop-Mac/*.dmg       (arm64 y/o Intel, detecta el chip solo)
 secrets/firebase-service-account.json
+secrets/ametra-checkin.key        (registro en casrodsoft.com/admin/instalaciones — desde v4.6)
 *.bak                             (backup de la base del cliente)
 BASE_MAESTRA_NACIONAL.csv
 ```
@@ -107,7 +108,7 @@ Para transferirlo al Mac:
 ### Paso 1 — Instalar el backend como servicio
 
 1. Descomprimir `AmetraOS-Backend-Mac.zip`
-2. Doble clic en `AmetraOS-Backend-3.0.0.pkg`
+2. Doble clic en `AmetraOS-Backend-<versión>.pkg` (ej. `AmetraOS-Backend-4.6.0.pkg`)
 3. Clic en **Continuar** → **Instalar**
 4. El Mac pide contraseña de administrador → escribirla → **Instalar software**
 5. El instalador automáticamente:

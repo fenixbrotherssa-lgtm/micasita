@@ -108,8 +108,14 @@ jobs:
           # Dependencias de producción (compiladas para Mac en este runner)
           cp -r Backend_NodeJS/node_modules pkg-root/Library/AmetraOS/backend/
 
-          # package.json lo necesita Node para resolver módulos
+          # package.json lo necesita Node para resolver módulos; package-lock.json es la huella
+          # de dependencias que usa el actualizador automático
           cp Backend_NodeJS/package.json pkg-root/Library/AmetraOS/backend/
+          cp Backend_NodeJS/package-lock.json pkg-root/Library/AmetraOS/backend/
+
+          # arranque.js SIN ofuscar: entrada del servicio (aplica actualizaciones y revierte
+          # una versión que no arranca). Nunca lo reemplaza una actualización.
+          cp Backend_NodeJS/arranque.js pkg-root/Library/AmetraOS/backend/
 
           # Scripts de utilidad accesibles tras la instalación
           cp Backend_NodeJS/installer/mac/escanear-whatsapp.sh \
@@ -145,13 +151,14 @@ jobs:
 
       - name: Construir PKG del backend
         run: |
+          VERSION=$(node -p "require('./Backend_NodeJS/package.json').version")
           pkgbuild \
             --root pkg-root \
             --scripts pkg-scripts \
             --identifier com.casrodsoft.ametraos.backend \
-            --version 3.0.0 \
+            --version "$VERSION" \
             --install-location / \
-            AmetraOS-Backend-3.0.0.pkg
+            "AmetraOS-Backend-$VERSION.pkg"
 
       # ─────────────────────────────────────────
       # ARTEFACTOS
@@ -166,7 +173,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AmetraOS-Backend-Mac
-          path: AmetraOS-Backend-3.0.0.pkg
+          path: AmetraOS-Backend-*.pkg
 
       - name: Subir script de desinstalación
         uses: actions/upload-artifact@v4

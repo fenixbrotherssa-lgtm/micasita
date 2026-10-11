@@ -21,8 +21,8 @@ const kpiController = {
 
             const reqBase = () => pool.request()
                 .input('id_cli', sql.Int, id_clinica)
-                .input('fIn', sql.Date, fecha_inicio)
-                .input('fOut', sql.Date, fecha_fin);
+                .input('fIn', sql.VarChar(10), fecha_inicio)
+                .input('fOut', sql.VarChar(10), fecha_fin);
 
             const [
                 ingresosGastos,
@@ -250,11 +250,254 @@ const kpiController = {
 
         } catch (error) {
             console.error("🔴 Error KPI Multi-Clínica:", error.message);
-            res.status(500).json({ 
-                status: "Error", 
+            res.status(500).json({
+                status: "Error",
                 message: "Error al generar métricas",
-                dev_info: error.message 
+                dev_info: error.message
             });
+        }
+    },
+
+    // ==========================================
+    // DETALLE (drill-down) — al hacer clic en una métrica del tablero.
+    // GET /kpi/detalle?tipo=...&valor=...&id_clinica=...&fecha_inicio=...&fecha_fin=...
+    // Usa los MISMOS filtros que getDashboardSuperKPI para que la suma del detalle
+    // cuadre con el número de la tarjeta.
+    // ==========================================
+    getDetalleKPI: async (req, res) => {
+        const { tipo, valor, id_clinica, fecha_inicio, fecha_fin } = req.query;
+
+        const PAGOS_OK = `CAST(PG.Fecha_Pago AS DATE) BETWEEN @fIn AND @fOut
+            AND NOT (PG.ID_Plan IS NULL AND PG.ID_Pago IN (SELECT ID_Pago_Origen FROM Facturacion_Documentos))`;
+        const METODO_CASE = `CASE
+                WHEN PG.Metodo_Pago LIKE '%Efectivo%'      THEN 'Efectivo'
+                WHEN PG.Metodo_Pago LIKE '%Transferencia%' THEN 'Transferencia'
+                WHEN PG.Metodo_Pago LIKE '%Tarjeta%'       THEN 'Tarjeta'
+                ELSE 'Otro' END`;
+        const SELECT_PAGOS = `
+            SELECT TOP 1000 PG.Fecha_Pago AS Fecha,
+                   ISNULL(P.Nombres + ' ' + P.Apellidos, '—') AS Paciente,
+                   ISNULL(TP.Nombre_Tratamiento, PG.Concepto) AS Concepto,
+                   PG.Metodo_Pago AS Metodo, PG.Monto
+            FROM Pagos PG
+            LEFT JOIN Pacientes P ON PG.ID_Paciente = P.ID_Paciente
+            LEFT JOIN Tratamientos_Plan TP ON PG.ID_Plan = TP.ID_Plan`;
+        const COLS_PAGOS = [
+            { key: 'Fecha', label: 'Fecha', tipo: 'datetime' },
+            { key: 'Paciente', label: 'Paciente' },
+            { key: 'Concepto', label: 'Concepto / Tratamiento' },
+            { key: 'Metodo', label: 'Método' },
+            { key: 'Monto', label: 'Monto', tipo: 'money' }
+        ];
+        const SELECT_CITAS = `
+            SELECT TOP 1000 C.Fecha_Cita AS Fecha, C.Hora_Inicio AS Hora,
+                   ISNULL(P.Nombres + ' ' + P.Apellidos, '—') AS Paciente,
+                   ISNULL(U.Nombres + ' ' + U.Apellidos, '—') AS Doctor,
+                   C.Asunto, C.Estado
+            FROM Citas C
+            LEFT JOIN Pacientes P ON C.ID_Paciente = P.ID_Paciente
+            LEFT JOIN Usuarios U ON C.ID_Doctor = U.ID_Usuario
+            WHERE C.ID_Clinica = @id_cli AND C.Fecha_Cita BETWEEN @fIn AND @fOut`;
+        const COLS_CITAS = [
+            { key: 'Fecha', label: 'Fecha', tipo: 'date' },
+            { key: 'Hora', label: 'Hora', tipo: 'time' },
+            { key: 'Paciente', label: 'Paciente' },
+            { key: 'Doctor', label: 'Doctor' },
+            { key: 'Asunto', label: 'Asunto' },
+            { key: 'Estado', label: 'Estado' }
+        ];
+
+        let titulo, columnas, query;
+        switch (tipo) {
+            case 'ingresos':
+            case 'ticket':
+                titulo = 'Ingresos del período';
+                columnas = COLS_PAGOS;
+                query = `${SELECT_PAGOS} WHERE PG.ID_Clinica = @id_cli AND ${PAGOS_OK} ORDER BY PG.Fecha_Pago DESC`;
+                break;
+            case 'metodo':
+                titulo = `Pagos · ${valor}`;
+                columnas = COLS_PAGOS;
+                query = `${SELECT_PAGOS} WHERE PG.ID_Clinica = @id_cli AND ${PAGOS_OK} AND ${METODO_CASE} = @valor ORDER BY PG.Fecha_Pago DESC`;
+                break;
+            case 'doctor':
+                titulo = 'Ingresos generados por el doctor';
+                columnas = COLS_PAGOS;
+                query = `${SELECT_PAGOS} WHERE PG.ID_Clinica = @id_cli AND CAST(PG.Fecha_Pago AS DATE) BETWEEN @fIn AND @fOut
+                         AND TP.ID_Medico = @valor_int ORDER BY PG.Fecha_Pago DESC`;
+                break;
+            case 'gastos':
+                titulo = 'Gastos del período';
+                columnas = [
+                    { key: 'Fecha', label: 'Fecha', tipo: 'datetime' },
+                    { key: 'Categoria', label: 'Categoría' },
+                    { key: 'Descripcion', label: 'Descripción' },
+                    { key: 'Metodo', label: 'Método' },
+                    { key: 'Monto', label: 'Monto', tipo: 'money' }
+                ];
+                query = `SELECT TOP 1000 G.Fecha, ISNULL(G.Categoria, G.Tipo) AS Categoria, G.Descripcion,
+                                G.Metodo_Pago AS Metodo, G.Monto
+                         FROM Gastos G
+                         WHERE G.ID_Clinica = @id_cli AND CAST(G.Fecha AS DATE) BETWEEN @fIn AND @fOut
+                         ORDER BY G.Fecha DESC`;
+                break;
+            case 'balance':
+                titulo = 'Balance diario (Ingresos − Gastos)';
+                columnas = [
+                    { key: 'Dia', label: 'Día', tipo: 'date' },
+                    { key: 'Ingresos', label: 'Ingresos', tipo: 'money' },
+                    { key: 'Gastos', label: 'Gastos', tipo: 'money' },
+                    { key: 'Balance', label: 'Balance', tipo: 'money' }
+                ];
+                query = `
+                    WITH I AS (SELECT CAST(PG.Fecha_Pago AS DATE) AS Dia, SUM(PG.Monto) AS Total
+                               FROM Pagos PG WHERE PG.ID_Clinica = @id_cli AND ${PAGOS_OK}
+                               GROUP BY CAST(PG.Fecha_Pago AS DATE)),
+                         G AS (SELECT CAST(Fecha AS DATE) AS Dia, SUM(Monto) AS Total
+                               FROM Gastos WHERE ID_Clinica = @id_cli AND CAST(Fecha AS DATE) BETWEEN @fIn AND @fOut
+                               GROUP BY CAST(Fecha AS DATE))
+                    SELECT ISNULL(I.Dia, G.Dia) AS Dia, ISNULL(I.Total, 0) AS Ingresos, ISNULL(G.Total, 0) AS Gastos,
+                           ISNULL(I.Total, 0) - ISNULL(G.Total, 0) AS Balance
+                    FROM I FULL OUTER JOIN G ON I.Dia = G.Dia
+                    ORDER BY Dia DESC`;
+                break;
+            case 'dia':
+                titulo = `Movimientos del ${valor}`;
+                columnas = [
+                    { key: 'Fecha', label: 'Fecha', tipo: 'datetime' },
+                    { key: 'Tipo', label: 'Tipo' },
+                    { key: 'Detalle', label: 'Detalle' },
+                    { key: 'Metodo', label: 'Método' },
+                    { key: 'Monto', label: 'Monto', tipo: 'money' }
+                ];
+                query = `
+                    SELECT Fecha, Tipo, Detalle, Metodo, Monto FROM (
+                        SELECT PG.Fecha_Pago AS Fecha, 'Ingreso' AS Tipo,
+                               ISNULL(P.Nombres + ' ' + P.Apellidos, '—') + ' · ' + ISNULL(TP.Nombre_Tratamiento, ISNULL(PG.Concepto, '')) AS Detalle,
+                               PG.Metodo_Pago AS Metodo, PG.Monto
+                        FROM Pagos PG
+                        LEFT JOIN Pacientes P ON PG.ID_Paciente = P.ID_Paciente
+                        LEFT JOIN Tratamientos_Plan TP ON PG.ID_Plan = TP.ID_Plan
+                        WHERE PG.ID_Clinica = @id_cli AND CAST(PG.Fecha_Pago AS DATE) = @dia
+                          AND NOT (PG.ID_Plan IS NULL AND PG.ID_Pago IN (SELECT ID_Pago_Origen FROM Facturacion_Documentos))
+                        UNION ALL
+                        SELECT G.Fecha, 'Gasto', ISNULL(G.Categoria, G.Tipo) + ' · ' + ISNULL(G.Descripcion, ''),
+                               G.Metodo_Pago, -G.Monto
+                        FROM Gastos G
+                        WHERE G.ID_Clinica = @id_cli AND CAST(G.Fecha AS DATE) = @dia
+                    ) X ORDER BY Fecha`;
+                break;
+            case 'citas':
+                titulo = 'Citas del período';
+                columnas = COLS_CITAS;
+                query = `${SELECT_CITAS} ORDER BY C.Fecha_Cita DESC, C.Hora_Inicio DESC`;
+                break;
+            case 'canceladas':
+                titulo = 'Citas canceladas / no asistió';
+                columnas = COLS_CITAS;
+                query = `${SELECT_CITAS} AND C.Estado IN (${ESTADOS_CANCELADA}) ORDER BY C.Fecha_Cita DESC, C.Hora_Inicio DESC`;
+                break;
+            case 'cartera':
+                titulo = 'Cartera pendiente';
+                columnas = [
+                    { key: 'Paciente', label: 'Paciente' },
+                    { key: 'Tratamiento', label: 'Tratamiento' },
+                    { key: 'Pieza', label: 'Pieza' },
+                    { key: 'Fecha', label: 'Inicio', tipo: 'date' },
+                    { key: 'Costo', label: 'Costo', tipo: 'money' },
+                    { key: 'Saldo', label: 'Saldo', tipo: 'money' }
+                ];
+                query = `SELECT TOP 1000 (P.Nombres + ' ' + P.Apellidos) AS Paciente, TP.Nombre_Tratamiento AS Tratamiento,
+                                TP.Numero_Diente AS Pieza, TP.Fecha_Inicio AS Fecha, TP.Costo_Total AS Costo, TP.Saldo_Pendiente AS Saldo
+                         FROM Tratamientos_Plan TP
+                         JOIN Pacientes P ON TP.ID_Paciente = P.ID_Paciente
+                         WHERE P.ID_Clinica = @id_cli AND TP.Estado_Tratamiento != 'PAGADO' AND TP.Saldo_Pendiente > 0
+                         ORDER BY TP.Saldo_Pendiente DESC`;
+                break;
+            case 'deudor':
+                titulo = 'Saldos pendientes del paciente';
+                columnas = [
+                    { key: 'Tratamiento', label: 'Tratamiento' },
+                    { key: 'Pieza', label: 'Pieza' },
+                    { key: 'Fecha', label: 'Inicio', tipo: 'date' },
+                    { key: 'Estado', label: 'Estado' },
+                    { key: 'Costo', label: 'Costo', tipo: 'money' },
+                    { key: 'Saldo', label: 'Saldo', tipo: 'money' }
+                ];
+                query = `SELECT TP.Nombre_Tratamiento AS Tratamiento, TP.Numero_Diente AS Pieza, TP.Fecha_Inicio AS Fecha,
+                                TP.Estado_Tratamiento AS Estado, TP.Costo_Total AS Costo, TP.Saldo_Pendiente AS Saldo
+                         FROM Tratamientos_Plan TP
+                         JOIN Pacientes P ON TP.ID_Paciente = P.ID_Paciente
+                         WHERE P.ID_Clinica = @id_cli AND TP.ID_Paciente = @valor_int AND TP.Saldo_Pendiente > 0
+                         ORDER BY TP.Fecha_Inicio DESC`;
+                break;
+            case 'servicio':
+                titulo = `Servicio · ${valor}`;
+                columnas = [
+                    { key: 'Fecha', label: 'Inicio', tipo: 'date' },
+                    { key: 'Paciente', label: 'Paciente' },
+                    { key: 'Doctor', label: 'Doctor' },
+                    { key: 'Pieza', label: 'Pieza' },
+                    { key: 'Costo', label: 'Costo', tipo: 'money' },
+                    { key: 'Saldo', label: 'Saldo', tipo: 'money' }
+                ];
+                query = `SELECT TOP 1000 TP.Fecha_Inicio AS Fecha, (P.Nombres + ' ' + P.Apellidos) AS Paciente,
+                                ISNULL(U.Nombres + ' ' + U.Apellidos, '—') AS Doctor, TP.Numero_Diente AS Pieza,
+                                TP.Costo_Total AS Costo, TP.Saldo_Pendiente AS Saldo
+                         FROM Tratamientos_Plan TP
+                         JOIN Pacientes P ON TP.ID_Paciente = P.ID_Paciente
+                         LEFT JOIN Usuarios U ON TP.ID_Medico = U.ID_Usuario
+                         WHERE P.ID_Clinica = @id_cli AND CAST(TP.Fecha_Inicio AS DATE) BETWEEN @fIn AND @fOut
+                           AND TP.Nombre_Tratamiento = @valor
+                         ORDER BY TP.Fecha_Inicio DESC`;
+                break;
+            case 'pacientes':
+                titulo = 'Pacientes nuevos';
+                columnas = [
+                    { key: 'Fecha', label: 'Registro', tipo: 'date' },
+                    { key: 'HC', label: 'H. Clínica' },
+                    { key: 'Paciente', label: 'Paciente' },
+                    { key: 'DNI', label: 'Cédula' },
+                    { key: 'Telefono', label: 'Teléfono' }
+                ];
+                query = `SELECT TOP 1000 Fecha_Registro AS Fecha, Historial_Clinico_General AS HC,
+                                (Nombres + ' ' + Apellidos) AS Paciente, DNI, Telefono
+                         FROM Pacientes
+                         WHERE ID_Clinica = @id_cli AND CAST(Fecha_Registro AS DATE) BETWEEN @fIn AND @fOut
+                         ORDER BY Fecha_Registro DESC`;
+                break;
+            case 'stock':
+                titulo = 'Inventario en alerta (stock ≤ mínimo)';
+                columnas = [
+                    { key: 'Nombre', label: 'Ítem' },
+                    { key: 'Categoria', label: 'Categoría' },
+                    { key: 'Ubicacion', label: 'Ubicación' },
+                    { key: 'Cantidad', label: 'Cantidad', tipo: 'number' },
+                    { key: 'Stock_Minimo', label: 'Mínimo', tipo: 'number' }
+                ];
+                query = `SELECT Nombre, Categoria, Ubicacion, Cantidad, Stock_Minimo
+                         FROM Inventario
+                         WHERE ID_Clinica = @id_cli AND Cantidad <= Stock_Minimo AND Activo = 1
+                         ORDER BY Cantidad ASC`;
+                break;
+            default:
+                return res.status(400).json({ status: "Error", message: "Tipo de detalle no válido." });
+        }
+
+        try {
+            const pool = await getConnection();
+            const result = await pool.request()
+                .input('id_cli', sql.Int, id_clinica)
+                .input('fIn', sql.VarChar(10), fecha_inicio)
+                .input('fOut', sql.VarChar(10), fecha_fin)
+                .input('valor', sql.NVarChar(300), valor || '')
+                .input('valor_int', sql.Int, parseInt(valor) || 0)
+                .input('dia', sql.VarChar(10), tipo === 'dia' ? valor : fecha_inicio)
+                .query(query);
+            res.json({ status: "Success", titulo, columnas, filas: result.recordset });
+        } catch (error) {
+            console.error("🔴 Error KPI detalle:", error.message);
+            res.status(500).json({ status: "Error", message: "Error al obtener el detalle", dev_info: error.message });
         }
     }
 };

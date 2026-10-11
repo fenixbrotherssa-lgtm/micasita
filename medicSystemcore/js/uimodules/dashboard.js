@@ -15,9 +15,56 @@ window.dashboardModule = {
             // 2. Carga de estadísticas del DÍA
             await this.cargarEstadisticasHoy(sesion);
 
+            // 3. Aviso de actualización del servidor (solo administrador)
+            if (parseInt(sesion.ID_Rol || sesion.id_rol) === 1) this.avisoActualizacionServidor();
+
         } catch (e) {
             console.error("❌ Error en Dashboard:", e);
         }
+    },
+
+    // El servidor se actualiza solo a las 23:30; este aviso permite instalar antes o ver
+    // si una actualización fue revertida. Nunca bloquea el dashboard si falla.
+    avisoActualizacionServidor: async function() {
+        try {
+            const res = await window.api.get('/sistema/estado');
+            const e = res?.data;
+            const main = document.querySelector('.main-viewport');
+            if (!e || !main || document.getElementById('aviso-actualizacion')) return;
+            let html = '';
+            if (e.preparada) {
+                html = `<i class="fas fa-cloud-download-alt"></i>
+                    <span><b>Actualización ${e.preparada} lista</b> para el servidor (actual ${e.version}). Se instalará sola a las 23:30.${e.notasPreparada ? ` <small>${String(e.notasPreparada).replace(/</g, '&lt;')}</small>` : ''}</span>
+                    <button onclick="window.dashboardModule.instalarActualizacionServidor()" style="margin-left:auto; background:#4f46e5; color:white; border:none; border-radius:8px; padding:7px 14px; font-weight:700; cursor:pointer;">Instalar ahora</button>`;
+            } else if (e.ultimoError && /revertida|rechaz/i.test(e.ultimoError)) {
+                html = `<i class="fas fa-exclamation-triangle"></i><span>${String(e.ultimoError).replace(/</g, '&lt;')} El sistema sigue funcionando con la versión ${e.version}.</span>`;
+            }
+            if (!html) return;
+            const div = document.createElement('div');
+            div.id = 'aviso-actualizacion';
+            div.style.cssText = `display:flex; align-items:center; gap:10px; margin:0 0 16px; padding:12px 16px; border-radius:12px; font-size:13px;
+                background:${e.preparada ? '#eef2ff' : '#fef3c7'}; color:${e.preparada ? '#3730a3' : '#92400e'}; border:1px solid ${e.preparada ? '#c7d2fe' : '#fde68a'};`;
+            div.innerHTML = html;
+            main.prepend(div);
+        } catch (_) { /* sin aviso si el servidor no responde */ }
+    },
+
+    instalarActualizacionServidor: async function() {
+        const c = await Swal.fire({
+            icon: 'question', title: '¿Instalar la actualización ahora?',
+            text: 'El servidor se reiniciará (alrededor de 1 minuto). Avise a quienes estén usando el sistema en otras PCs.',
+            showCancelButton: true, confirmButtonText: 'Sí, instalar', cancelButtonText: 'Cancelar', confirmButtonColor: '#4f46e5'
+        });
+        if (!c.isConfirmed) return;
+        const r = await window.api.post('/sistema/instalar-actualizacion', {});
+        if (r.status !== 'Success') return Swal.fire('Atención', r.message, 'info');
+        Swal.fire({ icon: 'info', title: 'Instalando...', text: 'El sistema se reconectará solo en un momento.', timer: 60000, timerProgressBar: true, showConfirmButton: false });
+        // Espera a que el servidor vuelva y recarga
+        const esperar = async () => {
+            const ok = await window.api.get('/sistema/estado').then(x => x?.status === 'Success').catch(() => false);
+            if (ok) { Swal.close(); location.reload(); } else setTimeout(esperar, 5000);
+        };
+        setTimeout(esperar, 15000);
     },
 
     renderInterfaz: function(sesion) {

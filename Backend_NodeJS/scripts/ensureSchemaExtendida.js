@@ -135,6 +135,172 @@ async function ensureSchemaExtendida(pool) {
         await pool.request().query(`ALTER TABLE Citas ADD Notificado BIT NOT NULL DEFAULT 0`);
         console.log('✅ [Schema]: Columna Citas.Notificado agregada.');
     });
+
+    await paso('agregar MSP_024_Consentimiento_Informado.Motivo_Consulta', async () => {
+        if (await existeColumna(pool, 'MSP_024_Consentimiento_Informado', 'Motivo_Consulta')) return;
+        // NULL: los consentimientos ya firmados quedan sin motivo (se imprime "—").
+        await pool.request().query(`ALTER TABLE MSP_024_Consentimiento_Informado ADD Motivo_Consulta NVARCHAR(MAX) NULL`);
+        console.log('✅ [Schema]: Columna MSP_024_Consentimiento_Informado.Motivo_Consulta agregada.');
+    });
+
+    // ── COMISIONES DE DOCTORES ──────────────────────────────────────────
+    // Especialidad con la que se planificó cada tratamiento (la del MSP-024). Los planes
+    // viejos quedan NULL y la comisión la deduce por el nombre del tratamiento.
+    await paso('agregar Tratamientos_Plan.Especialidad', async () => {
+        if (await existeColumna(pool, 'Tratamientos_Plan', 'Especialidad')) return;
+        await pool.request().query(`ALTER TABLE Tratamientos_Plan ADD Especialidad NVARCHAR(100) NULL`);
+        console.log('✅ [Schema]: Columna Tratamientos_Plan.Especialidad agregada.');
+    });
+
+    // % de comisión de cada doctor por especialidad. Especialidad '*' = % por defecto del
+    // doctor para cualquier especialidad que no tenga un % propio.
+    await paso('crear Comisiones_Config', async () => {
+        if (await existeTabla(pool, 'Comisiones_Config')) return;
+        await pool.request().query(`
+            CREATE TABLE Comisiones_Config (
+                ID_Config INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Usuario INT NOT NULL,
+                Especialidad NVARCHAR(100) NOT NULL,
+                Porcentaje DECIMAL(5,2) NOT NULL,
+                Fecha_Actualizacion DATETIME NOT NULL DEFAULT GETDATE(),
+                CONSTRAINT UQ_Comisiones_Config UNIQUE (ID_Usuario, Especialidad)
+            )
+        `);
+        console.log('✅ [Schema]: Tabla Comisiones_Config creada.');
+    });
+
+    // Cabecera de cada pago de comisiones a un doctor (queda registrado también como Gasto).
+    await paso('crear Comisiones_Liquidacion', async () => {
+        if (await existeTabla(pool, 'Comisiones_Liquidacion')) return;
+        await pool.request().query(`
+            CREATE TABLE Comisiones_Liquidacion (
+                ID_Liquidacion INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Clinica INT NOT NULL,
+                ID_Medico INT NOT NULL,
+                Fecha_Desde DATE NOT NULL,
+                Fecha_Hasta DATE NOT NULL,
+                Total_Cobrado DECIMAL(18,2) NOT NULL,
+                Total_Comision DECIMAL(18,2) NOT NULL,
+                Metodo_Pago NVARCHAR(50) NULL,
+                Observaciones NVARCHAR(500) NULL,
+                ID_Gasto INT NULL,
+                ID_Usuario_Registro INT NULL,
+                Fecha_Registro DATETIME NOT NULL DEFAULT GETDATE(),
+                Estado VARCHAR(20) NOT NULL DEFAULT 'PAGADA'
+            )
+        `);
+        console.log('✅ [Schema]: Tabla Comisiones_Liquidacion creada.');
+    });
+
+    // Cada pago de paciente comisionado, con el % aplicado congelado. ID_Pago UNIQUE
+    // (en liquidaciones vigentes) garantiza que un mismo cobro no se comisione dos veces.
+    await paso('crear Comisiones_Liquidacion_Detalle', async () => {
+        if (await existeTabla(pool, 'Comisiones_Liquidacion_Detalle')) return;
+        await pool.request().query(`
+            CREATE TABLE Comisiones_Liquidacion_Detalle (
+                ID_Detalle INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Liquidacion INT NOT NULL,
+                ID_Pago INT NOT NULL,
+                ID_Plan INT NULL,
+                Especialidad NVARCHAR(100) NULL,
+                Monto_Pago DECIMAL(18,2) NOT NULL,
+                Porcentaje DECIMAL(5,2) NOT NULL,
+                Comision DECIMAL(18,2) NOT NULL,
+                CONSTRAINT FK_ComLiqDet_Liq FOREIGN KEY (ID_Liquidacion) REFERENCES Comisiones_Liquidacion(ID_Liquidacion),
+                CONSTRAINT UQ_ComLiqDet_Pago UNIQUE (ID_Pago)
+            )
+        `);
+        console.log('✅ [Schema]: Tabla Comisiones_Liquidacion_Detalle creada.');
+    });
+
+    // ── NÓMINA DE PERSONAL (mismo modelo que MasterHotel/OMNI CORE) ─────
+    await paso('crear Personal', async () => {
+        if (await existeTabla(pool, 'Personal')) return;
+        await pool.request().query(`
+            CREATE TABLE Personal (
+                ID_Personal INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Clinica INT NOT NULL,
+                Nombre_Completo NVARCHAR(200) NOT NULL,
+                Cedula NVARCHAR(20) NULL,
+                Cargo NVARCHAR(100) NULL,
+                Salario_Base DECIMAL(10,2) NOT NULL DEFAULT 0,
+                Fecha_Ingreso DATE NULL,
+                Telefono NVARCHAR(30) NULL,
+                Correo NVARCHAR(150) NULL,
+                Afiliado_IESS BIT NOT NULL DEFAULT 0,
+                Decimo_Tercero_Mensualizado BIT NOT NULL DEFAULT 0,
+                Decimo_Cuarto_Mensualizado BIT NOT NULL DEFAULT 0,
+                Fondo_Reserva_Mensualizado BIT NOT NULL DEFAULT 0,
+                Activo BIT NOT NULL DEFAULT 1,
+                Fecha_Registro DATETIME NOT NULL DEFAULT GETDATE()
+            )
+        `);
+        console.log('✅ [Schema]: Tabla Personal creada.');
+    });
+
+    // ADELANTO, BONO, DESCUENTO, HORAS_SUPLEMENTARIAS, HORAS_EXTRAORDINARIAS,
+    // PAGO_NOMINA, LIQUIDACION_FINAL. ID_Gasto = el Egreso que generó (si salió dinero).
+    await paso('crear Movimientos_Personal', async () => {
+        if (await existeTabla(pool, 'Movimientos_Personal')) return;
+        await pool.request().query(`
+            CREATE TABLE Movimientos_Personal (
+                ID_Movimiento INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Personal INT NOT NULL,
+                ID_Clinica INT NOT NULL,
+                Tipo VARCHAR(30) NOT NULL,
+                Monto DECIMAL(10,2) NOT NULL,
+                Descripcion NVARCHAR(500) NULL,
+                Periodo CHAR(7) NULL,
+                Metodo_Pago NVARCHAR(50) NULL,
+                ID_Gasto INT NULL,
+                Desglose_JSON NVARCHAR(MAX) NULL,
+                ID_Usuario_Registro INT NULL,
+                Fecha_Movimiento DATETIME NOT NULL DEFAULT GETDATE(),
+                CONSTRAINT FK_MovPersonal_Personal FOREIGN KEY (ID_Personal) REFERENCES Personal(ID_Personal)
+            )
+        `);
+        console.log('✅ [Schema]: Tabla Movimientos_Personal creada.');
+    });
+
+    // SBU y tasas IESS por año — el administrador los ajusta cada enero (no se inventan).
+    await paso('crear Parametros_Laborales', async () => {
+        if (await existeTabla(pool, 'Parametros_Laborales')) return;
+        await pool.request().query(`
+            CREATE TABLE Parametros_Laborales (
+                Anio INT PRIMARY KEY,
+                SBU DECIMAL(10,2) NOT NULL,
+                Aporte_Personal_IESS DECIMAL(6,4) NOT NULL DEFAULT 0.0945,
+                Aporte_Patronal_IESS DECIMAL(6,4) NOT NULL DEFAULT 0.1115,
+                Porcentaje_Fondo_Reserva DECIMAL(6,4) NOT NULL DEFAULT 0.0833
+            )
+        `);
+        console.log('✅ [Schema]: Tabla Parametros_Laborales creada.');
+    });
+
+    // Región para el Décimo Cuarto (Art. 113): 'COSTA' (Costa/Galápagos) o 'SIERRA' (Sierra/Amazonía).
+    await paso('agregar Clinicas.Region_Decimo_Cuarto', async () => {
+        if (await existeColumna(pool, 'Clinicas', 'Region_Decimo_Cuarto')) return;
+        await pool.request().query(`ALTER TABLE Clinicas ADD Region_Decimo_Cuarto VARCHAR(10) NULL`);
+        console.log('✅ [Schema]: Columna Clinicas.Region_Decimo_Cuarto agregada.');
+    });
+
+    // Identificador único de ESTA instalación (para el registro de instalaciones en
+    // casrodsoft.com). Vive en la base de datos: si alguien copia el sistema completo a
+    // otra máquina, el mismo ID aparece con otra huella de equipo y el panel lo alerta.
+    await paso('crear Sistema_Instalacion', async () => {
+        if (!(await existeTabla(pool, 'Sistema_Instalacion'))) {
+            await pool.request().query(`
+                CREATE TABLE Sistema_Instalacion (
+                    ID_Instalacion NVARCHAR(36) NOT NULL PRIMARY KEY,
+                    Fecha_Creacion DATETIME NOT NULL DEFAULT GETDATE()
+                )
+            `);
+            console.log('✅ [Schema]: Tabla Sistema_Instalacion creada.');
+        }
+        await pool.request().query(`
+            IF NOT EXISTS (SELECT 1 FROM Sistema_Instalacion)
+                INSERT INTO Sistema_Instalacion (ID_Instalacion) VALUES (CONVERT(NVARCHAR(36), NEWID()))`);
+    });
 }
 
 module.exports = { ensureSchemaExtendida };
