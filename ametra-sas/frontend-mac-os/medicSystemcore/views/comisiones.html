@@ -1,0 +1,67 @@
+<div class="com-wrapper" style="animation: fadeIn 0.5s ease; padding: 25px; background: #f1f5f9; min-height: 100vh;">
+
+    <!-- HEADER -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 15px;">
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <button onclick="window.router.load('dashboard')"
+                style="background: #4f46e5; color: white; border: none; width: 50px; height: 50px; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);"
+                title="Regresar al Dashboard">
+                <i class="fas fa-arrow-left" style="font-size: 1.2rem;"></i>
+            </button>
+            <div>
+                <h1 style="font-size: 24px; font-weight: 800; color: #1e293b; margin: 0;">Comisiones de Doctores</h1>
+                <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Calculadas sobre lo cobrado · % por doctor y especialidad</p>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+            <div id="com-container-clinica" style="display: none; flex-direction: column; min-width: 200px;">
+                <label style="font-size: 10px; font-weight: 800; color: #4f46e5; margin-bottom: 5px; text-transform: uppercase;">Sede / Clínica</label>
+                <select id="com-clinica" onchange="window.comisionesModule.recargar()" style="padding: 10px; border-radius: 10px; border: 2px solid #e2e8f0; font-family: 'Inter'; font-weight: 600; color: #1e293b; background: #f8fafc;"></select>
+            </div>
+            <div style="display: flex; flex-direction: column;">
+                <label style="font-size: 10px; font-weight: 800; color: #64748b; margin-bottom: 5px;">PAGOS COBRADOS ENTRE</label>
+                <div style="display: flex; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 5px 15px;">
+                    <input type="date" id="com-fecha-inicio" style="border: none; background: transparent; padding: 8px; font-family: 'Inter';">
+                    <span style="align-self: center; color: #cbd5e1; margin: 0 10px;">al</span>
+                    <input type="date" id="com-fecha-fin" style="border: none; background: transparent; padding: 8px; font-family: 'Inter';">
+                </div>
+            </div>
+            <button onclick="window.comisionesModule.recargar()" style="background: #4f46e5; color: white; border: none; padding: 0 20px; border-radius: 10px; cursor: pointer; height: 48px;" title="Actualizar">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- PESTAÑAS -->
+    <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <button class="com-tab" data-tab="pendientes" onclick="window.comisionesModule.tab('pendientes')"><i class="fas fa-hourglass-half"></i> Pendientes por liquidar</button>
+        <button class="com-tab" data-tab="config" onclick="window.comisionesModule.tab('config')"><i class="fas fa-percent"></i> % por doctor y especialidad</button>
+        <button class="com-tab" data-tab="historial" onclick="window.comisionesModule.tab('historial')"><i class="fas fa-history"></i> Liquidaciones pagadas</button>
+    </div>
+
+    <div id="com-panel-pendientes" class="com-panel"></div>
+    <div id="com-panel-config" class="com-panel" style="display:none;"></div>
+    <div id="com-panel-historial" class="com-panel" style="display:none;"></div>
+</div>
+
+<style>
+    .com-tab { border: none; background: #e2e8f0; color: #475569; padding: 11px 18px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; font-family: 'Inter'; }
+    .com-tab.activa { background: #4f46e5; color: white; box-shadow: 0 4px 10px rgba(79,70,229,0.25); }
+    .com-panel { background: white; border-radius: 16px; padding: 22px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
+    .com-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .com-table th { text-align: left; color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; padding: 10px 8px; border-bottom: 2px solid #e2e8f0; }
+    .com-table td { padding: 11px 8px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
+    .com-table .num { text-align: right; font-weight: 700; }
+    .com-btn { border: none; border-radius: 8px; padding: 7px 12px; font-weight: 700; font-size: 12px; cursor: pointer; font-family: 'Inter'; }
+    .com-btn-primary { background: #4f46e5; color: white; }
+    .com-btn-green { background: #10b981; color: white; }
+    .com-btn-ghost { background: #eef2ff; color: #4f46e5; }
+    .com-btn-red { background: #fee2e2; color: #b91c1c; }
+    .com-empty { text-align: center; padding: 30px; color: #94a3b8; }
+    .com-warn { display: inline-block; background: #fef3c7; color: #b45309; border-radius: 6px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
+    .com-tot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+    .com-tot div { background: #f8fafc; border-left: 5px solid #4f46e5; border-radius: 12px; padding: 14px; }
+    .com-tot span { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+    .com-tot b { font-size: 20px; color: #1e293b; }
+</style>

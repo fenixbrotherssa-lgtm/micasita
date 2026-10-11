@@ -1,0 +1,72 @@
+<div class="nom-wrapper" style="animation: fadeIn 0.5s ease; padding: 25px; background: #f1f5f9; min-height: 100vh;">
+
+    <!-- HEADER -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 15px;">
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <button onclick="window.router.load('dashboard')"
+                style="background: #4f46e5; color: white; border: none; width: 50px; height: 50px; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);"
+                title="Regresar al Dashboard">
+                <i class="fas fa-arrow-left" style="font-size: 1.2rem;"></i>
+            </button>
+            <div>
+                <h1 style="font-size: 24px; font-weight: 800; color: #1e293b; margin: 0;">Nómina y Personal</h1>
+                <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px;">Rol de pagos, adelantos, beneficios de ley y liquidaciones · conectado a Ingresos y Gastos</p>
+            </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+            <div id="nom-container-clinica" style="display: none; flex-direction: column; min-width: 200px;">
+                <label style="font-size: 10px; font-weight: 800; color: #4f46e5; margin-bottom: 5px; text-transform: uppercase;">Sede / Clínica</label>
+                <select id="nom-clinica" onchange="window.personalModule.cambiarClinica()" style="padding: 10px; border-radius: 10px; border: 2px solid #e2e8f0; font-family: 'Inter'; font-weight: 600; color: #1e293b; background: #f8fafc;"></select>
+            </div>
+            <button class="nom-btn nom-btn-ghost" onclick="window.personalModule.abrirParametros()" style="height:46px;"><i class="fas fa-sliders-h"></i> Parámetros SBU/IESS</button>
+            <button class="nom-btn nom-btn-primary" onclick="window.personalModule.editarEmpleado()" style="height:46px;"><i class="fas fa-user-plus"></i> Nuevo empleado</button>
+        </div>
+    </div>
+
+    <div id="nom-aviso"></div>
+
+    <!-- EMPLEADOS -->
+    <div class="nom-panel" style="margin-bottom:20px;">
+        <h3 class="nom-h3"><i class="fas fa-id-badge" style="color:#4f46e5;"></i> Personal activo</h3>
+        <div id="nom-tabla-personal"><div class="nom-empty">Cargando personal...</div></div>
+    </div>
+
+    <!-- ROL DE PAGOS -->
+    <div class="nom-panel">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+            <h3 class="nom-h3" style="margin:0;"><i class="fas fa-file-invoice-dollar" style="color:#10b981;"></i> Rol de pagos</h3>
+            <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+                <div style="display:flex; flex-direction:column;">
+                    <label style="font-size:10px; font-weight:800; color:#64748b; margin-bottom:5px;">PERÍODO</label>
+                    <input type="month" id="nom-periodo" style="padding:9px 12px; border:1px solid #e2e8f0; border-radius:10px; font-family:'Inter'; background:#f8fafc;">
+                </div>
+                <button class="nom-btn nom-btn-primary" onclick="window.personalModule.generarNomina()" style="height:40px;"><i class="fas fa-calculator"></i> Calcular</button>
+                <button class="nom-btn nom-btn-ghost" onclick="window.personalModule.verHistorialPagos()" style="height:40px;"><i class="fas fa-history"></i> Pagos realizados</button>
+            </div>
+        </div>
+        <div id="nom-resultado"><div class="nom-empty">Elige el período y pulsa "Calcular".</div></div>
+    </div>
+</div>
+
+<style>
+    .nom-panel { background: white; border-radius: 16px; padding: 22px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); overflow-x: auto; }
+    .nom-h3 { font-size: 16px; font-weight: 800; color: #1e293b; margin: 0 0 14px 0; }
+    .nom-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+    .nom-table th { text-align: left; color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; padding: 10px 8px; border-bottom: 2px solid #e2e8f0; }
+    .nom-table td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; color: #1e293b; vertical-align: middle; }
+    .nom-table .num { text-align: right; font-weight: 700; }
+    .nom-btn { border: none; border-radius: 9px; padding: 8px 14px; font-weight: 700; font-size: 12px; cursor: pointer; font-family: 'Inter'; display: inline-flex; align-items: center; gap: 6px; }
+    .nom-btn-sm { padding: 6px 9px; font-size: 11px; }
+    .nom-btn-primary { background: #4f46e5; color: white; }
+    .nom-btn-green { background: #10b981; color: white; }
+    .nom-btn-ghost { background: #eef2ff; color: #4f46e5; }
+    .nom-btn-gray { background: #f1f5f9; color: #475569; }
+    .nom-btn-red { background: #fee2e2; color: #b91c1c; }
+    .nom-empty { text-align: center; padding: 26px; color: #94a3b8; }
+    .nom-tag { display: inline-block; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 2px 6px; }
+    .nom-aviso { border-radius: 10px; padding: 11px 14px; margin-bottom: 14px; font-size: 13px; font-weight: 600; }
+    .nom-form { text-align: left; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .nom-form label { font-size: 11px; font-weight: 800; color: #64748b; display: block; margin-bottom: 3px; }
+    .nom-form input, .nom-form select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 7px; font-family: 'Inter'; font-size: 13px; box-sizing: border-box; }
+    .nom-form .span2 { grid-column: 1 / -1; }
+</style>

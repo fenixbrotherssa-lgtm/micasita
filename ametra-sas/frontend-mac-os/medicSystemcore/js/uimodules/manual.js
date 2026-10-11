@@ -56,10 +56,10 @@ const MODULOS_MANUAL = [
         ],
         sections: [
             { t: 'Operaciones Clínicas', d: 'Pacientes, Citas Médicas, Inventario' },
-            { t: 'Gestión Financiera', d: 'Caja, Facturación, Gastos*, Reportes KPI*, CRM*' },
+            { t: 'Gestión Financiera', d: 'Caja, Facturación, Gastos*, Reportes KPI*, Comisiones*, Nómina*, CRM*' },
             { t: 'Configuración de Sistema', d: 'Personal* y Sucursales* (*solo Administrador)' }
         ],
-        note: 'Las tarjetas de módulos administrativos (Gastos, Reportes KPI, CRM, Personal, Sucursales) directamente no aparecen para Asistentes o Médicos — no es que estén bloqueadas, es que el propio Dashboard las quita de la pantalla según tu rol.',
+        note: 'Las tarjetas de módulos administrativos (Gastos, Reportes KPI, Comisiones, Nómina, CRM, Personal, Sucursales) directamente no aparecen para Asistentes o Médicos — no es que estén bloqueadas, es que el propio Dashboard las quita de la pantalla según tu rol.',
         warnings: [
             'Si no ves un módulo que esperabas, primero revisa tu rol antes de reportarlo como error — es comportamiento esperado, no un bug.'
         ]
@@ -171,6 +171,8 @@ const MODULOS_MANUAL = [
             { icon: 'print', label: 'Imprimir', desc: 'Genera el reporte del odontograma completo.' },
             { icon: 'save', label: 'Guardar Cambios Clínicos', desc: 'Guarda todos los hallazgos marcados en esta sesión.' },
             { icon: 'eraser', label: 'Limpiar', desc: 'Borra el hallazgo de la pieza/cara seleccionada.' },
+            { icon: 'tooth', label: 'Endo. / Perno / Implante', desc: 'Tratamientos de pieza completa: haz clic en cualquier cara del diente. Endodoncia se dibuja con el triángulo del MSP-033, el perno como poste con su núcleo y el implante como tornillo (el implante también rehabilita una pieza marcada como Ausente). Una pieza puede tener endodoncia + perno + corona a la vez.' },
+            { icon: 'x-ray', label: 'Vista RX (visor 3D)', desc: 'Vuelve translúcidas la encía y los dientes para ver las raíces: el conducto obturado (naranja), el perno metálico y el tornillo del implante. Haz zoom con la rueda del mouse y clic en una pieza para centrarla.' },
             { icon: 'file-invoice-dollar', label: 'Enviar a Presupuesto', desc: 'Manda las sugerencias detectadas a un presupuesto para el paciente.' },
             { icon: 'notes-medical', label: 'Enviar a Tratamiento', desc: 'Manda las sugerencias detectadas directo a planificación de tratamiento.' }
         ],
@@ -181,7 +183,9 @@ const MODULOS_MANUAL = [
             { c: '#e0f2fe', t: 'Carilla de Resina' },
             { c: '#f59e0b', t: 'Corona' },
             { c: '#10b981', t: 'Prótesis' },
-            { c: '#a855f7', t: 'Endodoncia' },
+            { c: '#a855f7', t: 'Endodoncia (triángulo ▲ en 2D, conducto en 3D)' },
+            { c: '#334155', t: 'Perno / núcleo' },
+            { c: '#cbd5e1', t: 'Implante (tornillo)' },
             { c: '#22d3ee', t: 'Sellante' },
             { c: '#6366f1', t: 'Brackets (Ortodoncia)' },
             { c: '#1e293b', t: 'Ausente' },
@@ -202,14 +206,16 @@ const MODULOS_MANUAL = [
             'Presiona <b>Planificar Tratamientos</b> (o llega aquí desde "Sugerencias por Pieza" del Odontograma, o desde "Aprobar" un Presupuesto).',
             'Por cada procedimiento: elige médico, servicio del catálogo, pieza/caras y descuento si aplica.',
             'Busca y selecciona el <b>diagnóstico CIE-10</b> correspondiente.',
+            'Revisa la <b>Especialidad</b> (se detecta sola según el procedimiento, pero puedes cambiarla — de ella depende el % de comisión del médico) y escribe el <b>Motivo de la consulta</b>, que sale impreso en el MSP-024.',
             'Explica el procedimiento al paciente, y hazlo firmar el <b>consentimiento informado MSP-024</b> en el recuadro de firma — es obligatorio, el sistema no deja guardar sin firma.',
             'Si el paciente es menor de edad o no apto para firmar, marca la casilla de representante legal y completa sus datos.',
             'Si el paciente no está físicamente frente al computador (o prefiere firmar en su propio celular), presiona <b>Enviar a Firma (Celular)</b>: se abre la app móvil de AMETRA OS en la pantalla de Firmador de quien la tenga instalada y con sesión iniciada en esa clínica, y la firma que haga ahí llena este mismo recuadro automáticamente, sin recargar nada.',
-            'Guarda — el sistema imprime el MSP-024 si lo necesitas en papel.'
+            'Guarda — el sistema imprime el MSP-024 si lo necesitas en papel. El formulario impreso incluye el <b>odontograma del paciente</b> con las piezas de este tratamiento marcadas en naranja.'
         ],
         actions: [
             { icon: 'plus-circle', label: 'Planificar Tratamientos', desc: 'Abre el modal completo: elige médico, servicio, pieza/caras, descuento, diagnóstico CIE-10, firma del consentimiento MSP-024.' },
             { icon: 'plus', label: 'Nuevo Servicio', desc: 'Agrega una prestación nueva al catálogo (con su precio).' },
+            { icon: 'pen', label: 'Editar Servicio (lápiz)', desc: 'Cambia el nombre o el precio de una prestación del catálogo. Los tratamientos ya asignados a pacientes conservan su precio original.' },
             { icon: 'mobile-alt', label: 'Enviar a Firma (Celular)', desc: 'Manda el consentimiento a firmar desde el celular en vez del recuadro del computador — la firma vuelve sola al mismo lugar.' }
         ],
         sections: [
@@ -298,7 +304,8 @@ const MODULOS_MANUAL = [
             'Revisa los datos del paciente y los montos <b>antes</b> de autorizar ante el SRI — una vez autorizado, el comprobante no se puede editar ni eliminar desde el sistema.',
             'Subir un certificado .p12 nuevo desactiva automáticamente el anterior — no se pueden tener dos firmas activas a la vez.',
             'El sistema no revisa si el certificado está vencido antes de usarlo — si expiró, el SRI lo va a rechazar recién en ese momento. Revisa la fecha de vencimiento de tu firma cada cierto tiempo.',
-            'Si los datos tributarios de la sede (RUC, régimen RIMPE, contribuyente especial) están incompletos en Sucursales, la factura se genera igual pero con esos campos en blanco — puede ser inválida ante el SRI. Complétalos antes de facturar desde una sede nueva.'
+            'Si los datos tributarios de la sede (RUC, régimen RIMPE, contribuyente especial) están incompletos en Sucursales, la factura se genera igual pero con esos campos en blanco — puede ser inválida ante el SRI. Complétalos antes de facturar desde una sede nueva.',
+            'Cada factura electrónica lleva en <b>Información Adicional</b> el RUC y nombre del proveedor del sistema de facturación (CasRodSoft Development, RUC 1760666147001), como corresponde ante el SRI — no es un error ni hay que borrarlo.'
         ]
     },
     {
@@ -330,7 +337,7 @@ const MODULOS_MANUAL = [
         title: 'Ingresos y Gastos',
         purpose: 'El panel financiero completo de la clínica: producción, recaudación real, egresos, cartera pendiente, auditoría de movimientos por sede, y el historial de todos los cierres de caja ya sellados.',
         steps: [
-            'Registra egresos del día a día con <b>Nuevo Movimiento</b>, usando los <b>Rubros</b> (categorías) que definas.',
+            'Registra egresos del día a día con <b>Nuevo Movimiento</b>, usando los <b>Rubros</b> (categorías) que definas. Los pagos de <b>Nómina</b> y las liquidaciones de <b>Comisiones</b> aparecen aquí solos como egresos.',
             'Antes de cerrar un período, confirma que <b>todos los cajeros ya hicieron su arqueo de Caja</b> — el sistema no te va a dejar avanzar si queda alguno abierto.',
             'Revisa los 5 indicadores y la auditoría de movimientos del período.',
             'Presiona <b>Ejecutar Cierre</b> para sellar el período — a partir de ahí, ningún gasto de esas fechas se puede registrar ni borrar.',
@@ -364,6 +371,7 @@ const MODULOS_MANUAL = [
             'Elige el rango de fechas y, si administras varias sedes, la clínica a analizar.',
             'Presiona <b>Actualizar</b> para recalcular las métricas de ese período.',
             'Revisa el ranking de doctores y servicios más rentables para decisiones de negocio.',
+            '<b>Haz clic en cualquier métrica</b> para ver el detalle de lo que suma: cada tarjeta, un día de la tendencia, un método de pago, un servicio, un doctor o un deudor abre una tabla con los registros y su total.',
             'Usa <b>Reporte Detallado</b> cuando necesites imprimir o compartir el informe completo.'
         ],
         actions: [
@@ -375,6 +383,66 @@ const MODULOS_MANUAL = [
             { t: 'Tendencia Ingresos vs Gastos', d: 'Gráfico comparativo' },
             { t: 'Ranking de Doctores', d: 'Producción por médico' },
             { t: 'Top Servicios Rentables', d: 'Los procedimientos que más generan' }
+        ],
+        note: 'El rango de fechas incluye el primer y el último día elegidos completos.'
+    },
+    {
+        id: 'comisiones', file: 'comisiones.html', icon: 'hand-holding-usd', color: '#10b981', role: 'admin',
+        title: 'Comisiones de Doctores',
+        purpose: 'Calcula y paga las comisiones de cada médico sobre lo efectivamente COBRADO (no sobre lo planificado), con un porcentaje propio por doctor y por especialidad.',
+        steps: [
+            'En la pestaña <b>% por doctor y especialidad</b>, edita cada médico: pon su <b>% por defecto</b> y, si alguna especialidad paga distinto (ej. Ortodoncia 50%), su % propio. Las especialidades vacías usan el % por defecto.',
+            'En <b>Pendientes por liquidar</b>, elige el rango de fechas de los cobros: verás por doctor cuánto se cobró y cuánto le corresponde. Usa <b>Detalle</b> para ver pago por pago.',
+            'Presiona <b>Liquidar</b>, indica de dónde sale el dinero (efectivo, transferencia, tarjeta) y confirma. Imprime el comprobante para que el doctor firme.',
+            'En <b>Liquidaciones pagadas</b> queda el historial; desde ahí puedes reimprimir o <b>anular</b> una liquidación.'
+        ],
+        actions: [
+            { icon: 'pen', label: 'Editar %', desc: '% por defecto y % por especialidad de cada doctor.' },
+            { icon: 'list', label: 'Detalle', desc: 'Pagos cobrados pendientes de comisión, con especialidad, % aplicado y comisión.' },
+            { icon: 'hand-holding-usd', label: 'Liquidar', desc: 'Registra el pago de la comisión: queda como egreso en Ingresos y Gastos (categoría Comisiones Médicas).' },
+            { icon: 'print', label: 'Comprobante', desc: 'Comprobante de liquidación con firmas de entrega y recepción.' },
+            { icon: 'ban', label: 'Anular', desc: 'Deshace una liquidación: elimina su egreso y los pagos vuelven a quedar pendientes.' }
+        ],
+        sections: [
+            { t: 'Base de cálculo', d: 'Cada pago de un paciente sobre un tratamiento genera comisión para el médico de ese tratamiento; un abono parcial genera comisión parcial' },
+            { t: 'Especialidad', d: 'La del MSP-024 al planificar; en tratamientos antiguos o de presupuestos se deduce por el nombre del procedimiento' }
+        ],
+        warnings: [
+            'Cada pago se comisiona <b>una sola vez</b> y queda guardado con el % que se aplicó: cambiar el % después no altera lo ya liquidado.',
+            'Los pagos de un doctor sin % configurado no se liquidan (aparecen marcados "sin %") — configúralo primero.',
+            'No se puede liquidar ni anular dentro de un período con <b>Cierre Financiero</b>.',
+            'En un mismo planificado, todos los procedimientos llevan la especialidad elegida en el MSP-024: si mezclas, por ejemplo, una limpieza y brackets, planifícalos por separado para que cada uno lleve su %.'
+        ]
+    },
+    {
+        id: 'nomina', file: 'nomina.html', icon: 'id-badge', color: '#4f46e5', role: 'admin',
+        title: 'Nómina',
+        purpose: 'Rol de pagos del personal según el Código de Trabajo de Ecuador: sueldo, IESS, décimos, fondo de reserva, vacaciones, horas extra, adelantos y liquidación final. Todo pago queda como egreso en Ingresos y Gastos.',
+        steps: [
+            'La primera vez (y cada enero), entra a <b>Parámetros SBU/IESS</b>: ingresa el Salario Básico Unificado del año y la región de la clínica para el Décimo Cuarto (Sierra/Amazonía o Costa/Galápagos).',
+            'Registra a cada empleado con <b>Nuevo empleado</b>: sueldo, fecha de ingreso, si está afiliado al IESS y qué beneficios eligió recibir cada mes (mensualizados).',
+            'Durante el mes registra con el botón de movimientos: adelantos, bonos, descuentos y horas suplementarias (+50%) o extraordinarias (+100%) — el valor de las horas lo calcula el sistema.',
+            'A fin de mes, elige el período y presiona <b>Calcular</b>: verás el rol de cada empleado. Presiona <b>Pagar</b> en cada uno e imprime el rol para que lo firme.',
+            'Si un empleado sale, usa <b>Liquidación final</b>: elige el motivo y la fecha, revisa y ajusta cada valor, y confirma.'
+        ],
+        actions: [
+            { icon: 'user-plus', label: 'Nuevo empleado', desc: 'Datos laborales, afiliación IESS y beneficios mensualizados.' },
+            { icon: 'exchange-alt', label: 'Movimiento', desc: 'Adelanto, bono, descuento u horas extra. Si el dinero ya se entregó, se registra el egreso en ese momento.' },
+            { icon: 'calculator', label: 'Calcular', desc: 'Rol de pagos del período: sueldo (prorrateado si entró a mitad de mes), bonos, horas, adelantos, descuentos, IESS y neto.' },
+            { icon: 'money-check-alt', label: 'Pagar', desc: 'Paga el neto del período (el sistema lo recalcula) y lo registra como egreso.' },
+            { icon: 'piggy-bank', label: 'Provisiones', desc: 'Décimo tercero, décimo cuarto, fondo de reserva (desde el mes 13), vacaciones y aporte patronal del mes.' },
+            { icon: 'file-invoice-dollar', label: 'Liquidación final', desc: 'Renuncia (desahucio), despido intempestivo (indemnización), mutuo acuerdo o visto bueno, con valores editables.' }
+        ],
+        sections: [
+            { t: 'Personal activo', d: 'Empleados con sueldo, ingreso, adelantos e IESS' },
+            { t: 'Rol de pagos', d: 'Cálculo por período, pagos realizados e impresión' }
+        ],
+        note: 'Los empleados de Nómina son independientes de los usuarios del sistema (módulo Personal). Un doctor con sueldo se registra aquí como empleado; sus comisiones siguen en el módulo Comisiones.',
+        warnings: [
+            'Sin el SBU del año configurado el rol no se calcula — el sistema avisa y lleva a Parámetros SBU/IESS.',
+            'Un período no se puede pagar dos veces al mismo empleado. Si te equivocaste, anula el pago desde el <b>Historial</b> del empleado (también elimina su egreso) y vuelve a pagar.',
+            'La liquidación final es una ayuda de cálculo: asume que el empleado nunca tomó vacaciones ni cobró el fondo de reserva — ajusta esos valores si no es así antes de confirmar.',
+            'No se pueden registrar pagos dentro de un período con <b>Cierre Financiero</b>.'
         ]
     },
     {
@@ -469,7 +537,7 @@ const MODULOS_MANUAL = [
 const GRUPOS_MANUAL = [
     { label: 'Inicio', ids: ['login', 'dashboard'] },
     { label: 'Operaciones Clínicas', ids: ['pacientes', 'citas', 'historia_clinica', 'odontograma', 'tratamientos', 'pagos'] },
-    { label: 'Gestión Financiera', ids: ['caja', 'facturacion', 'inventario', 'gastos', 'kpi', 'crm'] },
+    { label: 'Gestión Financiera', ids: ['caja', 'facturacion', 'inventario', 'gastos', 'kpi', 'comisiones', 'nomina', 'crm'] },
     { label: 'Configuración', ids: ['usuarios', 'sucursales'] }
 ];
 

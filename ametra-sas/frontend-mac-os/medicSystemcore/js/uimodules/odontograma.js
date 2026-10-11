@@ -18,6 +18,15 @@ const HALLAZGOS_INICIALES = ['Caries', 'Fractura', 'Ausente', 'Raiz', 'Extraer',
 // lista equivalente para saber cuándo debía sacar el estado visual de "Ausente").
 const ESTADOS_REHABILITACION = ['Protesis', 'Protesis Fija', 'Protesis Removible', 'Implante', 'Puente', 'Corona', 'Corona Fija'];
 
+// Tratamientos de PIEZA COMPLETA (no de una cara): se dibujan como marca sobre el diente y
+// cada uno se guarda en su propia "cara" fija, igual que en el backend (caraFijaPorEstado),
+// para que una pieza pueda tener endodoncia + perno + corona sin que un registro pise al otro.
+const MARCAS_PIEZA = {
+    Endodoncia: { clase: 'tiene-endo', cara: 'Raiz' },
+    Perno: { clase: 'tiene-perno', cara: 'Perno' },
+    Implante: { clase: 'tiene-implante', cara: 'Implante' }
+};
+
 // La patología (Estado del odontograma) y el catálogo de PRESTACIONES (precios) son cosas
 // distintas y cada clínica nombra su catálogo distinto — buscar el nombre literal de la
 // patología dentro del nombre de la prestación (ej. "caries" dentro de "RESTAURACION SIMPLE")
@@ -64,7 +73,9 @@ const TRADUCCION_TECNICA_CARAS = {
     "DERECHA": "Derecha (Mesial/Distal)",
     "CENTRO": "Centro (Oclusal)",
     "RAIZ": "Radicular / Raíz",
-    "GENERAL": "Pieza Completa"
+    "GENERAL": "Pieza Completa",
+    "PERNO": "Intrarradicular (perno/núcleo)",
+    "IMPLANTE": "Pieza Completa (implante)"
 };
 // ==========================================
 // MÓDULO DE LÓGICA PRINCIPAL
@@ -176,6 +187,19 @@ window.odontogramaModule = {
                         <polygon class="cara-odo" data-cara="Izquierda" points="0,0 0,100 25,75 25,25" onclick="window.marcarCara(this)" />
                         <polygon class="cara-odo" data-cara="Centro" points="25,25 75,25 75,75 25,75" onclick="window.marcarCara(this)" />
                     </svg>
+                    <svg viewBox="0 0 100 100" class="diente-marcas">
+                        <g class="marca-perno"><title>Perno / núcleo</title>
+                            <rect x="45" y="6" width="10" height="66" rx="2" fill="#334155"/>
+                            <rect x="35" y="36" width="30" height="24" rx="3" fill="#94a3b8" stroke="#1e293b" stroke-width="3"/>
+                        </g>
+                        <g class="marca-implante"><title>Implante</title>
+                            <rect x="39" y="8" width="22" height="84" rx="5" fill="#cbd5e1" stroke="#475569" stroke-width="3"/>
+                            <path d="M33 22 H67 M33 34 H67 M33 46 H67 M33 58 H67 M33 70 H67 M35 82 H65" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+                        </g>
+                        <g class="marca-endo"><title>Endodoncia</title>
+                            <polygon points="50,18 80,74 20,74" fill="none" stroke="#7c3aed" stroke-width="8" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
                 </div>
             </div>
         `).join('');
@@ -226,6 +250,13 @@ window.odontogramaModule = {
             svg.classList.remove('ausente-total');
             const imgRehab = unit.querySelector('.diente-img');
             if (imgRehab) imgRehab.style.opacity = '';
+        }
+
+        // Endodoncia / perno / implante: marca de pieza completa (cualquiera sea la cara con la
+        // que se haya guardado — los registros viejos de Endodoncia venían en caras sueltas).
+        if (MARCAS_PIEZA[estadoOriginal]) {
+            unit.classList.add(MARCAS_PIEZA[estadoOriginal].clase);
+            if (estadoOriginal !== 'Endodoncia') return; // la endodoncia además pinta su cara (abajo)
         }
 
         // --- LÓGICA DE PINTADO COMPLETA ---
@@ -534,7 +565,9 @@ window.marcarCara = function(el) {
                     window.odontogramaState.data[numDiente] = []; // ya no queda nada que re-pintar
 
                     svg.classList.remove('ausente-total', 'ortodoncia-total');
-                    unit.classList.remove('periodontitis-total', 'supernumerario-total');
+                    unit.classList.remove('periodontitis-total', 'supernumerario-total', 'tiene-endo', 'tiene-perno', 'tiene-implante');
+                    const imgLimpia = unit.querySelector('.diente-img');
+                    if (imgLimpia) imgLimpia.style.opacity = '';
                     svg.querySelectorAll('.cara-odo').forEach(c => c.setAttribute('class', 'cara-odo'));
                     unit.querySelectorAll('.zona-raiz').forEach(z => z.className = 'zona-raiz');
                 })
@@ -543,7 +576,20 @@ window.marcarCara = function(el) {
         return;
     }
 
-    if (tool === 'Periodontitis') {
+    if (MARCAS_PIEZA[tool]) {
+        // Pieza completa: no importa en qué cara se hizo clic.
+        unit.classList.add(MARCAS_PIEZA[tool].clase);
+        if (tool === 'Endodoncia') {
+            const zona = unit.querySelector('.zona-raiz');
+            if (zona) zona.className = 'zona-raiz endodoncia is-sanado';
+        }
+        if (tool === 'Implante') {
+            // El implante rehabilita una pieza ausente (igual que prótesis/corona).
+            svg.classList.remove('ausente-total');
+            const img = unit.querySelector('.diente-img');
+            if (img) img.style.opacity = '';
+        }
+    } else if (tool === 'Periodontitis') {
         unit.classList.add('periodontitis-total');
     } else if (tool === 'Supernumerario') {
         unit.classList.add('supernumerario-total');
@@ -596,6 +642,12 @@ window.guardarOdontograma = function() {
         if (unit.classList.contains('supernumerario-total')) {
             hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Supernumerario', idUser));
         }
+        // Perno e implante (la endodoncia ya se guarda abajo, con la zona de raíz).
+        ['Perno', 'Implante'].forEach(est => {
+            if (unit.classList.contains(MARCAS_PIEZA[est].clase)) {
+                hallazgos.push(crearObjetoHallazgo(idPac, num, MARCAS_PIEZA[est].cara, est, idUser));
+            }
+        });
 
         if (svg.classList.contains('ausente-total')) {
             hallazgos.push(crearObjetoHallazgo(idPac, num, 'General', 'Ausente', idUser));
@@ -930,8 +982,11 @@ window.initVisor3D = function () {
                 break;
 
             case 'Implante':
-                mesh.material.color.set(0x94a3b8);
-                mesh.material.metalness = 0.8;
+                // Corona de porcelana sobre el implante; la raíz natural se reemplaza por el
+                // tornillo de titanio en agregarAditamentos3D().
+                mesh.material.color.set(0xf8fafc);
+                mesh.material.metalness = 0.1;
+                mesh.material.roughness = 0.2;
                 break;
 
             // Antes: estos 6 estados caían en el "default" y se veían IGUAL que un diente sano
@@ -1048,6 +1103,183 @@ window.initVisor3D = function () {
                 );
             }
         });
+    }
+
+    // =========================================================
+    // ADITAMENTOS: ENDODONCIA / PERNO / IMPLANTE
+    // Cada pieza del modelo tiene su raíz como malla propia (NN_R). Se usa su caja en
+    // coordenadas de mundo y la dirección raíz→corona para dibujar, dentro de la raíz:
+    //  - Endodoncia: conducto obturado (gutapercha) + raíz semitransparente.
+    //  - Perno: poste metálico desde el tercio coronal de la raíz hasta la corona.
+    //  - Implante: tornillo de titanio en lugar de la raíz natural (que se oculta).
+    // Se agregan a la escena (no al modelo) para que el raycaster no los tome como dientes.
+    // =========================================================
+    const aditamentos = [];
+
+    function marcasDePieza(historial) {
+        const tiene = (est) => historial.some(h => h.Estado === est);
+        return { endo: tiene('Endodoncia'), perno: tiene('Perno'), implante: tiene('Implante') };
+    }
+
+    function orientarCilindro(obj, desde, hasta) {
+        const dir = new THREE.Vector3().subVectors(hasta, desde);
+        const largo = dir.length();
+        obj.position.copy(desde).addScaledVector(dir, 0.5);
+        obj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        return largo;
+    }
+
+    function hacerTransparente(mesh, color) {
+        mesh.material = mesh.material.clone();
+        mesh.material.transparent = true;
+        mesh.material.opacity = 0.35;
+        mesh.material.depthWrite = false;
+        if (color !== undefined) mesh.material.color.set(color);
+        mesh.userData.originalMaterial = mesh.material.clone();
+    }
+
+    function geometriaTornillo(largo, radio) {
+        // Perfil de rosca (diente de sierra) que se revoluciona alrededor del eje Y.
+        const pts = [new THREE.Vector2(0, 0)];
+        const pasos = 14;
+        for (let i = 0; i <= pasos; i++) {
+            const y = (i / pasos) * largo;
+            const conico = i < 3 ? 0.55 + i * 0.15 : 1; // ápice cónico
+            pts.push(new THREE.Vector2(radio * 0.78 * conico, y));
+            if (i < pasos) pts.push(new THREE.Vector2(radio * conico, y + largo / pasos * 0.5));
+        }
+        pts.push(new THREE.Vector2(radio * 0.9, largo));
+        pts.push(new THREE.Vector2(0, largo));
+        return new THREE.LatheGeometry(pts, 24);
+    }
+
+    function agregarAditamentos3D(model) {
+        aditamentos.forEach(o => { scene.remove(o); o.geometry?.dispose(); });
+        aditamentos.length = 0;
+
+        const data = window.odontogramaState?.data || {};
+        model.updateMatrixWorld(true);
+
+        // Mallas por pieza
+        const porPieza = {};
+        model.traverse(m => {
+            if (!m.isMesh) return;
+            const num = obtenerNumeroDiente(m);
+            if (!num) return;
+            (porPieza[num] = porPieza[num] || []).push(m);
+        });
+
+        Object.keys(porPieza).forEach(num => {
+            const historial = data[num];
+            if (!historial?.length) return;
+            const marcas = marcasDePieza(historial);
+            if (!marcas.endo && !marcas.perno && !marcas.implante) return;
+
+            const mallas = porPieza[num];
+            const raiz = mallas.find(m => obtenerCaraMesh(m) === 'R');
+            const corona = mallas.filter(m => obtenerCaraMesh(m) !== 'R');
+            if (!raiz || !corona.length) return;
+
+            const cajaRaiz = new THREE.Box3().setFromObject(raiz);
+            const cajaCorona = new THREE.Box3();
+            corona.forEach(m => cajaCorona.expandByObject(m));
+            const centroRaiz = cajaRaiz.getCenter(new THREE.Vector3());
+            const centroCorona = cajaCorona.getCenter(new THREE.Vector3());
+            const eje = new THREE.Vector3().subVectors(centroCorona, centroRaiz).normalize();
+
+            // Largo de la raíz a lo largo del eje y grosor en el plano perpendicular
+            const tam = cajaRaiz.getSize(new THREE.Vector3());
+            const largo = Math.abs(tam.x * eje.x) + Math.abs(tam.y * eje.y) + Math.abs(tam.z * eje.z);
+            const grosor = Math.min(...[tam.x, tam.y, tam.z].sort((a, b) => b - a).slice(1));
+            const apice = centroRaiz.clone().addScaledVector(eje, -largo * 0.5);
+            const cuello = centroRaiz.clone().addScaledVector(eje, largo * 0.5);
+
+            if (marcas.implante) {
+                raiz.visible = false;
+                const geo = geometriaTornillo(largo * 0.95, grosor * 0.32);
+                const tornillo = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+                    color: 0xa1a1aa, metalness: 0.9, roughness: 0.3, emissive: 0x27272a, emissiveIntensity: 0.2
+                }));
+                // LatheGeometry crece desde y=0: se ubica la base en el ápice y se orienta hacia la corona.
+                tornillo.position.copy(apice);
+                tornillo.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), eje);
+                scene.add(tornillo);
+                aditamentos.push(tornillo);
+                return; // con implante no aplica conducto ni perno sobre la raíz natural
+            }
+
+            hacerTransparente(raiz, marcas.endo ? 0xfbcfe8 : undefined);
+
+            if (marcas.endo) {
+                const conducto = new THREE.Mesh(
+                    new THREE.CylinderGeometry(grosor * 0.06, grosor * 0.03, 1, 12),
+                    new THREE.MeshStandardMaterial({ color: 0xf97316, emissive: 0xc2410c, emissiveIntensity: 0.5 })
+                );
+                const l = orientarCilindro(conducto, apice.clone().addScaledVector(eje, largo * 0.06), cuello);
+                conducto.scale.y = l;
+                scene.add(conducto);
+                aditamentos.push(conducto);
+            }
+
+            if (marcas.perno) {
+                const perno = new THREE.Mesh(
+                    new THREE.CylinderGeometry(grosor * 0.2, grosor * 0.14, 1, 16),
+                    new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.95, roughness: 0.2, emissive: 0x3f3f46, emissiveIntensity: 0.3 })
+                );
+                const l = orientarCilindro(perno,
+                    centroRaiz.clone().addScaledVector(eje, -largo * 0.15),   // tercio medio de la raíz
+                    cuello.clone().addScaledVector(eje, largo * 0.25));       // entra en la corona (núcleo)
+                perno.scale.y = l;
+                scene.add(perno);
+                aditamentos.push(perno);
+            }
+        });
+    }
+
+    // =========================================================
+    // VISTA RX: las raíces (y lo que hay dentro: conducto, perno, tornillo) están dentro
+    // de la encía. Este modo vuelve translúcidas encía y coronas para verlas, como una
+    // radiografía. Guarda y restaura los materiales originales al apagarse.
+    // =========================================================
+    let modoRX = false;
+
+    function aplicarModoRX(model, activo) {
+        modoRX = activo;
+        model.traverse(m => {
+            if (!m.isMesh || !m.material) return;
+            const esDiente = !!obtenerNumeroDiente(m);
+            const esRaiz = esDiente && obtenerCaraMesh(m) === 'R';
+            if (activo) {
+                if (!m.userData.matPreRX) m.userData.matPreRX = m.material;
+                const mat = m.material.clone();
+                mat.transparent = true;
+                mat.depthWrite = esRaiz;
+                mat.opacity = !esDiente ? 0.08 : (esRaiz ? Math.min(m.material.opacity ?? 1, 0.55) : 0.35);
+                m.material = mat;
+            } else if (m.userData.matPreRX) {
+                m.material = m.userData.matPreRX;
+                delete m.userData.matPreRX;
+            }
+            // El highlight guarda su propio "original": se reinicia para que no reponga el modo anterior.
+            delete m.userData.originalMaterial;
+        });
+        highlighted = null;
+        const btn = document.getElementById('btn-rx-3d');
+        if (btn) {
+            btn.style.background = activo ? '#22d3ee' : 'rgba(15,23,42,0.85)';
+            btn.style.color = activo ? '#0f172a' : '#e2e8f0';
+        }
+    }
+
+    function crearBotonRX(model, hayAditamentos) {
+        container.querySelector('#btn-rx-3d')?.remove();
+        const btn = document.createElement('button');
+        btn.id = 'btn-rx-3d';
+        btn.innerHTML = `<i class="fas fa-x-ray"></i> Vista RX${hayAditamentos ? ' · ver raíces' : ''}`;
+        btn.title = 'Ver raíces, conductos, pernos e implantes a través de la encía';
+        btn.style.cssText = 'position:absolute; top:14px; left:14px; z-index:5; border:1px solid #22d3ee; border-radius:10px; padding:8px 14px; font-weight:800; font-size:12px; cursor:pointer; font-family:Inter,sans-serif; background:rgba(15,23,42,0.85); color:#e2e8f0;';
+        btn.onclick = () => aplicarModoRX(model, !modoRX);
+        container.appendChild(btn);
     }
 
     // =========================================================
@@ -1208,6 +1440,10 @@ loader.load(
             mainModel.scale.setScalar(35 / maxDim);
 
             scene.add(mainModel);
+            agregarAditamentos3D(mainModel);
+            crearBotonRX(mainModel, aditamentos.length > 0);
+            // Acceso al visor para depuración/pruebas (cámara, controles, modelo, modo RX).
+            window.visor3D = { scene, camera, controls, model: mainModel, rx: (on) => aplicarModoRX(mainModel, on) };
 
             controls.target.set(0, 0, 0);
             controls.update();

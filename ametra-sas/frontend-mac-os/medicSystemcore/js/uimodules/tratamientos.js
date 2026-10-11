@@ -439,6 +439,13 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
                         <option value="Radiología Oral y Maxilofacial">Radiología Oral y Maxilofacial</option>
                     </select>
 
+                    <!-- MOTIVO DE LA CONSULTA -->
+                    <label style="font-weight:800; font-size:0.65rem; color:#4f46e5; margin-bottom: 4px; display:block;">
+                        <i class="fas fa-comment-medical"></i> MOTIVO DE LA CONSULTA
+                    </label>
+                    <textarea id="msp-motivo" rows="2" placeholder="Ej: Dolor en pieza 36 al masticar..."
+                              style="width:100%; padding:7px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.72rem; margin-bottom:10px; resize:vertical; font-family:'Inter'; box-sizing:border-box;"></textarea>
+
                     <!-- OBSERVACIONES -->
                     <label style="font-weight:800; font-size:0.65rem; color:#4f46e5; margin-bottom: 4px; display:block;">
                         <i class="fas fa-pen"></i> OBSERVACIONES
@@ -565,6 +572,7 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
             // Especialidad (autodetectada/editable) y observaciones
             const especialidad = document.getElementById('msp-especialidad')?.value || 'Odontología General';
             const observaciones = document.getElementById('msp-observaciones')?.value?.trim() || '';
+            const motivoConsulta = document.getElementById('msp-motivo')?.value?.trim() || '';
 
             // Retornamos todo estructurado
             return {
@@ -572,6 +580,7 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
                 firma: base64Firma,
                 especialidad: especialidad,
                 observaciones: observaciones,
+                motivo_consulta: motivoConsulta,
                 representante: representante,
                 requiere_representante: requiereRep ? 1 : 0,
                 consentimiento: {
@@ -1019,6 +1028,7 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
             firma_paciente:            resultadoLote.firma,
             especialidad:              resultadoLote.especialidad,
             observaciones:             resultadoLote.observaciones,
+            motivo_consulta:           resultadoLote.motivo_consulta,
             representante:             resultadoLote.representante,
             requiere_representante:    resultadoLote.requiere_representante,
             consentimiento_aceptado:   resultadoLote.consentimiento.aceptado,
@@ -1036,6 +1046,7 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
                 ...resultadoLote,
                 especialidad:  resPost.especialidad  || resultadoLote.especialidad,
                 observaciones: resPost.observaciones || resultadoLote.observaciones,
+                motivo_consulta: resPost.motivo_consulta || resultadoLote.motivo_consulta,
                 representante: resPost.representante  || resultadoLote.representante,
                 requiere_representante: resPost.requiere_representante ?? resultadoLote.requiere_representante,
                 consentimiento: {
@@ -1114,9 +1125,14 @@ window.renderCatalogoLateral = async function() {
                     <div style="font-weight: bold; color: #1e293b; font-size: 0.85rem;">${s.Nombre_Prestacion}</div>
                     <div style="color: #10b981; font-weight: 800; font-size: 0.8rem;">$${parseFloat(s.Precio_Base).toFixed(2)}</div>
                 </div>
-                <button onclick="window.borrarPrestacion(${s.ID_Prestacion})" style="background: none; border: none; color: #cbd5e1; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#cbd5e1'">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
+                <div style="display:flex; gap:4px;">
+                    <button onclick="window.editarPrestacion(${s.ID_Prestacion})" title="Editar nombre o precio" style="background: none; border: none; color: #cbd5e1; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#4f46e5'" onmouseout="this.style.color='#cbd5e1'">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button onclick="window.borrarPrestacion(${s.ID_Prestacion})" title="Eliminar" style="background: none; border: none; color: #cbd5e1; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#cbd5e1'">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
             </div>
         `).join('');
     } catch (error) {
@@ -1153,6 +1169,51 @@ window.modalGestionarCatalogo = async function() {
                 window.renderCatalogoLateral();
             }
         });
+    }
+};
+
+// Editar un servicio del catálogo (usa el endpoint /catalogo/guardar que ya existía).
+// Solo cambia el catálogo: los tratamientos ya asignados conservan su precio original.
+window.editarPrestacion = async function(id) {
+    const s = (window.router.catalogoPrestaciones || []).find(p => p.ID_Prestacion === id);
+    if (!s) return;
+    const esc = (v) => String(v ?? '').replace(/"/g, '&quot;');
+    const { value: formValues } = await Swal.fire({
+        title: 'Editar Servicio Médico',
+        html: `
+            <div style="text-align:left;">
+                <label style="font-size:0.8rem; font-weight:bold;">Nombre de la Prestación:</label>
+                <input id="cat-nombre" class="swal2-input" value="${esc(s.Nombre_Prestacion)}" style="width:100%; margin: 5px 0 15px 0;">
+                <label style="font-size:0.8rem; font-weight:bold;">Precio Base $:</label>
+                <input id="cat-precio" type="number" step="0.01" min="0" class="swal2-input" value="${parseFloat(s.Precio_Base).toFixed(2)}" style="width:100%; margin: 5px 0 0 0;">
+                <p style="font-size:0.72rem; color:#64748b; margin:12px 0 0;">Los tratamientos ya asignados a pacientes conservan su precio original.</p>
+            </div>
+        `,
+        confirmButtonText: 'Guardar cambios',
+        confirmButtonColor: '#4f46e5',
+        showCancelButton: true,
+        cancelButtonText: 'Cancelar',
+        preConfirm: () => {
+            const nombre = document.getElementById('cat-nombre').value.trim();
+            const precio = parseFloat(document.getElementById('cat-precio').value);
+            if (!nombre || isNaN(precio) || precio < 0) return Swal.showValidationMessage('Ingrese un nombre y un precio válido');
+            return { nombre, precio };
+        }
+    });
+    if (!formValues) return;
+
+    const res = await window.api.post('/tratamientos/catalogo/guardar', {
+        id_prestacion: s.ID_Prestacion,
+        nombre: formValues.nombre,
+        categoria: s.Categoria || 'General',
+        precio_base: formValues.precio,
+        activo: 1
+    });
+    if (res.status === 'Success') {
+        Swal.fire({ icon: 'success', title: 'Servicio actualizado', timer: 1000, showConfirmButton: false });
+        window.renderCatalogoLateral();
+    } else {
+        Swal.fire('Error', res.message || 'No se pudo actualizar el servicio.', 'error');
     }
 };
 
@@ -1232,6 +1293,154 @@ window.borrarTratamientoAsignado = function(id) {
 //   3. Sección C/D/E: lee aceptado/revocatoria en minúsculas (como los manda preConfirm)
 // =======================================================================
 
+// =======================================================================
+// ODONTOGRAMA SVG PARA EL MSP-024
+// Mismo dibujo que el odontograma del expediente (historia.js → imprimir historia),
+// más un recuadro naranja en las piezas incluidas en este plan de tratamiento.
+// =======================================================================
+window.generarOdontogramaMSP024 = function(hallazgos, edad, piezasPlan) {
+    const COLORES = {
+        caries: '#ef4444', fractura: '#ef4444', resina: '#3b82f6',
+        carilla_resina: '#bae6fd', carilla_porcelana: '#e0f2fe',
+        corona: '#f59e0b', protesis_fija: '#10b981', protesis_removible: '#065f46',
+        endodoncia: '#a855f7', sellante: '#22d3ee', raiz: '#7c2d12',
+        extraer: '#000000', ausente: '#e2e8f0', periodontitis: '#fee2e2',
+        ortodoncia: '#6366f1', supernumerario: '#10b981'
+    };
+    const plan = new Set((piezasPlan || []).map(String));
+
+    const hallazgosMap = {};
+    (hallazgos || []).forEach(h => {
+        const n = String(h.Numero_Diente);
+        if (!hallazgosMap[n]) hallazgosMap[n] = [];
+        hallazgosMap[n].push(h);
+    });
+
+    function svgPieza(num) {
+        const lista = hallazgosMap[String(num)] || [];
+        const w = 52, h = 62;
+        const esInferior = (num >= 31 && num <= 48) || (num >= 71 && num <= 85);
+
+        const getColor = (cara) => {
+            const hF = lista.find(x => (x.Cara_Diente || '').toLowerCase() === cara.toLowerCase() || (x.Cara_Diente || '').toLowerCase() === 'general');
+            if (!hF) return 'transparent';
+            const clave = (hF.Estado || '').toLowerCase().replace(/ /g, '_');
+            return COLORES[clave] || 'transparent';
+        };
+
+        const esAusente = lista.some(x => x.Estado === 'Ausente'),
+              esOrtodoncia = lista.some(x => x.Estado === 'Ortodoncia'),
+              esPeriodont = lista.some(x => x.Estado === 'Periodontitis'),
+              esSupernum = lista.some(x => x.Estado === 'Supernumerario');
+
+        const cSup = esAusente ? '#e2e8f0' : getColor('Superior'),
+              cInf = esAusente ? '#e2e8f0' : getColor('Inferior'),
+              cIzq = esAusente ? '#e2e8f0' : getColor('Izquierda'),
+              cDer = esAusente ? '#e2e8f0' : getColor('Derecha'),
+              cCen = esAusente ? '#e2e8f0' : getColor('Centro');
+
+        const raizH = lista.find(x => (x.Cara_Diente || '') === 'Raiz'),
+              cRaiz = raizH ? (COLORES[(raizH.Estado || '').toLowerCase().replace(/ /g, '_')] || '#94a3b8') : '#94a3b8';
+
+        const sanadoStroke = (cara) => {
+            const hF = lista.find(x => (x.Cara_Diente || '').toLowerCase() === cara.toLowerCase());
+            return (hF && hF.Tipo_Registro === 'Evolucion') ? 'stroke:#2563eb;stroke-width:3;' : '';
+        };
+
+        const transformTexto = esInferior ? `transform="scale(1,-1) translate(0, -10)"` : '';
+        const transformS = esInferior ? `transform="scale(1,-1) translate(0, -22)"` : '';
+        const enPlan = plan.has(String(num));
+
+        return `
+        <g class="pieza-${num}">
+          <rect x="0" y="8" width="${w}" height="${h - 8}" rx="4" fill="${esPeriodont ? '#fee2e2' : '#ffffff'}" stroke="${esPeriodont ? '#ef4444' : esOrtodoncia ? '#6366f1' : '#cbd5e1'}" stroke-width="${esOrtodoncia || esPeriodont ? 1.5 : 0.5}"/>
+          <text x="${w/2}" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="${enPlan ? '#ea580c' : (num > 50 ? '#4f46e5' : '#475569')}" ${transformTexto}>${num}</text>
+          <rect x="10" y="10" width="${w - 20}" height="7" rx="3" fill="${cRaiz}" stroke="#94a3b8" stroke-width="0.5"/>
+          <polygon points="4,19 ${w-4},19 ${w-4-8},27 12,27" fill="${cSup}" stroke="#94a3b8" stroke-width="0.8" style="${sanadoStroke('Superior')}"/>
+          <polygon points="${w-4},19 ${w-4},${h-4} ${w-4-8},${h-12} ${w-4-8},27" fill="${cDer}" stroke="#94a3b8" stroke-width="0.8" style="${sanadoStroke('Derecha')}"/>
+          <polygon points="${w-4},${h-4} 4,${h-4} 12,${h-12} ${w-4-8},${h-12}" fill="${cInf}" stroke="#94a3b8" stroke-width="0.8" style="${sanadoStroke('Inferior')}"/>
+          <polygon points="4,19 4,${h-4} 12,${h-12} 12,27" fill="${cIzq}" stroke="#94a3b8" stroke-width="0.8" style="${sanadoStroke('Izquierda')}"/>
+          <polygon points="12,27 ${w-4-8},27 ${w-4-8},${h-12} 12,${h-12}" fill="${cCen}" stroke="#94a3b8" stroke-width="0.8" style="${sanadoStroke('Centro')}"/>
+          ${esAusente ? `<line x1="6" y1="20" x2="${w-6}" y2="${h-4}" stroke="#94a3b8" stroke-width="1.5"/><line x1="${w-6}" y1="20" x2="6" y2="${h-4}" stroke="#94a3b8" stroke-width="1.5"/>` : ''}
+          ${esSupernum ? `
+            <g ${transformS}>
+                <circle cx="${w-4}" cy="11" r="6" fill="white" stroke="#10b981" stroke-width="1.2"/>
+                <text x="${w-4}" y="14" text-anchor="middle" font-size="7" font-weight="900" fill="#10b981">S</text>
+            </g>` : ''}
+          ${esOrtodoncia ? `<rect x="2" y="19" width="${w-4}" height="3" fill="#6366f1" opacity="0.6"/><rect x="2" y="${h-7}" width="${w-4}" height="3" fill="#6366f1" opacity="0.6"/>` : ''}
+          ${marcasPieza(lista)}
+          ${enPlan ? `<rect x="-2" y="6" width="${w + 4}" height="${h - 4}" rx="5" fill="none" stroke="#ea580c" stroke-width="2.5"/>` : ''}
+        </g>`;
+    }
+
+    // Endodoncia (triángulo MSP-033), perno/núcleo e implante — mismas marcas que el odontograma 2D.
+    function marcasPieza(lista) {
+        const tiene = (est) => lista.some(x => x.Estado === est);
+        let g = '';
+        if (tiene('Implante')) g += `<rect x="39" y="8" width="22" height="84" rx="5" fill="#cbd5e1" stroke="#475569" stroke-width="3"/><path d="M33 22 H67 M33 34 H67 M33 46 H67 M33 58 H67 M33 70 H67 M35 82 H65" stroke="#475569" stroke-width="4"/>`;
+        if (tiene('Perno')) g += `<rect x="45" y="6" width="10" height="66" rx="2" fill="#334155"/><rect x="35" y="36" width="30" height="24" rx="3" fill="#94a3b8" stroke="#1e293b" stroke-width="3"/>`;
+        if (tiene('Endodoncia')) g += `<polygon points="50,18 80,74 20,74" fill="none" stroke="#7c3aed" stroke-width="8" stroke-linejoin="round"/>`;
+        return g ? `<g transform="translate(4,19) scale(0.44,0.39)">${g}</g>` : '';
+    }
+
+    function generarFila(nums, xStart) {
+        const SEP = 56;
+        return nums.map((n, i) => `<g transform="translate(${xStart + (i * SEP)}, 0)">${svgPieza(n)}</g>`).join('');
+    }
+
+    const edadReal = parseInt(edad || 0);
+    const t1 = [55,54,53,52,51], t2 = [61,62,63,64,65];
+    const t4 = [85,84,83,82,81], t3 = [71,72,73,74,75];
+    // Temporales: igual que la historia (≤12 años), o si el plan incluye alguna pieza temporal
+    const mostrarTemporales = edadReal <= 12 || [...t1, ...t2, ...t3, ...t4].some(n => plan.has(String(n)));
+
+    const c1 = [18,17,16,15,14,13,12,11], c2 = [21,22,23,24,25,26,27,28];
+    const c4 = [48,47,46,45,44,43,42,41], c3 = [31,32,33,34,35,36,37,38];
+
+    const svgW = 16 * 56 + 20;
+    const centroX = svgW / 2;
+
+    const svg = `
+    <svg viewBox="0 0 ${svgW} 320" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-height:300px; display:block;">
+      <line x1="${centroX}" y1="0" x2="${centroX}" y2="320" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="0" y1="150" x2="${svgW}" y2="150" stroke="#cbd5e1" stroke-width="1"/>
+      <g transform="translate(10, 20)">
+        ${generarFila(c1, 0)} ${generarFila(c2, 8 * 56)}
+      </g>
+      ${mostrarTemporales ? `
+      <g transform="translate(${10 + (3 * 56)}, 85)">
+        ${generarFila(t1, 0)} ${generarFila(t2, 5 * 56)}
+      </g>
+      <g transform="translate(${10 + (3 * 56)}, 145)">
+        <g transform="scale(1,-1) translate(0,-62)">${generarFila(t4, 0)} ${generarFila(t3, 5 * 56)}</g>
+      </g>` : ''}
+      <g transform="translate(10, 210)">
+        <g transform="scale(1,-1) translate(0,-62)">${generarFila(c4, 0)} ${generarFila(c3, 8 * 56)}</g>
+      </g>
+    </svg>`;
+
+    const leyenda = [
+        [COLORES.caries, 'Caries'], [COLORES.resina, 'Resina'], [COLORES.endodoncia, 'Endodoncia'],
+        [COLORES.corona, 'Corona'], [COLORES.protesis_fija, 'Prótesis Fija'],
+        [COLORES.protesis_removible, 'Prótesis Removible'], [COLORES.sellante, 'Sellante'],
+        [COLORES.raiz, 'Raíz Residual'], [COLORES.extraer, 'Para Extraer'], [COLORES.ausente, 'Ausente'],
+        ['#334155', 'Perno / núcleo'], ['#cbd5e1', 'Implante']
+    ].map(([c, l]) => `
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 6px 2px 0;">
+            <span style="width:10px;height:10px;background:${c};border:1px solid #cbd5e1;border-radius:2px;display:inline-block;"></span>
+            <span style="font-size:8px;color:#374151;">${l}</span>
+        </span>`).join('');
+
+    const notaPlan = plan.size
+        ? `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 6px 2px 0;">
+               <span style="width:10px;height:10px;border:2px solid #ea580c;border-radius:2px;display:inline-block;"></span>
+               <span style="font-size:8px;color:#ea580c;font-weight:700;">Piezas de este tratamiento: ${[...plan].join(', ')}</span>
+           </span>`
+        : '';
+
+    return `${svg}<div style="text-align:left;margin-top:4px;">${notaPlan}${leyenda}</div>`;
+};
+
 window.imprimirMSP024 = async function(datosLote, idPaciente) {
     let info = { perfil: {}, historiaMedica: {} };
 
@@ -1296,6 +1505,7 @@ window.imprimirMSP024 = async function(datosLote, idPaciente) {
     // Especialidad y observaciones (vienen del backend / del lote)
     const especialidadDoc = datosLote.especialidad || cs.Especialidad || 'Odontología General';
     const observacionesDoc = datosLote.observaciones || cs.Observaciones || '';
+    const motivoConsultaDoc = datosLote.motivo_consulta || cs.Motivo_Consulta || '';
 
     // ── LOGO ──────────────────────────────────────────────────────────────
     // CORRECCIÓN: Logo_Ruta viene solo como nombre de archivo (ej: "clinica-123.png")
@@ -1310,8 +1520,26 @@ window.imprimirMSP024 = async function(datosLote, idPaciente) {
         : '';
     const cli = datosLote.clinica || {};
     // ── ODONTOGRAMA ───────────────────────────────────────────────────────
-    const odontogramaVisual = datosLote.odontogramaSVG
-        || '<br><br><em style="color:#94a3b8">(Gráfico o plano de tratamiento adjunto en el expediente físico)</em><br><br>';
+    // Se dibuja con los hallazgos del paciente (igual que en la historia clínica) y se
+    // marcan las piezas de este plan. Si el odontograma no se puede leer, queda la nota.
+    let odontogramaVisual = datosLote.odontogramaSVG || '';
+    if (!odontogramaVisual) {
+        try {
+            const odo = await window.api.get(`/odontograma/${idPaciente}`);
+            const piezasPlan = [];
+            (datosLote.tratamientos || []).forEach(t => {
+                const pz = t.numero_diente ?? t.Numero_Diente ?? t.pieza;
+                String(pz ?? '').split(/[^0-9]+/).filter(Boolean).forEach(n => piezasPlan.push(n));
+            });
+            const edadOdo = p.Edad || calcEdad(p.Fecha_Nacimiento);
+            odontogramaVisual = window.generarOdontogramaMSP024(odo?.hallazgos || [], edadOdo, piezasPlan);
+        } catch (e) {
+            console.warn('No se pudo cargar el odontograma para el MSP-024:', e);
+        }
+    }
+    if (!odontogramaVisual) {
+        odontogramaVisual = '<br><br><em style="color:#94a3b8">(Gráfico o plano de tratamiento adjunto en el expediente físico)</em><br><br>';
+    }
 
     // ── FIRMA DEL PACIENTE ────────────────────────────────────────────────
     // ── REPRESENTANTE LEGAL (menor / no apto) ─────────────────────────────
@@ -1697,6 +1925,11 @@ window.imprimirMSP024 = async function(datosLote, idPaciente) {
             <td class="val" width="32%">
                 AMBULATORIO &nbsp;<strong>(X)</strong>&nbsp;&nbsp;&nbsp; HOSPITALIZACIÓN &nbsp;(&nbsp;)
             </td>
+        </tr>
+
+        <tr>
+            <td class="bg-header">Motivo de la consulta:</td>
+            <td colspan="3" class="val">${motivoConsultaDoc && motivoConsultaDoc.trim() !== '' ? motivoConsultaDoc : '—'}</td>
         </tr>
 
         <tr>
