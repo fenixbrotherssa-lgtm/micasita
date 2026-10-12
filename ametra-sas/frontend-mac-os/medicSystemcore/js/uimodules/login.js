@@ -139,6 +139,19 @@ window.loginModule = {
                 // tener que volver a teclearlo en cada login desde este dispositivo.
                 localStorage.setItem('ultimo_identificador_clinica', identificadorClinica);
                 this.completarLogin(res);
+            } else if (res.codigo === 'licencia_vencida' && res.token_pago) {
+                // Licencia vencida y quien intenta es el administrador: puede renovar acá mismo.
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Licencia no vigente',
+                    text: res.message,
+                    showCancelButton: true,
+                    confirmButtonText: 'Renovar ahora',
+                    cancelButtonText: 'Cerrar',
+                    confirmButtonColor: '#4f46e5'
+                }).then(r => {
+                    if (r.isConfirmed) window.licenciaPago.abrir({ tokenPago: res.token_pago, nombreUsuario: res.nombre });
+                });
             } else {
                 // Error de credenciales
                 Swal.fire({
@@ -288,6 +301,29 @@ window.loginModule = {
             if (!this.tokenSoporte) return; // no debería poder llegar acá sin haber pasado btnLogin
             this.abrirFormCrearClinica();
         };
+
+        document.getElementById('link-config-cobros').onclick = (e) => {
+            e.preventDefault();
+            if (this.tokenSoporte) window.cobrosSoporte.abrirConfig(this.tokenSoporte);
+        };
+        document.getElementById('link-versiones-apps').onclick = (e) => {
+            e.preventDefault();
+            if (this.tokenSoporte) window.cobrosSoporte.abrirVersiones(this.tokenSoporte);
+        };
+        document.getElementById('link-pagos-reportados').onclick = (e) => {
+            e.preventDefault();
+            if (this.tokenSoporte) window.cobrosSoporte.abrirSolicitudes(this.tokenSoporte, () => this.refrescarClinicasSoporte());
+        };
+    },
+
+    // Recarga la lista (estado de licencia y pagos por revisar) sin salir del panel.
+    refrescarClinicasSoporte: async function() {
+        if (!this.tokenSoporte) return;
+        const listado = await window.api.listarTenantsSoporte(this.tokenSoporte);
+        if (listado.status !== 'Success') return;
+        this.tenantsSoporte = listado.tenants;
+        const q = (document.getElementById('soporte-buscar-clinica')?.value || '').trim().toLowerCase();
+        this.renderListaClinicas(q ? this.tenantsSoporte.filter(t => t.Nombre_Empresa.toLowerCase().includes(q)) : this.tenantsSoporte);
     },
 
     // Alta de clínica — genera automáticamente el usuario/contraseña del administrador de
@@ -445,6 +481,12 @@ window.loginModule = {
                         <span id="pl-dias-restantes" style="color:#94a3b8;">${diasTexto}</span>
                     </div>
 
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+                        <span style="flex:1;">Precio mensual de esta clínica</span>
+                        <input id="pl-precio" type="number" min="0" step="0.01" class="swal2-input" placeholder="General" value="${t.Precio_Mensual ?? ''}" style="margin:0; width:110px;">
+                        <button id="btn-pl-precio" type="button" class="swal2-styled" style="background:#4f46e5; margin:0; padding:6px 10px; font-size:0.72rem;">Guardar</button>
+                    </div>
+
                     <div style="font-weight:700; margin-bottom:6px; color:#1e293b;">Registrar pago</div>
                     <div style="display:flex; gap:8px;">
                         <input id="pl-monto" type="number" min="0" step="0.01" class="swal2-input" placeholder="Monto USD" style="margin:0 0 8px; flex:1;">
@@ -548,6 +590,17 @@ window.loginModule = {
                     }
                     actualizarEstadoLocal(estado, null);
                 };
+                document.getElementById('btn-pl-precio').onclick = async () => {
+                    const valor = document.getElementById('pl-precio').value.trim();
+                    const r = await window.cobrosSoporte._req(this.tokenSoporte, `/superadmin/tenants/${idTenant}/precio`, {
+                        method: 'PATCH', body: JSON.stringify({ precioMensual: valor === '' ? null : parseFloat(valor) })
+                    });
+                    if (r.status !== 'Success') return Swal.showValidationMessage(r.message || 'No se pudo guardar el precio.');
+                    t.Precio_Mensual = r.precioMensual;
+                    const btn = document.getElementById('btn-pl-precio');
+                    btn.innerHTML = '<i class="fas fa-check"></i>';
+                    setTimeout(() => { btn.textContent = 'Guardar'; }, 1500);
+                };
                 document.getElementById('btn-pl-suspender').onclick = () => cambiarEstado('suspendido');
                 document.getElementById('btn-pl-cancelar').onclick = () => cambiarEstado('cancelado');
                 document.getElementById('btn-pl-reactivar').onclick = () => cambiarEstado('activo');
@@ -563,6 +616,11 @@ window.loginModule = {
             cont.innerHTML = `<div style="padding:14px; font-size:0.82rem; color:#94a3b8; text-align:center;">Sin resultados.</div>`;
             return;
         }
+
+        const totalPendientes = (this.tenantsSoporte || []).reduce((n, t) => n + (t.Pagos_Pendientes || 0), 0);
+        const badge = document.getElementById('badge-pagos-reportados');
+        if (badge) badge.innerHTML = totalPendientes
+            ? `<span style="background:#dc2626; color:white; border-radius:999px; padding:0 6px; font-size:0.68rem;">${totalPendientes}</span>` : '';
 
         cont.innerHTML = tenants.map(t => {
             const dias = this.diasRestantes(t.Fecha_Vencimiento);
@@ -592,6 +650,7 @@ window.loginModule = {
                     </div>
                     <div style="text-align:right;">
                         <span style="font-size:0.7rem; font-weight:800; color:${colorEstado}; text-transform:uppercase;">${textoEstado}</span><br>
+                        ${t.Pagos_Pendientes ? `<span title="Pagos reportados por revisar" style="font-size:0.66rem; font-weight:800; color:#059669;"><i class="fas fa-receipt"></i> ${t.Pagos_Pendientes} por revisar</span><br>` : ''}
                         <i class="fas fa-file-invoice-dollar gestionar-licencia" data-id-licencia="${t.ID_Tenant}"
                            title="Gestionar licencia / pagos" style="cursor:pointer; color:#4f46e5; margin-top:5px; display:inline-block;"></i>
                     </div>

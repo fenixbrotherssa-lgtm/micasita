@@ -2,6 +2,48 @@
 const path = require('path');
 const fs = require('fs');
 
+// Actualizaciones automáticas de la app (Windows): electron-updater lee
+// https://www.casrodsoft.com/downloads/ametraos-saas/ametraos-saas.yml, descarga la versión
+// nueva en segundo plano y la instala al cerrar el programa. En Mac no hay instalación
+// silenciosa (requiere app firmada por Apple): ahí avisa js/uimodules/versionApp.js.
+let autoUpdaterRef = null;
+function configurarActualizaciones(win) {
+    if (!app.isPackaged || process.platform !== 'win32') return;
+    let autoUpdater;
+    try { ({ autoUpdater } = require('electron-updater')); }
+    catch (e) { console.warn('electron-updater no disponible:', e.message); return; }
+    autoUpdaterRef = autoUpdater;
+
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('error', (err) => console.error('Actualizador:', err && err.message || err));
+    autoUpdater.on('update-downloaded', async (info) => {
+        const { dialog } = require('electron');
+        const r = await dialog.showMessageBox(win, {
+            type: 'info',
+            title: 'Actualización lista',
+            message: `Hay una nueva versión de AMETRA OS (${info.version}) lista para instalar.`,
+            detail: 'Se instalará automáticamente al cerrar el programa. ¿Desea reiniciar ahora?',
+            buttons: ['Reiniciar ahora', 'Más tarde'],
+            defaultId: 0,
+            cancelId: 1
+        });
+        if (r.response === 0) instalarActualizacionAhora();
+    });
+
+    const buscar = () => autoUpdater.checkForUpdates().catch(() => {});
+    setTimeout(buscar, 10000);
+    setInterval(buscar, 4 * 60 * 60 * 1000);
+}
+
+function instalarActualizacionAhora() {
+    if (!autoUpdaterRef) return;
+    app.removeAllListeners('window-all-closed');
+    BrowserWindow.getAllWindows().forEach(w => { try { w.removeAllListeners('close'); w.destroy(); } catch (_) {} });
+    setImmediate(() => autoUpdaterRef.quitAndInstall());
+}
+
 function createWindow() {
     let config;
     const configPath = app.isPackaged 
@@ -84,7 +126,10 @@ function createWindow() {
             additionalArguments: [
                 `--api-url=${apiFinal}`,
                 `--public-url=${publicURL}`,
-                config.MODO_DEBUG ? '--development' : '--production'
+                config.MODO_DEBUG ? '--development' : '--production',
+                `--app-version=${app.getVersion()}`,
+                `--plataforma=${process.platform}`,
+                `--arquitectura=${process.arch}`
             ]
         }
     });
@@ -136,6 +181,8 @@ function createWindow() {
     if (config.MODO_DEBUG) {
         win.webContents.openDevTools();
     }
+
+    configurarActualizaciones(win);
 }
 
 // ✅ Todos los manejadores IPC agrupados aquí
@@ -145,6 +192,15 @@ app.whenReady().then(() => {
         console.log('🌐 Abriendo URL externa:', url);
         shell.openExternal(url);
     });
+
+    // La app quedó por debajo de la versión mínima del servidor: buscar y descargar ya la
+    // actualización (Windows). Devuelve si hay un actualizador disponible.
+    ipcMain.handle('buscar-actualizacion', async () => {
+        if (!autoUpdaterRef) return { disponible: false };
+        try { await autoUpdaterRef.checkForUpdates(); } catch (_) {}
+        return { disponible: true };
+    });
+    ipcMain.on('instalar-actualizacion', () => instalarActualizacionAhora());
 
     // NUEVO: Escucha el evento emitido desde citas.js (Kanban)
     ipcMain.on('llamar-paciente', (event, data) => {

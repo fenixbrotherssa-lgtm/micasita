@@ -1,7 +1,7 @@
 {
   "name": "ametra-os",
   "version": "4.6.0",
-  "description": "Sistema de Gestión Médica y Odontológica - V4.5",
+  "description": "AMETRA OS SaaS — Sistema de Gestión Médica y Odontológica",
   "main": "main.js",
   "author": "CASRODSOFT",
   "license": "ISC",
@@ -13,8 +13,8 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
-    "appId": "com.medicinaecuador.pro",
-    "productName": "ametra-os",
+    "appId": "com.casrodsoft.ametraos.saas",
+    "productName": "AMETRA-OS-SaaS",
     "directories": {
       "output": "dist"
     },
@@ -34,16 +34,20 @@
         }
       ],
       "icon": "assets/icon.icns",
-      "category": "public.app-category.healthcare-fitness"
+      "category": "public.app-category.healthcare-fitness",
+      "artifactName": "AMETRA-OS-SaaS-${version}-${arch}.${ext}"
     },
     "files": [
       "**/*",
       "!dist/*",
-      "!node_modules/*",
-      "!config.json",
       "!MedicinaEcuador_Pro_Installer.iss",
       "!README.md",
-      "!.gitignore"
+      "!.gitignore",
+      "!build/*",
+      "!MedicSystem_Ready/*",
+      "!Instalador_*.exe",
+      "!Output/*",
+      "!config.json"
     ],
     "extraResources": [
       {

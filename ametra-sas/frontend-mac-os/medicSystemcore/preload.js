@@ -26,6 +26,18 @@ contextBridge.exposeInMainWorld('appConfig', {
     isProd: isProd
 });
 
+// Versión y plataforma de esta app (para el control de versión mínima, ver versionApp.js).
+const arg = (nombre) => (process.argv.find(a => a.startsWith(`--${nombre}=`)) || '').split('=').slice(1).join('=');
+contextBridge.exposeInMainWorld('appInfo', {
+    version: arg('app-version'),
+    plataforma: arg('plataforma'),
+    arquitectura: arg('arquitectura')
+});
+contextBridge.exposeInMainWorld('_electronActualizador', {
+    buscar: () => ipcRenderer.invoke('buscar-actualizacion'),
+    instalar: () => ipcRenderer.send('instalar-actualizacion')
+});
+
 // Puente para abrir enlaces externos
 contextBridge.exposeInMainWorld('_electronAbrirExterno', (url) => {
     ipcRenderer.send('abrir-externo', url);

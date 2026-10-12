@@ -64,11 +64,17 @@ window.api = {
                 body: JSON.stringify(data)
             });
             const resBody = await response.json().catch(() => null);
-            if (!response.ok) throw new Error((resBody && resBody.message) || `Error HTTP: ${response.status}`);
+            if (!response.ok) {
+                const e = new Error((resBody && resBody.message) || `Error HTTP: ${response.status}`);
+                e.cuerpo = resBody;
+                throw e;
+            }
             return resBody;
         } catch (err) {
             console.error("🔴 Error POST:", err);
-            return { status: 'Error', message: err.message };
+            // Se conservan los demás campos del error (ej. codigo/token_pago del login de
+            // una clínica con la licencia vencida).
+            return { ...(err.cuerpo || {}), status: 'Error', message: err.message };
         }
     },
 
