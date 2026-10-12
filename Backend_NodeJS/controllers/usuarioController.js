@@ -110,15 +110,17 @@ const guardarUsuario = async (req, res) => {
     }
 };
 
-// 3. LISTAR MÉDICOS (Corregido para Roles 1 y 3)
+// 3. LISTAR MÉDICOS — solo ID_Rol 3 (Médico / Especialista). El rol 1 es Administrador:
+// un administrador no es médico aunque administre la clínica, y no debe salir en las listas
+// de "Doctor" (citas, recetas, tratamientos, inventario). Mismo criterio que comisiones,
+// guardia y el bot de WhatsApp.
 const listarMedicosParaSelect = async (req, res) => {
     try {
         const pool = await getConnection();
-        // AJUSTE: ID_Rol 1 (Doctores) e ID_Rol 3 (Médico Dueño)
         const result = await pool.request().query(`
             SELECT ID_Usuario, Nombres, Apellidos, ID_Rol, Registro_Sanitario
             FROM Usuarios 
-            WHERE Activo = 1 AND ID_Rol IN (1, 3)
+            WHERE Activo = 1 AND ID_Rol = 3
             ORDER BY Apellidos, Nombres
         `);
         
