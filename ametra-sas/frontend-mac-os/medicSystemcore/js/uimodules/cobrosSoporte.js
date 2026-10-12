@@ -57,12 +57,29 @@ window.cobrosSoporte = {
                 <div style="display:flex; gap:8px;">${inp('cc-titular', c.banco.titular, 'Titular')}${inp('cc-ident', c.banco.identificacion, 'CI / RUC del titular')}</div>
 
                 <div style="font-weight:700; margin:6px 0;">Tarjeta / PayPhone</div>
-                ${inp('cc-payphone', c.payphone_link, 'Link de PayPhone (https://ppls.me/...)')}
+                <select id="cc-pp-modo" class="swal2-input" style="margin:0 0 8px; width:100%; box-sizing:border-box;">
+                    <option value="link" ${c.payphone_modo !== 'api' ? 'selected' : ''}>Link fijo (la clínica escribe el monto y reporta el pago)</option>
+                    <option value="api" ${c.payphone_modo === 'api' ? 'selected' : ''}>API de PayPhone (monto exacto y confirmación automática)</option>
+                </select>
+                <div id="cc-pp-link">${inp('cc-payphone', c.payphone_link, 'Link de PayPhone (https://ppls.me/...)')}</div>
+                <div id="cc-pp-api">
+                    <div style="display:flex; gap:8px;">${inp('cc-pp-token', c.payphone_token, 'Token de PayPhone Developer')}${inp('cc-pp-store', c.payphone_store_id, 'Store ID')}</div>
+                    <div style="color:#94a3b8; font-size:0.72rem; margin:-4px 0 8px;">Se obtienen en PayPhone Developer → su aplicación. El pago confirmado renueva la licencia sola.</div>
+                </div>
 
                 <div style="font-weight:700; margin:6px 0;">Contacto que ve la clínica</div>
                 <div style="display:flex; gap:8px;">${inp('cc-whatsapp', c.whatsapp, 'WhatsApp')}${inp('cc-correo', c.correo, 'Correo')}</div>
                 <textarea id="cc-instrucciones" class="swal2-textarea" placeholder="Instrucciones adicionales (opcional)" maxlength="500" style="margin:0; width:100%; box-sizing:border-box; font-size:0.8rem;">${this._esc(c.instrucciones)}</textarea>
             </div>`,
+            didOpen: () => {
+                const modo = document.getElementById('cc-pp-modo');
+                const mostrar = () => {
+                    document.getElementById('cc-pp-link').style.display = modo.value === 'link' ? 'block' : 'none';
+                    document.getElementById('cc-pp-api').style.display = modo.value === 'api' ? 'block' : 'none';
+                };
+                modo.onchange = mostrar;
+                mostrar();
+            },
             preConfirm: () => {
                 const v = (id) => document.getElementById(id).value.trim();
                 const datos = {
@@ -70,13 +87,20 @@ window.cobrosSoporte = {
                     precio_mensual: parseFloat(v('cc-precio')) || 0,
                     descuentos: { 3: parseFloat(v('cc-desc-3')) || 0, 6: parseFloat(v('cc-desc-6')) || 0, 12: parseFloat(v('cc-desc-12')) || 0 },
                     banco: { nombre: v('cc-banco'), tipo: v('cc-tipo'), numero: v('cc-numero'), titular: v('cc-titular'), identificacion: v('cc-ident') },
+                    payphone_modo: v('cc-pp-modo'),
                     payphone_link: v('cc-payphone'),
+                    payphone_token: v('cc-pp-token'),
+                    payphone_store_id: v('cc-pp-store'),
                     whatsapp: v('cc-whatsapp'),
                     correo: v('cc-correo'),
                     instrucciones: v('cc-instrucciones')
                 };
                 if (datos.activo && !(datos.precio_mensual > 0)) return Swal.showValidationMessage('Ingrese el precio mensual.');
-                if (datos.activo && !datos.payphone_link && !(datos.banco.nombre && datos.banco.numero)) {
+                if (datos.payphone_modo === 'api' && (!datos.payphone_token || !datos.payphone_store_id)) {
+                    return Swal.showValidationMessage('Para PayPhone por API ingrese el token y el Store ID.');
+                }
+                const hayPayphone = datos.payphone_modo === 'api' || !!datos.payphone_link;
+                if (datos.activo && !hayPayphone && !(datos.banco.nombre && datos.banco.numero)) {
                     return Swal.showValidationMessage('Cargue al menos la cuenta bancaria o el link de PayPhone.');
                 }
                 return datos;
@@ -140,15 +164,17 @@ window.cobrosSoporte = {
             if (r.status !== 'Success') { cont.innerHTML = `<div style="color:#dc2626; padding:8px;">${this._esc(r.message)}</div>`; return; }
             if (!r.solicitudes.length) { cont.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:14px;">Ninguna clínica reportó pagos todavía.</div>'; return; }
             cont.innerHTML = r.solicitudes.map(s => {
-                const color = s.Estado === 'aprobada' ? '#059669' : s.Estado === 'rechazada' ? '#dc2626' : '#d97706';
+                const color = s.Estado === 'aprobada' ? '#059669' : (s.Estado === 'rechazada' || s.Estado === 'vencida') ? '#dc2626' : '#d97706';
+                const etiqueta = s.Estado === 'esperando_pago' ? 'esperando PayPhone' : s.Estado;
                 return `<div style="padding:9px 6px; border-bottom:1px solid #f1f5f9; ${s.Estado === 'pendiente' ? 'background:#fffbeb;' : ''}">
                     <div style="display:flex; justify-content:space-between; gap:8px;">
                         <b>${this._esc(s.Nombre_Empresa)}</b>
-                        <span style="font-weight:800; color:${color}; text-transform:uppercase; font-size:0.68rem;">${s.Estado}</span>
+                        <span style="font-weight:800; color:${color}; text-transform:uppercase; font-size:0.68rem;">${etiqueta}</span>
                     </div>
                     <div>${this._dinero(s.Monto)} · ${s.Meses} ${s.Meses === 1 ? 'mes' : 'meses'} · ${this._esc(s.Metodo)}${s.Referencia ? ' · ref <b>' + this._esc(s.Referencia) + '</b>' : ''}</div>
                     <div style="color:#94a3b8;">${new Date(s.Fecha_Solicitud).toLocaleString('es-EC')}${s.Reportado_Por ? ' · ' + this._esc(s.Reportado_Por) : ''}${s.Motivo_Rechazo ? ' · ' + this._esc(s.Motivo_Rechazo) : ''}</div>
                     <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                        ${s.Estado === 'esperando_pago' ? `<button type="button" class="swal2-styled cs-verificar" data-id="${s.ID_Solicitud}" style="margin:0; padding:4px 10px; font-size:0.72rem; background:#ea580c;"><i class="fas fa-rotate"></i> Verificar en PayPhone</button>` : ''}
                         ${s.Tiene_Comprobante ? `<button type="button" class="swal2-styled cs-ver" data-id="${s.ID_Solicitud}" style="margin:0; padding:4px 10px; font-size:0.72rem; background:#64748b;"><i class="fas fa-image"></i> Comprobante</button>` : ''}
                         ${s.Estado === 'pendiente' ? `
                             <button type="button" class="swal2-styled cs-aprobar" data-id="${s.ID_Solicitud}" data-monto="${s.Monto}" data-meses="${s.Meses}" data-clinica="${this._esc(s.Nombre_Empresa)}" style="margin:0; padding:4px 10px; font-size:0.72rem; background:#059669;"><i class="fas fa-check"></i> Aprobar</button>
@@ -158,6 +184,14 @@ window.cobrosSoporte = {
             }).join('');
 
             cont.querySelectorAll('.cs-ver').forEach(b => b.onclick = () => this.verComprobante(token, b.dataset.id));
+            cont.querySelectorAll('.cs-verificar').forEach(b => b.onclick = async () => {
+                b.disabled = true;
+                const r2 = await this._req(token, `/superadmin/cobros/solicitudes/${b.dataset.id}/verificar`, { method: 'POST', body: '{}' });
+                if (r2.status !== 'Success') { b.disabled = false; return this._error(r2.message); }
+                this._error(r2.estado === 'esperando_pago' ? 'PayPhone todavía no registra el pago.' : `Resultado: ${r2.estado}.`);
+                if (alCambiar) alCambiar();
+                render();
+            });
             cont.querySelectorAll('.cs-aprobar').forEach(b => b.onclick = async () => {
                 const ok = await this._confirmarEnLinea(b, `Aprobar ${this._dinero(b.dataset.monto)} y renovar ${b.dataset.meses} ${b.dataset.meses === '1' ? 'mes' : 'meses'} a ${b.dataset.clinica}?`);
                 if (!ok) return;

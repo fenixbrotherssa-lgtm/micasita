@@ -51,7 +51,9 @@ window.licenciaPago = {
         const vencida = d.fecha_vencimiento && new Date(d.fecha_vencimiento) < new Date();
         const b = d.banco || {};
         const hayBanco = b.numero && b.nombre;
+        const puedeReportar = !!(hayBanco || d.payphone_link);
         const hayPayphone = !!d.payphone_link;
+        const hayPayphoneApi = !!d.payphone_api;
         const opcionesHtml = d.opciones.map((o, i) => `
             <label class="lp-op" style="flex:1 1 110px; border:2px solid ${i === 0 ? '#4f46e5' : '#e2e8f0'}; border-radius:10px; padding:10px 8px; cursor:pointer; text-align:center; position:relative;">
                 <input type="radio" name="lp-meses" value="${o.meses}" ${i === 0 ? 'checked' : ''} style="position:absolute; opacity:0;">
@@ -96,6 +98,12 @@ window.licenciaPago = {
                         ${fila('Banco', b.nombre)}${b.tipo ? fila('Tipo de cuenta', b.tipo) : ''}${fila('Número de cuenta', b.numero, true)}
                         ${b.titular ? fila('Titular', b.titular) : ''}${b.identificacion ? fila('CI / RUC', b.identificacion, true) : ''}
                     </div>` : ''}
+                    ${hayPayphoneApi ? `<div style="flex:1 1 200px; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px;">
+                        <div style="font-weight:800;"><i class="fas fa-credit-card" style="color:#ea580c;"></i> Tarjeta (PayPhone)</div>
+                        <div style="color:#64748b; font-size:0.78rem;">Se abre PayPhone con el valor exacto. Al aprobarse, la licencia se renueva sola: no hace falta reportar nada.</div>
+                        <button type="button" id="lp-payphone-api" class="swal2-styled" style="background:#ea580c; margin:0;"><i class="fas fa-lock"></i> Pagar <span id="lp-total-pp"></span> con tarjeta</button>
+                        <div id="lp-pp-estado" style="display:none; font-size:0.78rem; color:#334155;"></div>
+                    </div>` : ''}
                     ${hayPayphone ? `<div style="flex:1 1 200px; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px;">
                         <div style="font-weight:800;"><i class="fas fa-credit-card" style="color:#ea580c;"></i> Tarjeta o PayPhone</div>
                         <div style="color:#64748b; font-size:0.78rem;">Se abre la página de PayPhone en su navegador. Ingrese el valor exacto indicado arriba.</div>
@@ -104,7 +112,8 @@ window.licenciaPago = {
                 </div>
                 ${d.instrucciones ? `<div style="background:#eef2ff; color:#3730a3; padding:8px 12px; border-radius:8px; margin:-6px 0 14px; font-size:0.78rem;">${this._esc(d.instrucciones)}</div>` : ''}
 
-                <div style="font-weight:700; margin-bottom:6px; color:#1e293b;">3. Reporte su pago</div>
+                <div style="${puedeReportar ? '' : 'display:none;'}">
+                <div style="font-weight:700; margin-bottom:6px; color:#1e293b;">3. Si pagó por transferencia${d.payphone_link ? ' o con el link de PayPhone' : ''}, repórtelo</div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <select id="lp-metodo" class="swal2-input" style="margin:0 0 8px; flex:1 1 150px;">
                         ${hayBanco ? '<option value="Transferencia">Transferencia</option>' : ''}
@@ -118,6 +127,7 @@ window.licenciaPago = {
                     <i class="fas fa-paper-plane"></i> Reportar pago
                 </button>
                 <div style="color:#94a3b8; font-size:0.72rem; margin:-10px 0 14px;">CasRodsoft verifica el pago y renueva la licencia. Recibirá la confirmación al volver a ingresar.</div>
+                </div>
 
                 <div style="font-weight:700; margin-bottom:6px; color:#1e293b;">Pagos reportados</div>
                 <div id="lp-historial" style="max-height:130px; overflow-y:auto; font-size:0.72rem; border:1px solid #e2e8f0; border-radius:6px; padding:6px;">
@@ -133,7 +143,13 @@ window.licenciaPago = {
                     });
                     const o = opciones.find(x => String(x.meses) === r.value);
                     document.getElementById('lp-total').textContent = this._dinero(o.total);
+                    const tpp = document.getElementById('lp-total-pp');
+                    if (tpp) tpp.textContent = this._dinero(o.total);
                 });
+                const tpp0 = document.getElementById('lp-total-pp');
+                if (tpp0) tpp0.textContent = this._dinero(opciones[0].total);
+                const btnApi = document.getElementById('lp-payphone-api');
+                if (btnApi) btnApi.onclick = () => this._pagarConPayphone(btnApi, nombreUsuario);
                 document.querySelectorAll('.lp-copiar').forEach(i => i.onclick = async () => {
                     try { await navigator.clipboard.writeText(i.getAttribute('data-v')); i.className = 'fas fa-check'; i.style.color = '#059669'; } catch (_) {}
                 });
@@ -173,6 +189,60 @@ window.licenciaPago = {
             willClose: () => { /* el token de pago se descarta al cerrar */ }
         });
         this._token = null;
+    },
+
+    // PayPhone por API: genera el link por el monto exacto, lo abre en el navegador y
+    // consulta cada 5 s hasta que PayPhone lo apruebe o lo rechace (máx. 20 min).
+    _pagarConPayphone: async function(boton, nombreUsuario) {
+        const meses = document.querySelector('input[name="lp-meses"]:checked').value;
+        const estado = document.getElementById('lp-pp-estado');
+        boton.disabled = true;
+        estado.style.display = 'block';
+        estado.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando el pago en PayPhone...';
+        const r = await this._fetch('/licencia/payphone/iniciar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meses, reportado_por: nombreUsuario || this._nombreSesion() })
+        });
+        if (r.status !== 'Success') {
+            boton.disabled = false;
+            estado.innerHTML = `<span style="color:#dc2626;">${this._esc(r.message)}</span>`;
+            return;
+        }
+        window.api.abrirExterno(r.pay_url);
+        estado.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Complete el pago de <b>${this._dinero(r.monto)}</b> en la ventana de PayPhone que se abrió. Esta pantalla se actualiza sola.
+            <div style="margin-top:4px;"><a href="#" id="lp-pp-reabrir" style="color:#ea580c;">Volver a abrir PayPhone</a></div>`;
+        const reabrir = document.getElementById('lp-pp-reabrir');
+        if (reabrir) reabrir.onclick = (e) => { e.preventDefault(); window.api.abrirExterno(r.pay_url); };
+
+        const token = this._token;
+        const limite = Date.now() + 20 * 60 * 1000;
+        const consultar = async () => {
+            if (!document.getElementById('lp-pp-estado')) return; // cerró la ventana: el pago igual se confirma solo
+            this._token = token;
+            const e = await this._fetch(`/licencia/payphone/estado/${r.id_solicitud}`);
+            if (e.estado === 'aprobada') {
+                this._token = null;
+                const vence = e.fecha_vencimiento ? new Date(e.fecha_vencimiento).toLocaleDateString('es-EC', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+                Swal.fire({
+                    icon: 'success', title: 'Pago aprobado',
+                    html: `Su licencia se renovó${vence ? ` hasta el <b>${vence}</b>` : ''}. ¡Gracias!`,
+                    confirmButtonColor: '#4f46e5'
+                }).then(() => { if (!token) location.reload(); });
+                return;
+            }
+            if (e.estado === 'rechazada' || e.estado === 'vencida') {
+                boton.disabled = false;
+                estado.innerHTML = `<span style="color:#dc2626;">PayPhone no aprobó el pago. Puede intentarlo de nuevo o pagar por transferencia.</span>`;
+                return;
+            }
+            if (Date.now() < limite) setTimeout(consultar, 5000);
+            else {
+                boton.disabled = false;
+                estado.innerHTML = 'No recibimos la confirmación todavía. Si ya pagó, la licencia se renovará sola en unos minutos.';
+            }
+        };
+        setTimeout(consultar, 5000);
     },
 
     _nombreSesion: function() {

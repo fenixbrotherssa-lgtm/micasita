@@ -306,6 +306,10 @@ window.loginModule = {
             e.preventDefault();
             if (this.tokenSoporte) window.cobrosSoporte.abrirConfig(this.tokenSoporte);
         };
+        document.getElementById('link-reportes-soporte').onclick = (e) => {
+            e.preventDefault();
+            if (this.tokenSoporte) window.reportesSoporte.abrir(this.tokenSoporte);
+        };
         document.getElementById('link-versiones-apps').onclick = (e) => {
             e.preventDefault();
             if (this.tokenSoporte) window.cobrosSoporte.abrirVersiones(this.tokenSoporte);
