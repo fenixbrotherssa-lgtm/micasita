@@ -37,8 +37,14 @@ function guardarEstado(e) {
     fs.writeFileSync(ESTADO + '.tmp', JSON.stringify(e, null, 2));
     fs.renameSync(ESTADO + '.tmp', ESTADO);
 }
+// Archivo por archivo (igual que el respaldo) en vez de fs.cpSync: en Node 24, cpSync es nativo y
+// corriendo como servicio mataba el proceso en silencio al copiar sobre la carpeta del sistema
+// (sin error que atrapar ni log), dejando el servicio en bucle sin aplicar nunca la versión.
 function copiar(origen, destino) {
-    fs.cpSync(origen, destino, { recursive: true, force: true });
+    for (const r of listarArchivos(origen)) {
+        fs.mkdirSync(path.dirname(path.join(destino, r)), { recursive: true });
+        fs.copyFileSync(path.join(origen, r), path.join(destino, r));
+    }
 }
 
 // Todos los archivos (rutas relativas) bajo una carpeta.
@@ -86,6 +92,7 @@ function aplicarPreparada(estado) {
     fs.writeFileSync(path.join(respaldo, '_nuevos.json'), JSON.stringify(nuevos));
 
     // 2. Copia de la versión nueva encima; si algo falla a medias, se deja todo como estaba.
+    log(`Aplicando versión ${meta.version}: copiando ${archivos.length} archivos...`);
     try {
         copiar(contenido, APP_DIR);
     } catch (err) {
