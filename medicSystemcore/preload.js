@@ -31,6 +31,12 @@ contextBridge.exposeInMainWorld('_electronAbrirExterno', (url) => {
     ipcRenderer.send('abrir-externo', url);
 });
 
+// Tuerca de configuración del login (servidor al que se conecta esta PC)
+contextBridge.exposeInMainWorld('_electronConfigServidor', {
+    leer: () => ipcRenderer.invoke('config-servidor-leer'),
+    guardar: (datos) => ipcRenderer.invoke('config-servidor-guardar', datos)
+});
+
 // NUEVO: Puente seguro y aislado para la Sala de Espera
 contextBridge.exposeInMainWorld('_electronSalaEspera', {
     llamarPaciente: (datos) => ipcRenderer.send('llamar-paciente', datos)

@@ -2,11 +2,25 @@
 const path = require('path');
 const fs = require('fs');
 
-function createWindow() {
-    let config;
-    const configPath = app.isPackaged 
+// Configuración: si en esta PC se eligió un servidor con la tuerca del login, se usa
+// el config.json de la carpeta del usuario (userData), que sobrevive a actualizaciones
+// y reinstalaciones; si no, el de fábrica que trae el instalador.
+function rutaConfigFabrica() {
+    return app.isPackaged
         ? path.join(process.resourcesPath, 'config.json') 
         : path.join(__dirname, 'config.json');
+}
+function rutaConfigUsuario() {
+    return path.join(app.getPath('userData'), 'config.json');
+}
+function rutaConfig() {
+    const enUsuario = rutaConfigUsuario();
+    return (app.isPackaged && fs.existsSync(enUsuario)) ? enUsuario : rutaConfigFabrica();
+}
+
+function createWindow() {
+    let config;
+    const configPath = rutaConfig();
     
     try {
         if (fs.existsSync(configPath)) {
@@ -141,6 +155,34 @@ function createWindow() {
 // ✅ Todos los manejadores IPC agrupados aquí
 app.whenReady().then(() => {
     
+    // ⚙️ Tuerca del login: leer / guardar a qué servidor se conecta esta PC.
+    // Se guarda en userData (en desarrollo, en el config.json del proyecto) y la app se reinicia.
+    ipcMain.handle('config-servidor-leer', () => {
+        try {
+            const cfg = JSON.parse(fs.readFileSync(rutaConfig(), 'utf8'));
+            return {
+                apiUrl: cfg.MODO_DEBUG ? cfg.URL_DESARROLLO : cfg.URL_PRODUCCION,
+                publicDomain: cfg.PUBLIC_DOMAIN || ''
+            };
+        } catch (e) {
+            return { apiUrl: '', publicDomain: '' };
+        }
+    });
+
+    ipcMain.handle('config-servidor-guardar', (event, datos) => {
+        let cfg = {};
+        try { cfg = JSON.parse(fs.readFileSync(rutaConfig(), 'utf8')); } catch (_) {}
+        if (cfg.MODO_DEBUG) cfg.URL_DESARROLLO = datos.apiUrl;
+        else cfg.URL_PRODUCCION = datos.apiUrl;
+        cfg.PUBLIC_DOMAIN = datos.publicDomain || '';
+        const destino = app.isPackaged ? rutaConfigUsuario() : rutaConfigFabrica();
+        fs.mkdirSync(path.dirname(destino), { recursive: true });
+        fs.writeFileSync(destino, JSON.stringify(cfg, null, 2), 'utf8');
+        console.log(`⚙️ Servidor cambiado a ${datos.apiUrl} (guardado en ${destino})`);
+        setTimeout(() => { app.relaunch(); app.exit(0); }, 300);
+        return { ok: true };
+    });
+
     ipcMain.on('abrir-externo', (event, url) => {
         console.log('🌐 Abriendo URL externa:', url);
         shell.openExternal(url);
