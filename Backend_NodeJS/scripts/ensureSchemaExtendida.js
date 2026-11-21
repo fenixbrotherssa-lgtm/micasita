@@ -284,6 +284,79 @@ async function ensureSchemaExtendida(pool) {
         console.log('✅ [Schema]: Columna Clinicas.Region_Decimo_Cuarto agregada.');
     });
 
+    // Certificados médicos (reposo, constancia de atención, certificado de salud). El PDF
+    // emitido (firmado o no) queda en uploads/certificados/<Token>.pdf; el Token es aleatorio
+    // (no adivinable) y es lo que lleva el QR de verificación.
+    await paso('crear Certificados_Medicos', async () => {
+        if (await existeTabla(pool, 'Certificados_Medicos')) return;
+        await pool.request().query(`
+            CREATE TABLE Certificados_Medicos (
+                ID_Certificado INT IDENTITY(1,1) PRIMARY KEY,
+                Token VARCHAR(64) NOT NULL UNIQUE,
+                ID_Paciente INT NOT NULL,
+                ID_Clinica INT NOT NULL,
+                ID_Medico INT NOT NULL,
+                ID_Usuario_Emite INT NULL,
+                Fecha_Emision DATETIME NOT NULL DEFAULT GETDATE(),
+                Tipo VARCHAR(20) NOT NULL,              -- REPOSO | ASISTENCIA | SALUD
+                Fecha_Atencion DATE NOT NULL,
+                Hora_Entrada VARCHAR(5) NULL,
+                Hora_Salida VARCHAR(5) NULL,
+                Contingencia NVARCHAR(100) NULL,
+                Dias_Reposo INT NULL,
+                Reposo_Desde DATE NULL,
+                Reposo_Hasta DATE NULL,
+                Resultado_Aptitud NVARCHAR(60) NULL,
+                Actividad_Aptitud NVARCHAR(300) NULL,
+                CIE10_Cod NVARCHAR(20) NULL,
+                CIE10_Texto NVARCHAR(400) NULL,
+                Mostrar_Diagnostico BIT NOT NULL DEFAULT 0,
+                Motivo NVARCHAR(1000) NULL,
+                Observaciones NVARCHAR(2000) NULL,
+                Especialidad_Medico NVARCHAR(150) NULL,
+                Nombre_Medico_Snapshot NVARCHAR(250) NULL,
+                Cedula_Medico_Snapshot VARCHAR(20) NULL,
+                Registro_Medico_Snapshot VARCHAR(80) NULL,
+                Firma_Tipo VARCHAR(10) NULL,            -- CLINICA | MEDICO | NULL (manuscrita)
+                Firma_Titular NVARCHAR(300) NULL,
+                Firma_Emisor NVARCHAR(300) NULL,
+                Archivo_PDF NVARCHAR(200) NULL,
+                Anulado BIT NOT NULL DEFAULT 0,
+                Motivo_Anulacion NVARCHAR(500) NULL,
+                Fecha_Anulacion DATETIME NULL
+            )
+        `);
+        await pool.request().query(`CREATE INDEX IX_Certificados_Medicos_Paciente ON Certificados_Medicos (ID_Paciente)`);
+        console.log('✅ [Schema]: Tabla Certificados_Medicos creada.');
+    });
+
+    // Firma electrónica personal de cada médico (.p12 y contraseña CIFRADOS con AES-256-GCM;
+    // ver services/firmaElectronicaService.js). Opcional: si no hay, se usa la de la clínica.
+    await paso('crear Usuarios_Firma_Electronica', async () => {
+        if (await existeTabla(pool, 'Usuarios_Firma_Electronica')) return;
+        await pool.request().query(`
+            CREATE TABLE Usuarios_Firma_Electronica (
+                ID_Firma INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Usuario INT NOT NULL,
+                P12_Cifrado VARBINARY(MAX) NOT NULL,
+                Password_Cifrado VARBINARY(MAX) NOT NULL,
+                Titular NVARCHAR(300) NULL,
+                Emisor NVARCHAR(300) NULL,
+                Fecha_Vencimiento DATETIME NULL,
+                Fecha_Carga DATETIME NOT NULL DEFAULT GETDATE(),
+                Activo BIT NOT NULL DEFAULT 1
+            )
+        `);
+        console.log('✅ [Schema]: Tabla Usuarios_Firma_Electronica creada.');
+    });
+
+    // Especialidad del profesional (se imprime en certificados y recetas)
+    await paso('agregar Usuarios.Especialidad', async () => {
+        if (await existeColumna(pool, 'Usuarios', 'Especialidad')) return;
+        await pool.request().query(`ALTER TABLE Usuarios ADD Especialidad NVARCHAR(150) NULL`);
+        console.log('✅ [Schema]: Columna Usuarios.Especialidad agregada.');
+    });
+
     // Identificador único de ESTA instalación (para el registro de instalaciones en
     // casrodsoft.com). Vive en la base de datos: si alguien copia el sistema completo a
     // otra máquina, el mismo ID aparece con otra huella de equipo y el panel lo alerta.

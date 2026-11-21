@@ -173,12 +173,17 @@ app.use('/api/auth', require('./routes/authRoutes'));
 // recetas sigue exigiendo token normalmente en el montaje de abajo.
 app.get('/api/recetas/verificar/:id', require('./controllers/recetaController').verificarReceta);
 
+// 🔓 VERIFICACIÓN DE CERTIFICADO MÉDICO POR QR (token aleatorio de 48 caracteres, no adivinable)
+app.get('/api/certificados/verificar/:token', require('./controllers/certificadoController').verificarCertificado);
+app.get('/api/certificados/verificar/:token/pdf', require('./controllers/certificadoController').verificarPdf);
+
 // 🛡️ RUTAS PROTEGIDAS (El middleware verificarToken bloquea intrusos)
 app.use('/api/usuarios', verificarToken, require('./routes/usuarioRoutes'));
 app.use('/api/clinicas', verificarToken, require('./routes/clinicaRoutes'));
 app.use('/api/pacientes', verificarToken, require('./routes/pacienteRoutes'));
 app.use('/api/odontograma', verificarToken, require('./routes/odontogramaRoutes'));
 app.use('/api/recetas', verificarToken, require('./routes/recetaRoutes'));
+app.use('/api/certificados', verificarToken, require('./routes/certificadoRoutes'));
 app.use('/api/pagos', verificarToken, require('./routes/pagoRoutes'));
 app.use('/api/caja', verificarToken, require('./routes/cajaRoutes'));
 app.use('/api/gastos', verificarToken, require('./routes/gastosRoutes'));

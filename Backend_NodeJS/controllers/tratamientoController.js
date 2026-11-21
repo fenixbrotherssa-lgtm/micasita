@@ -502,8 +502,9 @@ const getTratamientosPorPaciente = async (req, res) => {
                     t.Estado_Tratamiento,
                     t.CIE_Cod,
                     t.CIE_Texto,
-                    ISNULL(U.Nombres + ' ' + U.Apellidos, 'No asignado') AS Nombre_Medico
-                FROM Tratamientos_Plan t 
+                    ISNULL(U.Nombres + ' ' + U.Apellidos, 'No asignado') AS Nombre_Medico,
+                    U.Registro_Sanitario AS Registro_Medico
+                FROM Tratamientos_Plan t
                 INNER JOIN Prestaciones p ON t.ID_Prestacion = p.ID_Prestacion 
                 LEFT JOIN Usuarios U ON t.ID_Medico = U.ID_Usuario
                 WHERE t.ID_Paciente = @id 

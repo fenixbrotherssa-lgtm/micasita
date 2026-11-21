@@ -171,6 +171,10 @@ if(document.getElementById('paciente_em_parentesco'))
                 // 8. CONSENTIMIENTOS MSP-024  
                 // ======================================
                 this.cargarConsentimientosMSP024(pacienteId);
+                // ======================================
+                // 9. CERTIFICADOS MÉDICOS
+                // ======================================
+                if (window.certificadosModule) window.certificadosModule.cargarLista(pacienteId);
             } else {
                 // ANTES: si el backend respondía Error (403/404/500), esto no hacía NADA —
                 // el expediente se quedaba con los campos vacíos/anteriores, sin avisar.
@@ -2056,19 +2060,20 @@ const serverUrl = window.api?.baseURL
     : window.location.origin;
 
 // Añadimos 'detalleTratamientos' a las variables
-let maestro, odontograma, recetas, examenes, imagenes, signos, detalleTratamientos;
+let maestro, odontograma, recetas, examenes, imagenes, signos, detalleTratamientos, certificados;
 
 try {
     // IMPORTANTE: Ahora ejecutamos 7 peticiones. 
     // La última es la que trae el CIE-10 y la Fecha_Inicio correcta.
-    [maestro, odontograma, recetas, examenes, imagenes, signos, detalleTratamientos] = await Promise.all([
+    [maestro, odontograma, recetas, examenes, imagenes, signos, detalleTratamientos, certificados] = await Promise.all([
         window.api.get(`/pacientes/reporte-maestro/${pacienteId}`),
         window.api.get(`/odontograma/${pacienteId}`),
         window.api.get(`/recetas/paciente/${pacienteId}`).catch(() => []),
         window.api.get(`/pacientes/examenes/estomatognatico/${pacienteId}`).catch(() => []),
         window.api.get(`/pacientes/imagenes/${pacienteId}`).catch(() => ({ imagenes: [] })),
         window.api.get(`/pacientes/signos-todos/${pacienteId}`).catch(() => []),
-        window.api.get(`/tratamientos/paciente/${pacienteId}`).catch(() => []) // <--- NUEVA RUTA CLAVE
+        window.api.get(`/tratamientos/paciente/${pacienteId}`).catch(() => []), // <--- NUEVA RUTA CLAVE
+        window.api.get(`/certificados/paciente/${pacienteId}`).catch(() => [])
     ]);
 } catch (err) {
     console.error("Error capturando datos:", err);
@@ -2263,7 +2268,22 @@ const svgOdontograma = `
             </div>`).join('');
 
         // ─── 5. TABLA HALLAZGOS ───────────────────────────────────────
-        const htmlHallazgos = hallazgos.length > 0 ? hallazgos.map(h => `
+        // Cada hallazgo se cruza con su plan de tratamiento (procedimiento + CIE-10) y con el
+        // médico que lo registró (ID_Doctor) — o, si es de un plan, el médico del plan.
+        const planesPorId = {};
+        planes.forEach(p => { planesPorId[String(p.ID_Plan)] = p; });
+        const celdaMedico = (nombre, registro) => (nombre && nombre.trim() && nombre !== 'No asignado')
+            ? `Dr(a). ${nombre}${registro ? `<div style="font-size:7px;color:#64748b;">Reg: ${registro}</div>` : ''}`
+            : '—';
+        const htmlHallazgos = hallazgos.length > 0 ? hallazgos.map(h => {
+            const plan = h.ID_Plan_Tratamiento ? planesPorId[String(h.ID_Plan_Tratamiento)] : null;
+            const medico = (h.Nombre_Doctor && h.Nombre_Doctor.trim())
+                ? celdaMedico(h.Nombre_Doctor, h.Registro_Doctor)
+                : (plan ? celdaMedico(plan.Nombre_Medico, plan.Registro_Medico) : '—');
+            const procDiag = plan
+                ? `<div style="font-weight:600;">${plan.Nombre_Tratamiento || '—'}</div>${plan.CIE_Cod ? `<div style="font-size:7px;color:#92400e;"><span style="font-family:monospace;font-weight:800;">${plan.CIE_Cod}</span> ${plan.CIE_Texto || ''}</div>` : ''}`
+                : '—';
+            return `
             <tr>
                 <td style="text-align:center;font-weight:800;">${h.Numero_Diente}</td>
                 <td>${h.Cara_Diente || 'General'}</td>
@@ -2283,9 +2303,11 @@ const svgOdontograma = `
                     </span>
                 </td>
                 <td style="color:#64748b;">${fmtDate(h.Fecha)}</td>
+                <td>${procDiag}</td>
                 <td style="color:#475569;">${h.Observaciones || '—'}</td>
-            </tr>`).join('')
-            : '<tr><td colspan="6" style="text-align:center;padding:12px;color:#94a3b8;">Sin hallazgos registrados en el odontograma.</td></tr>';
+                <td>${medico}</td>
+            </tr>`; }).join('')
+            : '<tr><td colspan="8" style="text-align:center;padding:12px;color:#94a3b8;">Sin hallazgos registrados en el odontograma.</td></tr>';
 
         // ─── 6. PLANES DE TRATAMIENTO (con CIE-10) ───────────────────
         let totalCosto = 0, totalSaldo = 0;
@@ -2304,6 +2326,7 @@ const svgOdontograma = `
                 <td style="font-weight:600;">${t.Nombre_Tratamiento || '—'}</td>
                 <td style="text-align:center;">${t.Numero_Diente ? `Pza. ${t.Numero_Diente}` : 'General'}${t.Caras ? `<div style="font-size:7px;color:#4f46e5;">${t.Caras}</div>` : ''}</td>
                 <td style="text-align:center;">${fmtDate(t.Fecha_Inicio)}</td>
+                <td>${celdaMedico(t.Nombre_Medico, t.Registro_Medico)}</td>
                 <td style="text-align:right;">${fmtMoney(t.Costo_Total)}</td>
                 <td style="text-align:right;color:#b91c1c;font-weight:700;">${fmtMoney(t.Saldo_Pendiente)}</td>
                 <td style="text-align:center;">
@@ -2316,12 +2339,25 @@ const svgOdontograma = `
             </tr>`;
         }).join('') + `
             <tr style="border-top:2px solid #cbd5e1;background:#f8fafc;font-weight:700;">
-                <td colspan="4" style="text-align:right;padding:8px;">TOTALES:</td>
+                <td colspan="5" style="text-align:right;padding:8px;">TOTALES:</td>
                 <td style="text-align:right;color:#0f172a;">${fmtMoney(totalCosto)}</td>
                 <td style="text-align:right;color:#b91c1c;">${fmtMoney(totalSaldo)}</td>
                 <td></td>
             </tr>`
-            : '<tr><td colspan="7" style="text-align:center;padding:12px;color:#94a3b8;">No hay planes de tratamiento registrados.</td></tr>';
+            : '<tr><td colspan="8" style="text-align:center;padding:12px;color:#94a3b8;">No hay planes de tratamiento registrados.</td></tr>';
+
+        // ─── 6b. CERTIFICADOS MÉDICOS ─────────────────────────────────
+        const certificadosArr = Array.isArray(certificados) ? certificados : [];
+        const TIPO_CERT = { REPOSO: 'Reposo médico', ASISTENCIA: 'Constancia de atención', SALUD: 'Certificado de salud' };
+        const htmlCertificados = certificadosArr.map(c => `
+            <tr style="${c.Anulado ? 'color:#94a3b8;text-decoration:line-through;' : ''}">
+                <td style="font-weight:700;">${c.Numero}</td>
+                <td>${fmtDate(c.Fecha_Emision)}</td>
+                <td>${TIPO_CERT[c.Tipo] || c.Tipo}</td>
+                <td>${c.Tipo === 'REPOSO' ? `${c.Dias_Reposo} día(s): ${fmtDate(c.Reposo_Desde)} al ${fmtDate(c.Reposo_Hasta)}` : (c.Tipo === 'SALUD' ? (c.Resultado_Aptitud || '—') : 'Atención ' + fmtDate(c.Fecha_Atencion))}</td>
+                <td>Dr(a). ${c.Nombre_Medico_Snapshot || '—'}</td>
+                <td>${c.Anulado ? 'ANULADO' : (c.Firma_Tipo ? 'Firma electrónica (' + (c.Firma_Tipo === 'MEDICO' ? 'médico' : 'clínica') + ')' : 'Manuscrita')}</td>
+            </tr>`).join('');
 
         // ─── 7. RECETAS ───────────────────────────────────────────────
         const htmlRecetas = recetasArr.length > 0 ? recetasArr.map((r, idx) => {
@@ -2756,8 +2792,10 @@ const svgOdontograma = `
                 <th style="width:70px;">Cara</th>
                 <th>Estado / Hallazgo</th>
                 <th style="width:110px;">Tipo de Registro</th>
-                <th style="width:80px;">Fecha</th>
+                <th style="width:70px;">Fecha</th>
+                <th>Procedimiento / Diagnóstico</th>
                 <th>Observaciones</th>
+                <th style="width:110px;">Médico</th>
             </tr>
         </thead>
         <tbody>${htmlHallazgos}</tbody>
@@ -2774,6 +2812,7 @@ const svgOdontograma = `
                 <th>Procedimiento</th>
                 <th style="width:70px;text-align:center;">Diente</th>
                 <th style="width:80px;text-align:center;">Fecha</th>
+                <th style="width:110px;">Médico</th>
                 <th style="width:70px;text-align:right;">Inversión</th>
                 <th style="width:70px;text-align:right;">Saldo</th>
                 <th style="width:80px;text-align:center;">Estado</th>
@@ -2786,6 +2825,25 @@ const svgOdontograma = `
 <!-- ═══════════════════ RECETAS ═══════════════════ -->
 <div class="sec-h page-break">💊 Recetas Médicas</div>
 <div class="sec-body">${htmlRecetas}</div>
+
+<!-- ═══════════════════ CERTIFICADOS MÉDICOS ═══════════════════ -->
+${htmlCertificados ? `
+<div class="sec-h">📄 Certificados Médicos Emitidos</div>
+<div class="sec-body">
+    <table>
+        <thead>
+            <tr>
+                <th style="width:80px;">N.°</th>
+                <th style="width:70px;">Emisión</th>
+                <th style="width:120px;">Tipo</th>
+                <th>Detalle</th>
+                <th style="width:130px;">Médico</th>
+                <th style="width:120px;">Firma</th>
+            </tr>
+        </thead>
+        <tbody>${htmlCertificados}</tbody>
+    </table>
+</div>` : ''}
 
 <!-- ═══════════════════ GALERÍA ═══════════════════ -->
 ${htmlGaleria ? `

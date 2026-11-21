@@ -136,13 +136,19 @@ const getOdontogramaPaciente = async (req, res) => {
                 FROM Pacientes WHERE ID_Paciente = @id
             `),
             pool.request().input('id', sql.Int, id_paciente).query(`
-                SELECT Numero_Diente, Cara_Diente, Estado, Tipo_Registro, Lado_Cara, ID_Plan_Tratamiento, Observaciones, Fecha,
-                CASE 
-                    WHEN Estado IN ('Resina', 'Corona', 'Obturado', 'Protesis', 'Sellante', 'Endodoncia', 'Perno', 'Implante') THEN 1
-                    ELSE 0 
-                END AS Es_Sanado
-                FROM Odontograma WHERE ID_Paciente = @id
-                ORDER BY Fecha ASC
+                SELECT o.Numero_Diente, o.Cara_Diente, o.Estado, o.Tipo_Registro, o.Lado_Cara, o.ID_Plan_Tratamiento, o.Observaciones, o.Fecha,
+                CASE
+                    WHEN o.Estado IN ('Resina', 'Corona', 'Obturado', 'Protesis', 'Sellante', 'Endodoncia', 'Perno', 'Implante') THEN 1
+                    ELSE 0
+                END AS Es_Sanado,
+                -- Quién registró el hallazgo (para la evolución del expediente impreso)
+                o.ID_Doctor,
+                LTRIM(RTRIM(ISNULL(U.Nombres, '') + ' ' + ISNULL(U.Apellidos, ''))) AS Nombre_Doctor,
+                U.Registro_Sanitario AS Registro_Doctor
+                FROM Odontograma o
+                LEFT JOIN Usuarios U ON o.ID_Doctor = U.ID_Usuario
+                WHERE o.ID_Paciente = @id
+                ORDER BY o.Fecha ASC
             `)
         ]);
 

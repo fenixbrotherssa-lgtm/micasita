@@ -346,6 +346,34 @@
     </div>
 </div>
 
+               <div class="info-card" style="margin-top: 20px;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-file-medical" style="color:#0891b2;"></i>
+            Certificados Médicos
+        </div>
+        <button onclick="window.certificadosModule.abrirModal()" style="background: #0891b2; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+            <i class="fas fa-plus"></i> Nuevo Certificado
+        </button>
+    </div>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                    <th style="padding: 12px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Emisión</th>
+                    <th style="padding: 12px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Certificado</th>
+                    <th style="padding: 12px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Médico</th>
+                    <th style="padding: 12px; text-align: center; font-size: 11px; color: #64748b; text-transform: uppercase;">Firma</th>
+                    <th style="padding: 12px; text-align: center; font-size: 11px; color: #64748b; text-transform: uppercase;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyCertificadosHistorial">
+                <tr><td colspan="5" style="text-align: center; padding: 20px; color: #94a3b8;">Cargando certificados...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
             <div class="info-card">
                 <div class="card-title" style="color: #6366f1; display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 8px;">
@@ -393,6 +421,14 @@
                 </div>
                 <h3>Recetas Médicas</h3>
                 <p>Emitir nueva receta</p>
+            </div>
+
+            <div class="action-box" onclick="window.certificadosModule.abrirModal()">
+                <div class="icon-wrap" style="background: #cffafe; color: #0891b2;">
+                    <i class="fas fa-file-medical" style="font-size: 22px;"></i>
+                </div>
+                <h3>Certificado Médico</h3>
+                <p>Reposo, atención o salud</p>
             </div>
         <!-- CONSENTIMIENTOS MSP-024 -->
 <div style="background:#fff; border-radius:12px; border:1px solid #e2e8f0; padding:15px; margin-top:15px;">
