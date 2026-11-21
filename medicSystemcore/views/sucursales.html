@@ -137,12 +137,27 @@
                     <label><i class="fas fa-directions"></i> Dirección Exacta</label>
                     <div style="display: flex; gap: 10px;">
                         <input type="text" id="s_direccion" placeholder="Calle principal y secundaria..." style="flex: 1;">
-                        <button type="button" class="btn-gps" onclick="window.obtenerCoordenadasGPS()" title="Capturar ubicación actual">
+                    </div>
+                </div>
+
+                <!-- Ubicación para el pin que el bot de WhatsApp envía a los pacientes.
+                     El GPS de una PC de escritorio suele fallar o dar una posición aproximada
+                     (por IP), así que también se puede pegar el enlace de Google Maps o las
+                     coordenadas a mano. -->
+                <div class="form-group full-width">
+                    <label><i class="fas fa-map-marker-alt"></i> Ubicación en el mapa</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="s_ubicacion" placeholder="Pegue el enlace de Google Maps o coordenadas (ej. -2.1709, -79.9224)" style="flex: 1;"
+                               onchange="window.aplicarUbicacionTexto()" onpaste="setTimeout(window.aplicarUbicacionTexto, 0)">
+                        <button type="button" class="btn-gps" onclick="window.obtenerCoordenadasGPS()" title="Tomar la ubicación de este equipo">
                             <i class="fas fa-crosshairs"></i>
+                        </button>
+                        <button type="button" class="btn-gps btn-ver-mapa" onclick="window.verUbicacionEnMapa()" title="Ver en Google Maps">
+                            <i class="fas fa-map-marked-alt"></i>
                         </button>
                     </div>
                     <small id="status-gps" class="status-text">
-                        <i class="fas fa-info-circle"></i> Usa la mira para capturar el GPS para envíos por WhatsApp.
+                        <i class="fas fa-info-circle"></i> En Google Maps busque la sede → Compartir → Copiar enlace, y péguelo aquí. También puede usar la mira.
                     </small>
                 </div>
                 
@@ -266,39 +281,131 @@
         }
     };
 
-    // Lógica GPS Nativa
+    // =====================================================================
+    // UBICACIÓN DE LA SEDE (pin que el bot de WhatsApp envía a los pacientes)
+    // =====================================================================
+    const ICONO_OK = '<i class="fas fa-check-circle" style="color:#22c55e"></i>';
+    const ICONO_AVISO = '<i class="fas fa-exclamation-triangle" style="color:#f59e0b"></i>';
+    const ICONO_ERROR = '<i class="fas fa-times-circle" style="color:#ef4444"></i>';
+
+    function coordenadasValidas(lat, lng) {
+        return isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+    }
+
+    // Saca latitud/longitud de un enlace de Google Maps o de texto "lat, lng".
+    window.extraerCoordenadas = function(texto) {
+        const t = decodeURIComponent(String(texto || '').trim());
+        const patrones = [
+            /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,                       // punto exacto del lugar
+            /[?&](?:q|query|ll|destination|center)=(-?\d+(?:\.\d+)?),\s*\+?(-?\d+(?:\.\d+)?)/,
+            /\/search\/(-?\d+(?:\.\d+)?),\s*\+?(-?\d+(?:\.\d+)?)/,
+            /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,                            // centro del mapa
+            /^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/             // "-2.1709, -79.9224"
+        ];
+        for (const p of patrones) {
+            const m = t.match(p);
+            if (m) {
+                const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+                if (coordenadasValidas(lat, lng)) return { lat, lng };
+            }
+        }
+        return null;
+    };
+
+    window.fijarUbicacionSede = function(lat, lng, mensaje) {
+        document.getElementById('s_latitud').value = lat;
+        document.getElementById('s_longitud').value = lng;
+        document.getElementById('s_ubicacion').value = `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}`;
+        const btn = document.querySelector('.btn-gps');
+        btn.innerHTML = '<i class="fas fa-crosshairs"></i>';
+        btn.classList.add('active');
+        document.getElementById('status-gps').innerHTML = mensaje ||
+            `${ICONO_OK} Ubicación vinculada (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}). Verifíquela con el botón del mapa.`;
+    };
+
+    // Texto pegado o escrito en el campo de ubicación
+    window.aplicarUbicacionTexto = async function() {
+        const input = document.getElementById('s_ubicacion');
+        const status = document.getElementById('status-gps');
+        const texto = input.value.trim();
+        if (!texto) {
+            document.getElementById('s_latitud').value = '';
+            document.getElementById('s_longitud').value = '';
+            document.querySelector('.btn-gps').classList.remove('active');
+            status.innerHTML = '<i class="fas fa-info-circle"></i> Sin ubicación: el bot de WhatsApp no enviará el pin de esta sede.';
+            return;
+        }
+
+        let c = window.extraerCoordenadas(texto);
+
+        // Enlace corto (maps.app.goo.gl / goo.gl/maps): hay que seguir la redirección.
+        // Lo hace el proceso principal de la app (sin restricciones CORS).
+        if (!c && /^https?:\/\//i.test(texto) && window._electronMapa) {
+            status.innerHTML = '<i class="fas fa-sync fa-spin"></i> Leyendo el enlace...';
+            try {
+                const final = await window._electronMapa.resolverEnlace(texto);
+                c = window.extraerCoordenadas(final);
+            } catch (e) { console.warn('No se pudo resolver el enlace de mapa:', e); }
+        }
+
+        if (c) {
+            window.fijarUbicacionSede(c.lat, c.lng);
+        } else {
+            status.innerHTML = `${ICONO_ERROR} No se encontraron coordenadas. Pegue el enlace de "Compartir" de Google Maps o escriba latitud, longitud (ej. -2.1709, -79.9224).`;
+        }
+    };
+
+    window.verUbicacionEnMapa = function() {
+        const lat = document.getElementById('s_latitud').value;
+        const lng = document.getElementById('s_longitud').value;
+        if (!lat || !lng) {
+            return Swal.fire('Sin ubicación', 'Primero pegue el enlace de Google Maps, escriba las coordenadas o use la mira.', 'info');
+        }
+        const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        if (window._electronAbrirExterno) window._electronAbrirExterno(url);
+        else window.open(url, '_blank');
+    };
+
+    // GPS del equipo
     window.obtenerCoordenadasGPS = function() {
         const btn = document.querySelector('.btn-gps');
         const status = document.getElementById('status-gps');
-        
+
         if (!navigator.geolocation) {
-            return Swal.fire("No soportado", "Tu navegador o equipo no permite geolocalización.", "warning");
+            status.innerHTML = `${ICONO_ERROR} Este equipo no permite geolocalización. Pegue el enlace de Google Maps.`;
+            return;
         }
 
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        status.innerHTML = '<i class="fas fa-sync fa-spin"></i> Obteniendo ubicación...';
+        status.innerHTML = '<i class="fas fa-sync fa-spin"></i> Obteniendo ubicación del equipo...';
 
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 const lat = pos.coords.latitude;
                 const lng = pos.coords.longitude;
-                
-                document.getElementById('s_latitud').value = lat;
-                document.getElementById('s_longitud').value = lng;
-                
-                btn.innerHTML = '<i class="fas fa-check"></i>';
-                btn.classList.add('active');
-                status.innerHTML = `<i class="fas fa-check-circle" style="color:#22c55e"></i> Ubicación vinculada (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-                
-                console.log("📍 GPS CasRodsoft Fijado:", lat, lng);
+                const precision = Math.round(pos.coords.accuracy || 0);
+                console.log("📍 GPS:", lat, lng, "precisión ±" + precision + " m");
+
+                if (precision > 300) {
+                    // Sin GPS ni Wi-Fi la posición sale por la IP del proveedor de internet:
+                    // puede caer en otro barrio o en otra ciudad.
+                    window.fijarUbicacionSede(lat, lng,
+                        `${ICONO_AVISO} Ubicación aproximada (±${precision >= 1000 ? (precision / 1000).toFixed(1) + ' km' : precision + ' m'}): este equipo no tiene GPS preciso. ` +
+                        `Revísela con el botón del mapa o pegue el enlace de Google Maps de la sede.`);
+                } else {
+                    window.fijarUbicacionSede(lat, lng,
+                        `${ICONO_OK} Ubicación del equipo vinculada (±${precision} m). Verifíquela con el botón del mapa.`);
+                }
             },
             (err) => {
                 btn.innerHTML = '<i class="fas fa-crosshairs"></i>';
-                btn.classList.remove('active');
-                status.innerHTML = '<i class="fas fa-times-circle" style="color:#ef4444"></i> Permiso denegado o error de señal.';
-                Swal.fire("Acceso denegado", "Habilita los permisos de ubicación para vincular la sede.", "error");
+                const motivo = err && err.code === 1
+                    ? 'Windows/macOS no da permiso de ubicación a la aplicación (Configuración → Privacidad → Ubicación).'
+                    : 'el equipo no pudo determinar su ubicación (sin GPS / Wi-Fi o servicio de ubicación apagado).';
+                status.innerHTML = `${ICONO_ERROR} No se pudo tomar la ubicación: ${motivo} Pegue el enlace de Google Maps de la sede.`;
+                document.getElementById('s_ubicacion').focus();
             },
-            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
         );
     };
 

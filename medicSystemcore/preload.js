@@ -37,6 +37,11 @@ contextBridge.exposeInMainWorld('_electronConfigServidor', {
     guardar: (datos) => ipcRenderer.invoke('config-servidor-guardar', datos)
 });
 
+// Sucursales: leer enlaces cortos de Google Maps (para la ubicación de la sede)
+contextBridge.exposeInMainWorld('_electronMapa', {
+    resolverEnlace: (url) => ipcRenderer.invoke('resolver-enlace-mapa', url)
+});
+
 // NUEVO: Puente seguro y aislado para la Sala de Espera
 contextBridge.exposeInMainWorld('_electronSalaEspera', {
     llamarPaciente: (datos) => ipcRenderer.send('llamar-paciente', datos)

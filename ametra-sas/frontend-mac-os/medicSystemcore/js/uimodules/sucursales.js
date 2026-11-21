@@ -163,6 +163,9 @@ window.mostrarModalSucursal = function() {
     document.getElementById('s_telefono').value = "";
     document.getElementById('s_latitud').value = "";
     document.getElementById('s_longitud').value = "";
+    document.getElementById('s_ubicacion').value = "";
+    const btnGpsNuevo = document.querySelector('.btn-gps');
+    if (btnGpsNuevo) btnGpsNuevo.classList.remove('active');
 
     // Resetear campos tributarios (NUEVOS)
     document.getElementById('s_contribuyente_especial').value = "";
@@ -208,9 +211,14 @@ window.prepararEdicion = async function(id) {
 
             const btnGps = document.querySelector('.btn-gps');
             const statusGps = document.getElementById('status-gps');
+            document.getElementById('s_ubicacion').value = (clinica.Latitud && clinica.Longitud)
+                ? `${Number(clinica.Latitud).toFixed(6)}, ${Number(clinica.Longitud).toFixed(6)}` : "";
             if (clinica.Latitud && clinica.Longitud) {
                 if(btnGps) btnGps.classList.add('active');
-                if(statusGps) statusGps.innerHTML = `<i class="fas fa-check-circle" style="color:#22c55e"></i> Coordenadas cargadas.`;
+                if(statusGps) statusGps.innerHTML = `<i class="fas fa-check-circle" style="color:#22c55e"></i> Coordenadas cargadas. Verifíquelas con el botón del mapa.`;
+            } else {
+                if(btnGps) btnGps.classList.remove('active');
+                if(statusGps) statusGps.innerHTML = `<i class="fas fa-info-circle"></i> Sin ubicación: pegue el enlace de Google Maps de la sede o use la mira.`;
             }
 
             const serverBase = window.api.baseURL ? window.api.baseURL.slice(0, -4) : '';

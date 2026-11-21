@@ -183,6 +183,23 @@ app.whenReady().then(() => {
         return { ok: true };
     });
 
+    // 📍 Sucursales: un enlace corto de Google Maps (maps.app.goo.gl, goo.gl/maps) no trae
+    // las coordenadas; hay que seguir la redirección. Solo dominios de Google.
+    ipcMain.handle('resolver-enlace-mapa', async (event, url) => {
+        const u = new URL(String(url));
+        if (!/(^|\.)(goo\.gl|google\.[a-z.]+|app\.goo\.gl)$/i.test(u.hostname)) throw new Error('Solo enlaces de Google Maps');
+        const { net } = require('electron');
+        return await new Promise((resolve, reject) => {
+            let ultima = u.toString();
+            const req = net.request({ url: ultima, redirect: 'manual' });
+            req.on('redirect', (status, method, nuevaUrl) => { ultima = nuevaUrl; req.followRedirect(); });
+            req.on('response', (res) => { res.on('data', () => {}); res.on('end', () => {}); resolve(ultima); req.abort(); });
+            req.on('error', (e) => reject(e));
+            setTimeout(() => { try { req.abort(); } catch (_) {} resolve(ultima); }, 10000);
+            req.end();
+        });
+    });
+
     ipcMain.on('abrir-externo', (event, url) => {
         console.log('🌐 Abriendo URL externa:', url);
         shell.openExternal(url);
