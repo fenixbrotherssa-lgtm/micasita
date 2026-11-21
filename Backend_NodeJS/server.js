@@ -146,6 +146,9 @@ folders.forEach(dir => {
 
 // --- ARCHIVOS ESTÁTICOS ---
 // Las carpetas públicas quedan abiertas para que Electron pueda leer las imágenes y logos
+// Carpetas privadas: la firma .p12 de la clínica y los certificados médicos nunca se
+// descargan por /uploads (los certificados salen por /api/certificados con permiso o token).
+app.use(['/uploads/facturacion/p12', '/uploads/certificados'], (req, res) => res.status(404).end());
 app.use('/uploads', express.static(path.join(baseDir, 'uploads')));
 app.use('/assets', express.static(path.join(baseDir, 'assets')));
 

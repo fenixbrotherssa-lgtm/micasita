@@ -63,10 +63,19 @@ const guardarReceta = async (req, res) => {
 
         const idReceta = result.recordset[0].ID_Receta;
 
+        // Código aleatorio para el QR (columna con DEFAULT, ver ensureSchemaExtendida)
+        let codigoVerificacion = null;
+        try {
+            const c = await pool.request().input('id', sql.Int, idReceta)
+                .query('SELECT Codigo_Verificacion FROM Recetas WHERE ID_Receta = @id');
+            codigoVerificacion = (c.recordset[0] && c.recordset[0].Codigo_Verificacion) || null;
+        } catch (_) { /* base sin la columna: el QR usa el número */ }
+
         res.json({ 
             status: "Success", 
             message: "Receta guardada con éxito",
-            id_receta: idReceta 
+            id_receta: idReceta,
+            codigo_verificacion: codigoVerificacion
         });
         
     } catch (error) {
@@ -113,10 +122,19 @@ const getRecetasPorPaciente = async (req, res) => {
 const verificarReceta = async (req, res) => {
     const { id } = req.params;
 
+    // QR nuevo: código aleatorio de 32 caracteres (no se puede adivinar ni recorrer).
+    // QR viejo (número correlativo): solo confirma que la receta existe, sin datos clínicos.
+    const codigo = String(id || '').trim().toLowerCase();
+    const esLegado = /^\d{1,10}$/.test(codigo);
+    if (!esLegado && !/^[0-9a-f]{32}$/.test(codigo)) {
+        return res.status(404).send(`<html><body style="font-family:sans-serif; text-align:center; padding:60px; color:#ef4444;"><h2>⚠️ Receta no encontrada</h2><p>El código QR no corresponde a ninguna receta registrada en el sistema.</p></body></html>`);
+    }
+
     try {
         const pool = await getConnection();
         const result = await pool.request()
-            .input('id', sql.Int, id)
+            .input('id', sql.Int, esLegado ? Number(codigo) : 0)
+            .input('codigo', sql.VarChar(32), esLegado ? '' : codigo)
             .query(`
                 SELECT 
                     R.ID_Receta,
@@ -138,7 +156,7 @@ const verificarReceta = async (req, res) => {
                 INNER JOIN Pacientes P ON R.ID_Paciente = P.ID_Paciente
                 INNER JOIN Usuarios U  ON R.ID_Usuario  = U.ID_Usuario
                 INNER JOIN Clinicas C  ON R.ID_Clinica  = C.ID_Clinica
-                WHERE R.ID_Receta = @id
+                WHERE ${esLegado ? 'R.ID_Receta = @id' : 'R.Codigo_Verificacion = @codigo'}
             `);
 
         if (!result.recordset || result.recordset.length === 0) {
@@ -156,6 +174,15 @@ const verificarReceta = async (req, res) => {
         try {
             medicamentos = JSON.parse(r.Medicamentos_JSON || '[]');
         } catch(e) { medicamentos = []; }
+
+        if (esLegado) {
+            r.Nombre_Paciente = String(r.Nombre_Paciente || '').split(/\s+/).filter(Boolean).map(p => p[0].toUpperCase() + '.').join(' ');
+            r.DNI = r.DNI ? '•••••••' + String(r.DNI).slice(-3) : null;
+            r.CIE10_Cod = null;
+            r.Indicaciones_Generales = null;
+            r.Proxima_Cita = null;
+            medicamentos = [];
+        }
 
         const fechaEmision = new Date(r.Fecha).toLocaleDateString('es-EC', { year:'numeric', month:'long', day:'numeric' });
         const fechaVerificacion = new Date().toLocaleString('es-EC', {
@@ -272,7 +299,9 @@ const verificarReceta = async (req, res) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${medsRows || '<tr><td colspan="4" style="padding:15px; text-align:center; color:#94a3b8;">Sin datos</td></tr>'}
+                                    ${medsRows || (esLegado
+                                        ? '<tr><td colspan="4" style="padding:15px; text-align:center; color:#94a3b8;">Detalle reservado por confidencialidad. Este QR es de una versión anterior: reimprima la receta para obtener el QR con código seguro.</td></tr>'
+                                        : '<tr><td colspan="4" style="padding:15px; text-align:center; color:#94a3b8;">Sin datos</td></tr>')}
                                 </tbody>
                             </table>
                         </div>

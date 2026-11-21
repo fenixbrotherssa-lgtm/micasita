@@ -617,7 +617,16 @@ const baseParaQR = window.api.publicURL || window.api.baseURL;
 
 // Construimos la ruta pegando el endpoint de verificación
 // Resultado: https://tudominio.com/api/recetas/verificar/123
-let contenidoQR = `${baseParaQR}/api/recetas/verificar/${numReceta}`;
+// QR con código aleatorio (no se puede adivinar); en la nube lleva el N° de la clínica
+let idTenantQR = '';
+try {
+    const tk = window.api.getToken && window.api.getToken();
+    if (tk) {
+        const carga = JSON.parse(atob(tk.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (carga.id_tenant) idTenantQR = carga.id_tenant + '/';
+    }
+} catch (e) { idTenantQR = ''; }
+let contenidoQR = `${baseParaQR}/api/recetas/verificar/${idTenantQR}${datos.Codigo_Verificacion || numReceta}`;
 
 // Escapado simple para que no rompa la impresión
 const contenidoQREscapado = contenidoQR
@@ -1096,6 +1105,7 @@ window.abrirModalReceta = async function() {
                 const recetaParaImprimir = {
                     ...formValues,
                     ID_Receta: res.id_receta,
+                    Codigo_Verificacion: res.codigo_verificacion,
                     DNI: formValues.dni_temp,
                     Paciente: formValues.nombre_temp,
                     Nombre_Medico: formValues.medico_nombre,

@@ -357,6 +357,36 @@ async function ensureSchemaExtendida(pool) {
         console.log('✅ [Schema]: Columna Usuarios.Especialidad agregada.');
     });
 
+    // Código aleatorio para el QR de las recetas (antes el QR usaba el número correlativo
+    // y cambiando el número se podían ver otras recetas). Las recetas viejas también lo reciben.
+    await paso('agregar Recetas.Codigo_Verificacion', async () => {
+        if (!(await existeColumna(pool, 'Recetas', 'Codigo_Verificacion'))) {
+            await pool.request().query(`ALTER TABLE Recetas ADD Codigo_Verificacion VARCHAR(32) NULL
+                CONSTRAINT DF_Recetas_Codigo_Verificacion DEFAULT (LOWER(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', '')))`);
+            console.log('✅ [Schema]: Columna Recetas.Codigo_Verificacion agregada.');
+        }
+        await pool.request().query(`UPDATE Recetas SET Codigo_Verificacion = LOWER(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''))
+            WHERE Codigo_Verificacion IS NULL`);
+        await pool.request().query(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Recetas_Codigo_Verificacion' AND object_id = OBJECT_ID('Recetas'))
+            CREATE INDEX IX_Recetas_Codigo_Verificacion ON Recetas (Codigo_Verificacion)`);
+    });
+
+    // La contraseña de la firma .p12 de la clínica se guardaba solo en base64: se cifra.
+    await paso('cifrar contraseña de la firma de la clínica', async () => {
+        if (!(await existeTabla(pool, 'Facturacion_Certificados'))) return;
+        const { cifrarClaveFirma } = require('../services/firmaElectronicaService');
+        const r = await pool.request().query(`SELECT ID_Certificado, Password_P12_Encrypted FROM Facturacion_Certificados
+            WHERE Password_P12_Encrypted IS NOT NULL AND Password_P12_Encrypted NOT LIKE 'enc1:%'`);
+        for (const c of r.recordset) {
+            const plano = Buffer.from(c.Password_P12_Encrypted, 'base64').toString('utf8');
+            await pool.request()
+                .input('id', sql.Int, c.ID_Certificado)
+                .input('pass', sql.NVarChar(sql.MAX), cifrarClaveFirma(plano))
+                .query('UPDATE Facturacion_Certificados SET Password_P12_Encrypted = @pass WHERE ID_Certificado = @id');
+        }
+        if (r.recordset.length) console.log(`✅ [Schema]: ${r.recordset.length} contraseña(s) de firma cifrada(s).`);
+    });
+
     // Identificador único de ESTA instalación (para el registro de instalaciones en
     // casrodsoft.com). Vive en la base de datos: si alguien copia el sistema completo a
     // otra máquina, el mismo ID aparece con otra huella de equipo y el panel lo alerta.

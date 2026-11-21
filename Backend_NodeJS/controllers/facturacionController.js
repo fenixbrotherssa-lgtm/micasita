@@ -1,4 +1,5 @@
 const { getConnection, sql } = require('../config/db');
+const { cifrarClaveFirma, leerClaveFirma } = require('../services/firmaElectronicaService');
 const PDFDocument = require('pdfkit');
 const { createCanvas } = require('canvas');
 const JsBarcode = require('jsbarcode');
@@ -66,7 +67,7 @@ const facturacionController = {
             }
 
             const pool = await getConnection();
-            const passwordHash = Buffer.from(password_p12).toString('base64');
+            const passwordHash = cifrarClaveFirma(password_p12);
 
             const fechaVencimiento = new Date();
             fechaVencimiento.setFullYear(fechaVencimiento.getFullYear() + 1);
@@ -588,7 +589,7 @@ const facturacionController = {
             const jarPath = path.join(process.cwd(), 'services', 'firmadormedico', 'sri.jar');
             
             const p12Path = path.resolve(cert.Ruta_Archivo_P12);
-            const p12Pass = Buffer.from(cert.Password_P12_Encrypted, 'base64').toString('utf8');
+            const p12Pass = leerClaveFirma(cert.Password_P12_Encrypted);
 
             if (!javaBin) {
                 throw new Error("Motor Java no encontrado. En Mac ejecute: brew install openjdk@11");

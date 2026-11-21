@@ -92,6 +92,23 @@ function descifrar(buffer) {
     return Buffer.concat([decipher.update(datos), decipher.final()]);
 }
 
+// Contraseña del .p12 de la clínica (Facturacion_Certificados.Password_P12_Encrypted).
+// Antes se guardaba solo en base64; ahora va cifrada con el prefijo "enc1:".
+// leerClaveFirma acepta los dos formatos (la migración convierte los viejos al arrancar).
+const PREFIJO_CLAVE = 'enc1:';
+function cifrarClaveFirma(texto) {
+    return PREFIJO_CLAVE + cifrar(Buffer.from(String(texto || ''), 'utf8')).toString('base64');
+}
+function leerClaveFirma(valor) {
+    const v = String(valor || '');
+    if (!v.startsWith(PREFIJO_CLAVE)) return Buffer.from(v, 'base64').toString('utf8');
+    try {
+        return descifrar(Buffer.from(v.slice(PREFIJO_CLAVE.length), 'base64')).toString('utf8');
+    } catch (_) {
+        throw new Error('No se pudo leer la contraseña de la firma electrónica de la clínica (cambió la llave de cifrado de este servidor). Vuelva a subir el archivo .p12 en Facturación.');
+    }
+}
+
 // ---------------------------------------------------------------------
 // Lectura y validación del .p12
 // ---------------------------------------------------------------------
@@ -153,7 +170,7 @@ async function obtenerFirmaClinica(pool, idClinica) {
     const ruta = path.resolve(c.Ruta_Archivo_P12);
     if (!fs.existsSync(ruta)) return null;
     const p12 = fs.readFileSync(ruta);
-    const password = Buffer.from(c.Password_P12_Encrypted || '', 'base64').toString('utf8');
+    const password = leerClaveFirma(c.Password_P12_Encrypted);
     return { origen: 'CLINICA', p12, password };
 }
 
@@ -260,6 +277,9 @@ async function firmarPdf(pdfBuffer, firma, { motivo, ubicacion, contacto } = {})
 }
 
 module.exports = {
+    PREFIJO_CLAVE,
+    cifrarClaveFirma,
+    leerClaveFirma,
     leerInfoP12,
     estadoFirmas,
     guardarFirmaMedico,
