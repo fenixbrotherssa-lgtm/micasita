@@ -175,6 +175,8 @@ if(document.getElementById('paciente_em_parentesco'))
                 // 9. CERTIFICADOS MÉDICOS
                 // ======================================
                 if (window.certificadosModule) window.certificadosModule.cargarLista(pacienteId);
+                if (window.ordenesModule) window.ordenesModule.cargarLista(pacienteId);
+                if (window.conveniosModule) window.conveniosModule.cargarDelPaciente(pacienteId);
             } else {
                 // ANTES: si el backend respondía Error (403/404/500), esto no hacía NADA —
                 // el expediente se quedaba con los campos vacíos/anteriores, sin avisar.
@@ -307,7 +309,9 @@ if(document.getElementById('paciente_em_parentesco'))
                 return;
             }
 
-            tbody.innerHTML = recetas.map(r => {
+            window._recetasCache = recetas;
+            const yoId = Number((JSON.parse(localStorage.getItem('usuario_sesion') || '{}')).ID_Usuario);
+            tbody.innerHTML = recetas.map((r, i) => {
                 let medsText = "";
                 try {
                     const meds = JSON.parse(r.Medicamentos_JSON || '[]');
@@ -318,11 +322,17 @@ if(document.getElementById('paciente_em_parentesco'))
                 <tr style="border-bottom: 1px solid #f1f5f9; font-size: 0.85rem;">
                     <td style="padding:10px;">${new Date(r.Fecha).toLocaleDateString()}</td>
                     <td style="padding:10px;">${r.Nombre_Medico}</td>
-                    <td style="padding:10px; color:#64748b; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${medsText}</td>
-                    <td style="padding:10px; text-align:center;">
-                        <button onclick='window.imprimirDocumentoClinico("receta", ${JSON.stringify(r)})' style="background:#4f46e5; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">
+                    <td style="padding:10px; color:#64748b; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${medsText}
+                        ${r.Atencion_Texto ? `<div style="font-size:10px; color:#4f46e5; white-space:normal;"><i class="fas fa-link"></i> ${String(r.Atencion_Texto).replace(/</g, '&lt;')}</div>` : ''}
+                        ${window.documentosUI && (r.Estado_Firma === 'PENDIENTE_FIRMA' || r.Estado_Firma === 'FIRMADA') ? '<div style="margin-top:3px;">' + window.documentosUI.badgeFirma(r.Estado_Firma, r.Estado_Firma === 'FIRMADA' ? r.Firma_Tipo : null, r.Firma_Titular) + '</div>' : ''}</td>
+                    <td style="padding:10px; text-align:center; white-space:nowrap;">
+                        <button onclick="window.imprimirDocumentoClinico('receta', window._recetasCache[${i}])" title="Imprimir" style="background:#4f46e5; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">
                             <i class="fas fa-print"></i>
                         </button>
+                        ${!window.documentosUI ? '' : r.Estado_Firma === 'PENDIENTE_FIRMA'
+                            ? (yoId === Number(r.ID_Usuario) ? `<button onclick="window.documentosUI.bandejaFirmas()" title="Firmar con mi PIN" style="background:#f59e0b; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-left:3px;"><i class="fas fa-signature"></i></button>` : '')
+                            : `${r.Estado_Firma === 'FIRMADA' ? '' : `<button onclick="window.firmarRecetaElectronica(${r.ID_Receta}, ${r.ID_Usuario}, window._recetasCache[${i}].Nombre_Medico, ${pacienteId})" title="Firmar electrónicamente" style="background:#eef2ff; color:#4f46e5; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-left:3px;"><i class="fas fa-signature"></i></button>`}
+                               <button onclick="window.documentosUI.verPdf('RECETA', ${r.ID_Receta}, 'RX-${String(r.ID_Receta).padStart(6, '0')}')" title="PDF / WhatsApp" style="background:#dcfce7; color:#16a34a; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; margin-left:3px;"><i class="fas fa-file-pdf"></i></button>`}
                     </td>
                 </tr>`;
             }).join('');
@@ -901,6 +911,25 @@ window.actualizarTablaMedsReceta = function() {
     `).join('');
 };
 
+// Firma electrónica de una receta ya guardada (médico con PIN / clínica / sin firma)
+window.firmarRecetaElectronica = async function(idReceta, idMedico, nombreMedico, idPaciente) {
+    const r = await Swal.fire({
+        title: '<i class="fas fa-signature" style="color:#4f46e5;"></i> Firmar receta',
+        width: '560px',
+        html: `<div style="text-align:left;font-size:13px;"><div id="rec-firma-caja" style="display:grid;gap:6px;"></div></div>`,
+        showCancelButton: true, confirmButtonText: 'Continuar', cancelButtonText: 'Cancelar', confirmButtonColor: '#4f46e5',
+        didOpen: () => window.documentosUI.bloqueFirma(document.getElementById('rec-firma-caja'), idMedico, String(nombreMedico || '').replace(/^Dr\(a\)\.\s*/, '')),
+        preConfirm: () => window.documentosUI.leerFirma(document.getElementById('rec-firma-caja'))
+    });
+    if (!r.isConfirmed) return;
+    Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const res = await window.api.post(`/recetas/${idReceta}/firmar`, { ...r.value, url_publica: window.documentosUI.urlPublica() });
+    if (window.historiaModule?.cargarHistorialRecetas && idPaciente) window.historiaModule.cargarHistorialRecetas(idPaciente);
+    if (!res || res.status !== 'Success') return Swal.fire('No se pudo firmar', (res && res.message) || 'Error al firmar la receta.', 'error');
+    if (res.pendiente) return Swal.fire('Pendiente de firma', res.message, 'info');
+    window.documentosUI.verPdf('RECETA', idReceta, res.numero);
+};
+
 window.abrirModalReceta = async function() {
     const inputDNI = document.getElementById('paciente_dni');
     const inputNombre = document.getElementById('paciente_nombre');
@@ -921,6 +950,11 @@ window.abrirModalReceta = async function() {
     }
 
     window.medsTemporales = []; 
+
+    // Trazabilidad: tratamiento del plan del que nace la receta
+    const htmlPlanReceta = window.documentosUI
+        ? await window.documentosUI.selectorPlan(idPaciente, 'rec_plan', 'width:100%; height:35px; margin-top:5px; font-size:13px; border:1px solid #cbd5e1; border-radius:6px; padding:0 8px;')
+        : '';
 
     const { value: formValues } = await Swal.fire({
         title: 'Generar Receta Médica Profesional',
@@ -997,6 +1031,7 @@ window.abrirModalReceta = async function() {
                     </div>
                 </div>
 
+                ${htmlPlanReceta ? `<div style="margin-bottom: 12px;"><label style="font-size: 11px; font-weight: bold; color: #64748b;"><i class="fas fa-link"></i> TRATAMIENTO / PROCEDIMIENTO RELACIONADO:</label>${htmlPlanReceta}</div>` : ''}
                 <div style="max-height: 180px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 15px;">
                     <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                         <thead style="background: #f1f5f9;">
@@ -1085,6 +1120,7 @@ window.abrirModalReceta = async function() {
                 cie_cod: cieCod,
                 cie_texto: cieTxt,
                 tipo_diagnostico: tipoDiag,
+                id_plan: (document.getElementById('rec_plan') || {}).value || null,
                 dni_temp: dniActual,
                 nombre_temp: nombreActual,
                 medico_nombre: medicoSeleccionado.dataset.nombre,
@@ -1115,13 +1151,19 @@ window.abrirModalReceta = async function() {
                 Swal.fire({
                     icon: "success",
                     title: `Receta #${res.id_receta} Guardada`,
+                    text: '¿Cómo desea entregarla?',
                     showCancelButton: true,
-                    confirmButtonText: "🖨️ Imprimir",
+                    showDenyButton: !!window.documentosUI,
+                    confirmButtonText: "🖨️ Imprimir (firma manuscrita)",
+                    denyButtonText: '<i class="fas fa-signature"></i> Firmar electrónicamente',
                     cancelButtonText: "Cerrar",
-                    confirmButtonColor: '#10b981'
+                    confirmButtonColor: '#10b981',
+                    denyButtonColor: '#4f46e5'
                 }).then(result => {
                     if(result.isConfirmed) {
                         window.imprimirDocumentoClinico('receta', recetaParaImprimir);
+                    } else if (result.isDenied) {
+                        window.firmarRecetaElectronica(res.id_receta, formValues.id_usuario, formValues.medico_nombre, idPaciente);
                     }
                 });
             } else {

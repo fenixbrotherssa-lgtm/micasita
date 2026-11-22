@@ -189,6 +189,8 @@ async function generarCertificadoPdf(d) {
         const filasDetalle = [['Diagnóstico (CIE-10)', diagnostico, d.Tipo === 'REPOSO' ? 'Tipo de contingencia' : '', d.Contingencia]];
         if (d.Tipo === 'REPOSO') filasDetalle.push(['Días de reposo', `${d.Dias_Reposo} (${numeroALetras(d.Dias_Reposo)})`, 'Período', `${fechaCorta(d.Reposo_Desde)} al ${fechaCorta(d.Reposo_Hasta)}`]);
         if (d.Tipo === 'SALUD') filasDetalle.push(['Resultado', d.Resultado_Aptitud, 'Actividad evaluada', d.Actividad_Aptitud]);
+        // Trazabilidad: plan / procedimiento del que nace el certificado
+        if (limpio(d.Atencion_Texto)) filasDetalle.push(['Atención / tratamiento relacionado', d.Atencion_Texto, '', '']);
         tablaDatos(filasDetalle);
         if (limpio(d.Observaciones)) {
             doc.fillColor(GRIS_CLARO).font('Helvetica-Bold').fontSize(7).text('OBSERVACIONES / RECOMENDACIONES', IZQ + 8, doc.y);
@@ -242,4 +244,4 @@ async function generarCertificadoPdf(d) {
     });
 }
 
-module.exports = { generarCertificadoPdf, numeroALetras, fechaLarga };
+module.exports = { generarCertificadoPdf, numeroALetras, fechaLarga, fechaCorta, edad, nombrePropio, limpio };

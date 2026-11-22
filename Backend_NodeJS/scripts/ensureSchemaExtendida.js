@@ -387,6 +387,128 @@ async function ensureSchemaExtendida(pool) {
         if (r.recordset.length) console.log(`✅ [Schema]: ${r.recordset.length} contraseña(s) de firma cifrada(s).`);
     });
 
+    // =====================================================================
+    // v4.7.0 — firma con PIN + bandeja de pendientes, receta firmada, trazabilidad
+    // con el plan, órdenes de exámenes y convenios. Todo ADITIVO e idempotente.
+    // =====================================================================
+    const agregarColumnas = async (tabla, columnas) => {
+        if (!(await existeTabla(pool, tabla))) return;
+        for (const [nombre, definicion] of columnas) {
+            if (!(await existeColumna(pool, tabla, nombre))) {
+                await pool.request().query(`ALTER TABLE ${tabla} ADD ${nombre} ${definicion}`);
+                console.log(`✅ [Schema]: Columna ${tabla}.${nombre} agregada.`);
+            }
+        }
+    };
+    const COLUMNAS_FIRMA = [
+        ['Firma_Tipo', 'VARCHAR(10) NULL'], ['Firma_Titular', 'NVARCHAR(300) NULL'], ['Firma_Emisor', 'NVARCHAR(300) NULL'],
+        ['Archivo_PDF', 'NVARCHAR(200) NULL'], ['Fecha_Firma', 'DATETIME NULL'], ['ID_Usuario_Firma', 'INT NULL'], ['Origen_Firma', 'NVARCHAR(100) NULL']
+    ];
+
+    await paso('v4.7 certificados: estado de firma y plan', async () => {
+        await agregarColumnas('Certificados_Medicos', [
+            ['Estado', "VARCHAR(20) NOT NULL CONSTRAINT DF_Certificados_Medicos_Estado DEFAULT 'EMITIDO'"],
+            ['ID_Plan', 'INT NULL'], ['Atencion_Texto', 'NVARCHAR(400) NULL'],
+            ['Fecha_Firma', 'DATETIME NULL'], ['ID_Usuario_Firma', 'INT NULL'], ['Origen_Firma', 'NVARCHAR(100) NULL']
+        ]);
+    });
+
+    await paso('v4.7 recetas: firma electrónica y plan', async () => {
+        await agregarColumnas('Recetas', [
+            ['Estado_Firma', 'VARCHAR(20) NULL'], ['ID_Plan', 'INT NULL'], ['Atencion_Texto', 'NVARCHAR(400) NULL'],
+            ['ID_Usuario_Prepara', 'INT NULL'], ...COLUMNAS_FIRMA
+        ]);
+    });
+
+    // La contraseña (PIN) de la firma de cada médico ya no se guarda: se borra la que hubiera.
+    await paso('v4.7 firma del médico sin contraseña guardada', async () => {
+        if (!(await existeTabla(pool, 'Usuarios_Firma_Electronica'))) return;
+        const r = await pool.request().query(`UPDATE Usuarios_Firma_Electronica SET Password_Cifrado = 0x WHERE DATALENGTH(Password_Cifrado) > 0`);
+        if (r.rowsAffected[0]) console.log(`✅ [Schema]: ${r.rowsAffected[0]} contraseña(s) de firma de médico eliminada(s) (ahora se pide el PIN al firmar).`);
+    });
+
+    await paso('v4.7 crear Convenios', async () => {
+        if (await existeTabla(pool, 'Convenios')) return;
+        await pool.request().query(`
+            CREATE TABLE Convenios (
+                ID_Convenio INT IDENTITY(1,1) PRIMARY KEY,
+                Nombre NVARCHAR(150) NOT NULL,
+                Tipo VARCHAR(20) NOT NULL DEFAULT 'OTRO',      -- ASEGURADORA | EMPRESA | IESS | ISSFA | ISSPOL | MSP_RPIS | OTRO
+                RUC VARCHAR(13) NULL,
+                Contacto NVARCHAR(150) NULL,
+                Telefono NVARCHAR(30) NULL,
+                Email NVARCHAR(150) NULL,
+                Descuento_Porcentaje DECIMAL(5,2) NOT NULL DEFAULT 0,
+                Requiere_Autorizacion BIT NOT NULL DEFAULT 0,
+                Observaciones NVARCHAR(500) NULL,
+                Activo BIT NOT NULL DEFAULT 1,
+                Fecha_Registro DATETIME NOT NULL DEFAULT GETDATE()
+            )`);
+        console.log('✅ [Schema]: Tabla Convenios creada.');
+    });
+
+    await paso('v4.7 crear Paciente_Convenios', async () => {
+        if (await existeTabla(pool, 'Paciente_Convenios')) return;
+        await pool.request().query(`
+            CREATE TABLE Paciente_Convenios (
+                ID_Paciente_Convenio INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Paciente INT NOT NULL,
+                ID_Convenio INT NOT NULL,
+                Numero_Afiliado NVARCHAR(60) NULL,
+                Titular NVARCHAR(150) NULL,
+                Parentesco NVARCHAR(40) NULL,
+                Vigente_Hasta DATE NULL,
+                Activo BIT NOT NULL DEFAULT 1,
+                Fecha_Registro DATETIME NOT NULL DEFAULT GETDATE()
+            )`);
+        await pool.request().query(`CREATE INDEX IX_Paciente_Convenios_Paciente ON Paciente_Convenios (ID_Paciente)`);
+        console.log('✅ [Schema]: Tabla Paciente_Convenios creada.');
+    });
+
+    await paso('v4.7 crear Ordenes_Examenes', async () => {
+        if (await existeTabla(pool, 'Ordenes_Examenes')) return;
+        await pool.request().query(`
+            CREATE TABLE Ordenes_Examenes (
+                ID_Orden INT IDENTITY(1,1) PRIMARY KEY,
+                Codigo_Verificacion VARCHAR(32) NOT NULL CONSTRAINT DF_Ordenes_Examenes_Codigo DEFAULT (LOWER(REPLACE(CONVERT(VARCHAR(36), NEWID()), '-', ''))),
+                ID_Paciente INT NOT NULL,
+                ID_Clinica INT NULL,
+                ID_Medico INT NOT NULL,
+                ID_Usuario_Emite INT NULL,
+                Fecha DATETIME NOT NULL DEFAULT GETDATE(),
+                Tipo VARCHAR(15) NOT NULL,                     -- LABORATORIO | IMAGEN | OTRO
+                Prioridad VARCHAR(10) NOT NULL DEFAULT 'RUTINA',
+                Examenes_JSON NVARCHAR(MAX) NOT NULL,
+                CIE10_Cod NVARCHAR(20) NULL,
+                CIE10_Texto NVARCHAR(400) NULL,
+                Indicaciones NVARCHAR(1000) NULL,
+                Destino NVARCHAR(200) NULL,
+                ID_Plan INT NULL,
+                Atencion_Texto NVARCHAR(400) NULL,
+                ID_Convenio INT NULL,
+                Convenio_Texto NVARCHAR(200) NULL,
+                Estado VARCHAR(20) NOT NULL DEFAULT 'EMITIDO',
+                Firma_Tipo VARCHAR(10) NULL,
+                Firma_Titular NVARCHAR(300) NULL,
+                Firma_Emisor NVARCHAR(300) NULL,
+                Archivo_PDF NVARCHAR(200) NULL,
+                Fecha_Firma DATETIME NULL,
+                ID_Usuario_Firma INT NULL,
+                Origen_Firma NVARCHAR(100) NULL,
+                Anulado BIT NOT NULL DEFAULT 0,
+                Motivo_Anulacion NVARCHAR(500) NULL,
+                Fecha_Anulacion DATETIME NULL,
+                Resultado_Archivo NVARCHAR(200) NULL,
+                Resultado_Nombre NVARCHAR(200) NULL,
+                Resultado_Fecha DATETIME NULL,
+                Resultado_Notas NVARCHAR(1000) NULL,
+                ID_Usuario_Resultado INT NULL
+            )`);
+        await pool.request().query(`CREATE INDEX IX_Ordenes_Examenes_Paciente ON Ordenes_Examenes (ID_Paciente)`);
+        await pool.request().query(`CREATE UNIQUE INDEX IX_Ordenes_Examenes_Codigo ON Ordenes_Examenes (Codigo_Verificacion)`);
+        console.log('✅ [Schema]: Tabla Ordenes_Examenes creada.');
+    });
+
     // Identificador único de ESTA instalación (para el registro de instalaciones en
     // casrodsoft.com). Vive en la base de datos: si alguien copia el sistema completo a
     // otra máquina, el mismo ID aparece con otra huella de equipo y el panel lo alerta.

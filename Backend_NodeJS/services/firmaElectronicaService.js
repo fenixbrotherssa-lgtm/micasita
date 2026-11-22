@@ -8,7 +8,7 @@
 //   - CLINICA: el mismo .p12 que la clínica ya subió para facturar en el SRI
 //              (tabla Facturacion_Certificados). Se reutiliza tal cual.
 //   - MEDICO : el .p12 personal de cada médico (tabla Usuarios_Firma_Electronica).
-//              Se guarda CIFRADO en la base (AES-256-GCM): archivo y contraseña.
+//              Se guarda CIFRADO en la base (AES-256-GCM) solo el archivo: el PIN (contraseña) no se guarda, el médico lo escribe al firmar.
 //
 //  Llave de cifrado: variable FIRMA_DOCUMENTOS_KEY (64 hex) o, si no existe,
 //  secrets/firma-documentos.key (se crea sola la primera vez). Las actualizaciones
@@ -174,25 +174,36 @@ async function obtenerFirmaClinica(pool, idClinica) {
     return { origen: 'CLINICA', p12, password };
 }
 
-async function obtenerFirmaMedico(pool, idUsuario) {
+// La contraseña (PIN) de la firma del médico NO se guarda: el médico la escribe cada vez
+// que firma. Así nadie más (recepción, administrador) puede firmar en su nombre.
+async function datosFirmaMedico(pool, idUsuario) {
     const r = await pool.request()
         .input('id', sql.Int, idUsuario)
-        .query(`SELECT TOP 1 P12_Cifrado, Password_Cifrado
+        .query(`SELECT TOP 1 P12_Cifrado, Titular, Emisor, Fecha_Vencimiento
                 FROM Usuarios_Firma_Electronica
                 WHERE ID_Usuario = @id AND Activo = 1
                 ORDER BY Fecha_Carga DESC`);
-    const f = r.recordset[0];
+    return r.recordset[0] || null;
+}
+
+async function obtenerFirmaMedico(pool, idUsuario, pin) {
+    const f = await datosFirmaMedico(pool, idUsuario);
     if (!f) return null;
+    let p12;
     try {
-        return {
-            origen: 'MEDICO',
-            p12: descifrar(Buffer.from(f.P12_Cifrado)),
-            password: descifrar(Buffer.from(f.Password_Cifrado)).toString('utf8')
-        };
+        p12 = descifrar(Buffer.from(f.P12_Cifrado));
     } catch (e) {
         console.error('❌ [Firma]: no se pudo descifrar la firma del médico', idUsuario, '-', e.message);
         return null; // llave cambiada: el médico debe volver a subirla
     }
+    if (!pin) throw new Error('Ingrese el PIN de su firma electrónica (la contraseña del archivo .p12).');
+    try {
+        leerInfoP12(p12, String(pin));
+    } catch (e) {
+        if (/contraseña|password|MAC|Invalid/i.test(e.message)) throw new Error('PIN de la firma electrónica incorrecto.');
+        throw e;
+    }
+    return { origen: 'MEDICO', p12, password: String(pin) };
 }
 
 /** Estado de las dos firmas para mostrar en pantalla (sin exponer nada sensible). */
@@ -215,7 +226,15 @@ async function estadoFirmas(pool, idClinica, idMedico) {
     };
     return {
         clinica: await resumen(() => obtenerFirmaClinica(pool, idClinica)),
-        medico: idMedico ? await resumen(() => obtenerFirmaMedico(pool, idMedico)) : { disponible: false }
+        // Del médico se informa con los datos guardados (sin PIN no se puede abrir el .p12)
+        medico: idMedico ? await (async () => {
+            try {
+                const f = await datosFirmaMedico(pool, idMedico);
+                if (!f) return { disponible: false };
+                const vencida = !!(f.Fecha_Vencimiento && new Date(f.Fecha_Vencimiento) < new Date());
+                return { disponible: !vencida, titular: f.Titular, emisor: f.Emisor, vence: f.Fecha_Vencimiento, vencida, requierePin: true };
+            } catch (e) { return { disponible: false, error: e.message }; }
+        })() : { disponible: false }
     };
 }
 
@@ -228,7 +247,7 @@ async function guardarFirmaMedico(pool, idUsuario, p12Buffer, password) {
     await pool.request()
         .input('id', sql.Int, idUsuario)
         .input('p12', sql.VarBinary(sql.MAX), cifrar(p12Buffer))
-        .input('pass', sql.VarBinary(sql.MAX), cifrar(Buffer.from(password, 'utf8')))
+        .input('pass', sql.VarBinary(sql.MAX), Buffer.alloc(0)) // el PIN no se guarda
         .input('titular', sql.NVarChar(300), info.titular)
         .input('emisor', sql.NVarChar(300), info.emisor || null)
         .input('vence', sql.DateTime, info.vence)
@@ -248,10 +267,10 @@ async function eliminarFirmaMedico(pool, idUsuario) {
  * Elige la firma según la preferencia: 'MEDICO' | 'CLINICA' | 'NINGUNA'.
  * Devuelve null si se pidió 'NINGUNA'; lanza Error si la elegida no está disponible.
  */
-async function resolverFirma(pool, preferencia, idClinica, idMedico) {
+async function resolverFirma(pool, preferencia, idClinica, idMedico, pin) {
     if (preferencia === 'NINGUNA') return null;
     const firma = preferencia === 'MEDICO'
-        ? await obtenerFirmaMedico(pool, idMedico)
+        ? await obtenerFirmaMedico(pool, idMedico, pin)
         : await obtenerFirmaClinica(pool, idClinica);
     if (!firma) {
         throw new Error(preferencia === 'MEDICO'
@@ -282,6 +301,7 @@ module.exports = {
     leerClaveFirma,
     leerInfoP12,
     estadoFirmas,
+    datosFirmaMedico,
     guardarFirmaMedico,
     eliminarFirmaMedico,
     resolverFirma,

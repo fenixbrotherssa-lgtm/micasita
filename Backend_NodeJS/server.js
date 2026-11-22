@@ -29,6 +29,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*" }
 });
+app.set('io', io); // los controladores avisan en tiempo real (ej. documentos por firmar)
 
 // --- FIRMA REMOTA (escritorio -> celular -> escritorio) ---
 // No agrega tablas ni cambia la transacción que ya crea el plan + consentimiento
@@ -148,7 +149,7 @@ folders.forEach(dir => {
 // Las carpetas públicas quedan abiertas para que Electron pueda leer las imágenes y logos
 // Carpetas privadas: la firma .p12 de la clínica y los certificados médicos nunca se
 // descargan por /uploads (los certificados salen por /api/certificados con permiso o token).
-app.use(['/uploads/facturacion/p12', '/uploads/certificados'], (req, res) => res.status(404).end());
+app.use(['/uploads/facturacion/p12', '/uploads/certificados', '/uploads/documentos_firmados'], (req, res) => res.status(404).end());
 app.use('/uploads', express.static(path.join(baseDir, 'uploads')));
 app.use('/assets', express.static(path.join(baseDir, 'assets')));
 
@@ -180,6 +181,11 @@ app.get('/api/recetas/verificar/:id', require('./controllers/recetaController').
 app.get('/api/certificados/verificar/:token', require('./controllers/certificadoController').verificarCertificado);
 app.get('/api/certificados/verificar/:token/pdf', require('./controllers/certificadoController').verificarPdf);
 
+// 🔓 PDF firmado de la receta y verificación de órdenes de exámenes (código aleatorio de 32 caracteres)
+app.get('/api/recetas/verificar/:id/pdf', require('./controllers/recetaController').verificarRecetaPdf);
+app.get('/api/ordenes/verificar/:codigo', require('./controllers/ordenController').verificar);
+app.get('/api/ordenes/verificar/:codigo/pdf', require('./controllers/ordenController').verificarPdf);
+
 // 🛡️ RUTAS PROTEGIDAS (El middleware verificarToken bloquea intrusos)
 app.use('/api/usuarios', verificarToken, require('./routes/usuarioRoutes'));
 app.use('/api/clinicas', verificarToken, require('./routes/clinicaRoutes'));
@@ -187,6 +193,9 @@ app.use('/api/pacientes', verificarToken, require('./routes/pacienteRoutes'));
 app.use('/api/odontograma', verificarToken, require('./routes/odontogramaRoutes'));
 app.use('/api/recetas', verificarToken, require('./routes/recetaRoutes'));
 app.use('/api/certificados', verificarToken, require('./routes/certificadoRoutes'));
+app.use('/api/documentos', verificarToken, require('./routes/documentoRoutes'));
+app.use('/api/ordenes', verificarToken, require('./routes/ordenRoutes'));
+app.use('/api/convenios', verificarToken, require('./routes/convenioRoutes'));
 app.use('/api/pagos', verificarToken, require('./routes/pagoRoutes'));
 app.use('/api/caja', verificarToken, require('./routes/cajaRoutes'));
 app.use('/api/gastos', verificarToken, require('./routes/gastosRoutes'));

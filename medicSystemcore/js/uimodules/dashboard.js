@@ -18,6 +18,9 @@ window.dashboardModule = {
             // 3. Aviso de actualización del servidor (solo administrador)
             if (parseInt(sesion.ID_Rol || sesion.id_rol) === 1) this.avisoActualizacionServidor();
 
+            // 4. Documentos esperando la firma de este médico (aviso flotante)
+            if (window.documentosUI) window.documentosUI.avisoPendientes();
+
         } catch (e) {
             console.error("❌ Error en Dashboard:", e);
         }

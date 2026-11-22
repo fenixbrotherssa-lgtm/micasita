@@ -15,6 +15,9 @@ window.dashboardModule = {
             // 2. Carga de estadísticas del DÍA
             await this.cargarEstadisticasHoy(sesion);
 
+            // Documentos esperando la firma de este médico (aviso flotante)
+            if (window.documentosUI) window.documentosUI.avisoPendientes();
+
             // 3. Aviso de licencia por vencer (solo administrador)
             if (parseInt(sesion.ID_Rol || sesion.id_rol) === 1) this.avisoLicencia();
 

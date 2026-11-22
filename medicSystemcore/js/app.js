@@ -303,6 +303,11 @@ window.cerrarSesion = function() {
             if (typeof window.cerrarSesion === 'function') window.cerrarSesion();
         });
 
+        // Documento nuevo esperando la firma de un médico (ver js/uimodules/documentos.js)
+        socket.on('firmas-pendientes', (data) => {
+            window.dispatchEvent(new CustomEvent('ametra-firmas-pendientes', { detail: data }));
+        });
+
         socket.on('db-update', (data) => {
             const moduloActual = window.router.iaState.ultimoModulo;
             if (data.modulo === moduloActual) {

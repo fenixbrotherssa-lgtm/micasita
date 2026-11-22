@@ -49,19 +49,23 @@ window.certificadosModule = (function () {
                 const t = TIPOS[c.Tipo] || { nombre: c.Tipo, icono: 'fa-file', color: '#64748b' };
                 const detalle = c.Tipo === 'REPOSO' ? `${c.Dias_Reposo} día(s) · ${fechaCorta(c.Reposo_Desde)} al ${fechaCorta(c.Reposo_Hasta)}`
                     : c.Tipo === 'SALUD' ? (c.Resultado_Aptitud || '') : `Atención ${fechaCorta(c.Fecha_Atencion)}`;
-                const firma = c.Firma_Tipo
-                    ? `<span title="${esc(c.Firma_Titular)}" style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;"><i class="fas fa-signature"></i> ${c.Firma_Tipo === 'MEDICO' ? 'Médico' : 'Clínica'}</span>`
-                    : `<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Manuscrita</span>`;
+                const pendiente = c.Estado === 'PENDIENTE_FIRMA';
+                const firma = window.documentosUI ? window.documentosUI.badgeFirma(c.Estado, c.Firma_Tipo, c.Firma_Titular) : '';
+                const soyElMedico = Number(sesion().ID_Usuario) === Number(c.ID_Medico);
                 return `
                 <tr style="border-bottom:1px solid #f1f5f9;${c.Anulado ? 'opacity:.55;' : ''}">
                     <td style="padding:10px;font-size:12px;">${fechaCorta(c.Fecha_Emision)}<div style="font-size:10px;color:#94a3b8;">${esc(c.Numero)}</div></td>
                     <td style="padding:10px;font-size:12px;"><i class="fas ${t.icono}" style="color:${t.color};margin-right:5px;"></i><b>${esc(t.nombre)}</b>
                         <div style="font-size:10px;color:#64748b;">${esc(detalle)}</div>
+                        ${c.Atencion_Texto ? `<div style="font-size:10px;color:#4f46e5;"><i class="fas fa-link"></i> ${esc(c.Atencion_Texto)}</div>` : ''}
                         ${c.Anulado ? `<div style="font-size:10px;color:#dc2626;font-weight:700;">ANULADO: ${esc(c.Motivo_Anulacion)}</div>` : ''}</td>
                     <td style="padding:10px;font-size:12px;">Dr(a). ${esc(c.Nombre_Medico_Snapshot)}</td>
                     <td style="padding:10px;text-align:center;">${firma}</td>
                     <td style="padding:10px;text-align:center;white-space:nowrap;">
-                        <button onclick="window.certificadosModule.verPdf(${c.ID_Certificado}, '${esc(c.Numero)}')" title="Ver / imprimir" style="background:#eef2ff;color:#4f46e5;border:none;padding:6px 9px;border-radius:6px;cursor:pointer;"><i class="fas fa-file-pdf"></i></button>
+                        ${pendiente
+                            ? (soyElMedico ? `<button onclick="window.documentosUI.bandejaFirmas()" title="Firmar con mi PIN" style="background:#4f46e5;color:white;border:none;padding:6px 9px;border-radius:6px;cursor:pointer;"><i class="fas fa-signature"></i></button>` : '')
+                            : `<button onclick="window.certificadosModule.verPdf(${c.ID_Certificado}, '${esc(c.Numero)}')" title="Ver / imprimir / WhatsApp" style="background:#eef2ff;color:#4f46e5;border:none;padding:6px 9px;border-radius:6px;cursor:pointer;"><i class="fas fa-file-pdf"></i></button>
+                               ${c.Anulado ? '' : `<button onclick="window.documentosUI.enviarWhatsApp('CERTIFICADO', ${c.ID_Certificado})" title="Enviar por WhatsApp" style="background:#dcfce7;color:#16a34a;border:none;padding:6px 9px;border-radius:6px;cursor:pointer;margin-left:4px;"><i class="fab fa-whatsapp"></i></button>`}`}
                         ${c.Anulado ? '' : `<button onclick="window.certificadosModule.anular(${c.ID_Certificado}, '${esc(c.Numero)}')" title="Anular" style="background:#fef2f2;color:#dc2626;border:none;padding:6px 9px;border-radius:6px;cursor:pointer;margin-left:4px;"><i class="fas fa-ban"></i></button>`}
                     </td>
                 </tr>`;
@@ -76,64 +80,7 @@ window.certificadosModule = (function () {
     // Ver PDF (vista previa con imprimir / descargar)
     // -----------------------------------------------------------------
     async function verPdf(id, numero) {
-        try {
-            Swal.fire({ title: 'Abriendo certificado...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            const resp = await fetch(`${window.api.baseURL}/certificados/${id}/pdf`, {
-                headers: { 'Authorization': `Bearer ${window.api.getToken()}` }
-            });
-            if (!resp.ok) throw new Error('No se encontró el PDF del certificado.');
-            const bytes = await resp.arrayBuffer();
-            const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-            // Vista previa con pdf.js (igual que facturación): el visor PDF de Electron
-            // dentro de un iframe se queda en negro en algunos equipos.
-            const base = window.api.baseURL.replace(/\/api\/?$/, '');
-            const cargarPDFJS = () => new Promise((resolve, reject) => {
-                if (window.pdfjsLib) return resolve(window.pdfjsLib);
-                const s = document.createElement('script');
-                s.src = `${base}/assets/js/pdf.min.js`;
-                s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${base}/assets/js/pdf.worker.min.js`; resolve(window.pdfjsLib); };
-                s.onerror = reject;
-                document.head.appendChild(s);
-            });
-            await Swal.fire({
-                title: `Certificado ${esc(numero || '')}`,
-                width: '900px',
-                html: `<div id="cert-pdf-vista" style="height:72vh;overflow:auto;background:#525659;border-radius:8px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;"><div style="color:#e2e8f0;margin-top:40px;">Cargando vista previa...</div></div>`,
-                didOpen: async () => {
-                    const cont = document.getElementById('cert-pdf-vista');
-                    try {
-                        const pdfjsLib = await cargarPDFJS();
-                        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(bytes.slice(0)) }).promise;
-                        cont.innerHTML = '';
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i);
-                            const v1 = page.getViewport({ scale: 1 });
-                            const vp = page.getViewport({ scale: Math.min((cont.clientWidth - 40) / v1.width, 2) });
-                            const canvas = document.createElement('canvas');
-                            canvas.width = vp.width; canvas.height = vp.height;
-                            canvas.style.cssText = 'box-shadow:0 4px 20px rgba(0,0,0,0.5);max-width:100%;background:#fff;';
-                            cont.appendChild(canvas);
-                            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-                        }
-                    } catch (err) {
-                        cont.innerHTML = `<div style="color:#fca5a5;margin-top:40px;text-align:center;">No se pudo mostrar la vista previa.<br><small>Use "Descargar PDF".</small></div>`;
-                    }
-                },
-                showCancelButton: true,
-                confirmButtonText: '<i class="fas fa-download"></i> Descargar PDF',
-                cancelButtonText: 'Cerrar',
-                confirmButtonColor: '#4f46e5',
-                preConfirm: () => {
-                    const a = document.createElement('a');
-                    a.href = url; a.download = `Certificado_${numero || id}.pdf`;
-                    document.body.appendChild(a); a.click(); a.remove();
-                    return false; // deja la vista abierta
-                }
-            });
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
-        } catch (e) {
-            Swal.fire('Error', e.message, 'error');
-        }
+        return window.documentosUI.verPdf('CERTIFICADO', id, numero);
     }
 
     async function anular(id, numero) {
@@ -178,7 +125,7 @@ window.certificadosModule = (function () {
                     <input type="file" id="cm-p12" accept=".p12,.pfx" class="swal2-file" style="width:100%;margin:6px 0 12px;font-size:13px;">
                     <label style="font-weight:700;color:#334155;">Contraseña de la firma</label>
                     <input type="password" id="cm-p12-pass" class="swal2-input" style="width:100%;margin:6px 0;" autocomplete="new-password">
-                    <small style="color:#94a3b8;">Se guarda cifrada. Solo se usa para firmar los documentos de este médico.</small>
+                    <small style="color:#94a3b8;">Solo se usa para comprobar el archivo: <b>no se guarda</b>. El médico la escribe como PIN cada vez que firma.</small>
                 </div>`,
             showCancelButton: true,
             showDenyButton: !!(m && m.titular),
@@ -233,6 +180,7 @@ window.certificadosModule = (function () {
         const lbl = 'display:block;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;';
         const inp = 'width:100%;padding:9px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box;';
         const opcionesCie = (window.CATALOGO_CIE10 || []).slice(0, 3000).map(i => `<option value="${esc(i.c)} — ${esc(i.d)}">`).join('');
+        const htmlPlan = await window.documentosUI.selectorPlan(idPaciente, 'cm-plan', inp);
 
         const html = `
         <div style="text-align:left;font-size:13px;">
@@ -272,6 +220,8 @@ window.certificadosModule = (function () {
                     <div><label style="${lbl}">Para (actividad evaluada)</label><input id="cm-actividad" style="${inp}" placeholder="Ej. actividades laborales, actividad física, ingreso escolar"></div>
                 </div>
             </div>
+
+            <div style="margin-top:12px;"><label style="${lbl}"><i class="fas fa-link"></i> Tratamiento / procedimiento relacionado</label>${htmlPlan}</div>
 
             <div style="margin-top:12px;"><label style="${lbl}">Motivo de la atención / procedimiento</label>
                 <input id="cm-motivo" style="${inp}" placeholder="Ej. exodoncia de tercer molar inferior"></div>
@@ -315,28 +265,7 @@ window.certificadosModule = (function () {
             const idMedico = document.getElementById('cm-medico').value;
             const med = medicos.find(m => String(m.ID_Usuario) === String(idMedico)) || {};
             document.getElementById('cm-especialidad').value = med.Especialidad || document.getElementById('cm-especialidad').value || '';
-            const caja = document.getElementById('cm-firmas');
-            caja.innerHTML = 'Consultando firmas...';
-            const e = await window.api.get(`/certificados/firmas/estado?id_medico=${idMedico}`).catch(() => null) || { clinica: {}, medico: {} };
-            const puedeMedico = Number(yo.ID_Rol) === 1 || Number(yo.ID_Usuario) === Number(idMedico);
-            const opcion = (valor, titulo, info, habilitada, motivoNo) => `
-                <label style="display:flex;gap:8px;align-items:flex-start;padding:7px 9px;border-radius:8px;background:${habilitada ? '#f8fafc' : '#fafafa'};cursor:${habilitada ? 'pointer' : 'not-allowed'};opacity:${habilitada ? 1 : .6};">
-                    <input type="radio" name="cm-firma" value="${valor}" ${habilitada ? '' : 'disabled'} style="margin-top:3px;">
-                    <span><b style="color:#1e293b;">${titulo}</b><br><small>${habilitada ? info : motivoNo}</small></span>
-                </label>`;
-            const fmtFirma = f => `${esc(f.titular)} · vence ${new Date(f.vence).toLocaleDateString('es-EC')}`;
-            caja.innerHTML =
-                opcion('MEDICO', 'Firma electrónica del médico', e.medico && e.medico.disponible ? fmtFirma(e.medico) : '',
-                    !!(e.medico && e.medico.disponible && puedeMedico),
-                    e.medico && e.medico.disponible ? 'Solo el propio médico puede firmar con su firma personal.' : (e.medico && e.medico.vencida ? 'La firma del médico está vencida.' : 'El médico no ha cargado su firma personal (opcional).')) +
-                opcion('CLINICA', 'Firma electrónica de la clínica', e.clinica && e.clinica.disponible ? fmtFirma(e.clinica) : '',
-                    !!(e.clinica && e.clinica.disponible),
-                    e.clinica && e.clinica.vencida ? 'La firma de la clínica está vencida.' : (e.clinica && e.clinica.error ? esc(e.clinica.error) : 'La clínica no ha cargado su firma (Facturación → Certificado).')) +
-                opcion('NINGUNA', 'Sin firma electrónica', 'Se imprime para firma y sello manuscritos.', true, '');
-            const preferida = document.querySelector('input[name="cm-firma"][value="MEDICO"]:not([disabled])') ||
-                document.querySelector('input[name="cm-firma"][value="CLINICA"]:not([disabled])') ||
-                document.querySelector('input[name="cm-firma"][value="NINGUNA"]');
-            if (preferida) preferida.checked = true;
+            await window.documentosUI.bloqueFirma(document.getElementById('cm-firmas'), idMedico, nombreMedico(med));
         };
 
         const r = await Swal.fire({
@@ -368,14 +297,15 @@ window.certificadosModule = (function () {
             preConfirm: () => {
                 const v = id => (document.getElementById(id) || {}).value || '';
                 const tipo = (document.querySelector('input[name="cm-tipo"]:checked') || {}).value;
-                const firma = (document.querySelector('input[name="cm-firma"]:checked') || {}).value || 'NINGUNA';
+                const { firma, pin } = window.documentosUI.leerFirma(document.getElementById('cm-firmas'));
                 if (!v('cm-fecha')) return Swal.showValidationMessage('Indique la fecha de atención');
                 if (tipo === 'REPOSO' && !(parseInt(v('cm-dias'), 10) >= 1)) return Swal.showValidationMessage('Indique los días de reposo');
                 if (tipo === 'ASISTENCIA' && !v('cm-hent')) return Swal.showValidationMessage('Indique al menos la hora de ingreso');
                 const cie = v('cm-cie').trim();
                 const m = cie.match(/^([A-Z]\d{2}(?:\.\d{1,2})?)\s*(?:—|-)?\s*(.*)$/i);
                 return {
-                    tipo, firma,
+                    tipo, firma, pin,
+                    id_plan: v('cm-plan') || null,
                     id_paciente: idPaciente,
                     id_medico: v('cm-medico'),
                     especialidad: v('cm-especialidad').trim(),
@@ -394,12 +324,13 @@ window.certificadosModule = (function () {
         });
         if (!r.isConfirmed) return;
 
-        Swal.fire({ title: r.value.firma === 'NINGUNA' ? 'Generando certificado...' : 'Generando y firmando electrónicamente...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: r.value.firma === 'NINGUNA' ? 'Generando certificado...' : (r.value.firma === 'MEDICO' && !r.value.pin ? 'Enviando a la firma del médico...' : 'Generando y firmando electrónicamente...'), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const res = await window.api.post('/certificados', r.value);
         if (!res || res.status !== 'Success') {
             return Swal.fire('No se pudo emitir', (res && res.message) || 'Error al emitir el certificado.', 'error');
         }
         cargarLista(idPaciente);
+        if (res.pendiente) return Swal.fire('Pendiente de firma', res.message, 'info');
         await verPdf(res.id_certificado, res.numero);
     }
 

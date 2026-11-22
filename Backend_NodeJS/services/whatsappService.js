@@ -836,6 +836,27 @@ const enviarMensaje = async (numero, mensaje) => {
     }
 };
 
+// --- ENVÍO DE DOCUMENTOS (receta / certificado / orden en PDF) ---
+const enviarDocumento = async (numero, pdfBuffer, nombreArchivo, mensaje) => {
+    try {
+        if (!numero) return { success: false, motivo: 'El paciente no tiene teléfono registrado.' };
+        // Sin sesión vinculada, whatsapp-web.js se queda esperando minutos: se avisa al instante
+        if (estadoBot !== 'conectado') return { success: false, motivo: 'WhatsApp no está vinculado en este servidor. Vincúlelo escaneando el QR en Configuración → WhatsApp.' };
+        let num = String(numero).replace(/\D/g, '');
+        if (num.startsWith('0')) num = '593' + num.substring(1);
+        if (!num.startsWith('593')) num = '593' + num;
+        const contactId = await client.getNumberId(num);
+        if (!contactId) return { success: false, motivo: 'El número del paciente no tiene WhatsApp.' };
+        const { MessageMedia } = require('whatsapp-web.js');
+        const media = new MessageMedia('application/pdf', Buffer.from(pdfBuffer).toString('base64'), nombreArchivo);
+        await client.sendMessage(contactId._serialized, media, { caption: mensaje || '' });
+        return { success: true };
+    } catch (f) {
+        console.error('Error al enviar documento por WA:', f.message);
+        return { success: false, motivo: 'WhatsApp no está conectado o no respondió. Revise la vinculación en Configuración.' };
+    }
+};
+
 // --- FUNCIÓN DE APOYO PARA FECHAS (Úsala cuando apruebes citas) ---
 function normalizarFechaSQL(fechaDb) {
     const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -1015,4 +1036,4 @@ process.on('SIGTERM', () => cerrarWhatsAppLimpio('SIGTERM'));
 // ya se encarga de limpiar cualquier Chrome huérfano antes de conectar.
 setTimeout(iniciarBot, 5000);
 
-module.exports = { enviarMensaje, normalizarFechaSQL, reiniciarBot, obtenerEstadoBot, obtenerUltimoQR };
+module.exports = { enviarMensaje, enviarDocumento, normalizarFechaSQL, reiniciarBot, obtenerEstadoBot, obtenerUltimoQR };

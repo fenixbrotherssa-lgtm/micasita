@@ -7,7 +7,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { getConnection, sql } = require('../config/db');
 const firmaSrv = require('../services/firmaElectronicaService');
-const { generarCertificadoPdf, fechaLarga } = require('../services/certificadoPdfService');
+const { fechaLarga } = require('../services/certificadoPdfService');
+const docs = require('../services/documentosFirmaService');
 
 const DIR_CERTIFICADOS = () => path.join(process.cwd(), 'uploads', 'certificados');
 const TIPOS = ['REPOSO', 'ASISTENCIA', 'SALUD'];
@@ -127,9 +128,6 @@ const emitirCertificado = async (req, res) => {
         if (!idPaciente || !idMedico) return res.status(400).json({ status: 'Error', message: 'Faltan el paciente o el médico.' });
         if (!esFecha(b.fecha_atencion)) return res.status(400).json({ status: 'Error', message: 'Indique la fecha de atención.' });
         if (!esHora(b.hora_entrada) || !esHora(b.hora_salida)) return res.status(400).json({ status: 'Error', message: 'Hora no válida (use HH:MM).' });
-        if (firmaPref === 'MEDICO' && !esAdmin(req) && Number(req.usuarioAuth.id_usuario) !== idMedico) {
-            return res.status(403).json({ status: 'Error', message: 'Solo el propio médico puede firmar con su firma electrónica personal.' });
-        }
 
         let dias = null, desde = null, hasta = null;
         if (tipo === 'REPOSO') {
@@ -160,13 +158,25 @@ const emitirCertificado = async (req, res) => {
         if (!pac) return res.status(404).json({ status: 'Error', message: 'Paciente no encontrado.' });
         if (!med) return res.status(404).json({ status: 'Error', message: 'Médico no encontrado o inactivo.' });
 
-        // ── Firma (se valida ANTES de grabar nada) ──
-        let firma = null;
+        // ── Firma: se valida ANTES de grabar nada ──
+        // CLINICA se abre ya; MEDICO solo se comprueba que exista (el PIN lo escribe el médico).
+        const yoSoyElMedico = Number(req.usuarioAuth.id_usuario) === idMedico;
         try {
-            firma = await firmaSrv.resolverFirma(pool, firmaPref, idClinica, idMedico);
+            if (firmaPref === 'CLINICA') await firmaSrv.resolverFirma(pool, 'CLINICA', idClinica, idMedico);
+            if (firmaPref === 'MEDICO') {
+                const fm = await firmaSrv.datosFirmaMedico(pool, idMedico);
+                if (!fm) throw new Error('El médico no tiene una firma electrónica cargada.');
+                if (fm.Fecha_Vencimiento && new Date(fm.Fecha_Vencimiento) < new Date()) throw new Error('La firma electrónica del médico está vencida.');
+                if (yoSoyElMedico && b.pin) await firmaSrv.resolverFirma(pool, 'MEDICO', idClinica, idMedico, b.pin); // PIN errado → no se graba nada
+            }
         } catch (e) {
             return res.status(400).json({ status: 'Error', message: e.message });
         }
+
+        // ── Trazabilidad: plan / procedimiento relacionado (debe ser del mismo paciente) ──
+        const idPlan = parseInt(b.id_plan, 10) || null;
+        const atencionTexto = idPlan ? await docs.textoAtencion(pool, idPlan, idPaciente) : null;
+        if (idPlan && !atencionTexto) return res.status(400).json({ status: 'Error', message: 'El tratamiento elegido no pertenece a este paciente.' });
 
         const especialidad = txt(b.especialidad, 150) || txt(med.Especialidad, 150);
         // La especialidad escrita se recuerda en el médico para la próxima vez
@@ -211,68 +221,41 @@ const emitirCertificado = async (req, res) => {
             .input('nmed', sql.NVarChar(250), nombreMedico)
             .input('cmed', sql.VarChar(20), txt(med.Cedula, 20))
             .input('rmed', sql.VarChar(80), txt(med.Registro_Sanitario, 80))
-            .input('ftipo', sql.VarChar(10), firma ? firma.origen : null)
-            .input('ftit', sql.NVarChar(300), firma ? firma.info.titular : null)
-            .input('femi', sql.NVarChar(300), firma ? (firma.info.emisor || null) : null)
+            .input('plan', sql.Int, idPlan)
+            .input('atencion', sql.NVarChar(400), atencionTexto)
             .query(`
                 INSERT INTO Certificados_Medicos (
                     Token, ID_Paciente, ID_Clinica, ID_Medico, ID_Usuario_Emite, Tipo, Fecha_Atencion, Hora_Entrada, Hora_Salida,
                     Contingencia, Dias_Reposo, Reposo_Desde, Reposo_Hasta, Resultado_Aptitud, Actividad_Aptitud,
                     CIE10_Cod, CIE10_Texto, Mostrar_Diagnostico, Motivo, Observaciones, Especialidad_Medico,
-                    Nombre_Medico_Snapshot, Cedula_Medico_Snapshot, Registro_Medico_Snapshot, Firma_Tipo, Firma_Titular, Firma_Emisor)
+                    Nombre_Medico_Snapshot, Cedula_Medico_Snapshot, Registro_Medico_Snapshot, ID_Plan, Atencion_Texto)
                 OUTPUT INSERTED.ID_Certificado, INSERTED.Fecha_Emision
                 VALUES (
                     @token, @pac, @cli, @med, @emite, @tipo, @fatencion, @hent, @hsal,
                     @cont, @dias, @desde, @hasta, @res, @act,
                     @ciecod, @cietxt, @mostrar, @motivo, @obs, @esp,
-                    @nmed, @cmed, @rmed, @ftipo, @ftit, @femi)`);
-        const { ID_Certificado: idCert, Fecha_Emision } = ins.recordset[0];
+                    @nmed, @cmed, @rmed, @plan, @atencion)`);
+        const { ID_Certificado: idCert } = ins.recordset[0];
 
-        // ── PDF ──
-        const datos = {
-            Token: token, numero: numeroCertificado(idCert), Fecha_Emision, Tipo: tipo,
-            Fecha_Atencion: b.fecha_atencion, Hora_Entrada: txt(b.hora_entrada, 5), Hora_Salida: txt(b.hora_salida, 5),
-            Contingencia: txt(b.contingencia, 100), Dias_Reposo: dias, Reposo_Desde: desde, Reposo_Hasta: hasta,
-            Resultado_Aptitud: txt(b.resultado_aptitud, 60) || 'APTO', Actividad_Aptitud: txt(b.actividad_aptitud, 300),
-            CIE10_Cod: txt(b.cie10_cod, 20), CIE10_Texto: txt(b.cie10_texto, 400), Mostrar_Diagnostico: mostrarDx,
-            Motivo: txt(b.motivo, 1000), Observaciones: txt(b.observaciones, 2000),
-            Especialidad_Medico: especialidad, Nombre_Medico_Snapshot: nombreMedico,
-            Cedula_Medico_Snapshot: med.Cedula, Registro_Medico_Snapshot: med.Registro_Sanitario,
-            Nombres_Paciente: pac.Nombres, Apellidos_Paciente: pac.Apellidos, DNI: pac.DNI, Fecha_Nacimiento: pac.Fecha_Nacimiento,
-            Genero: pac.Genero, Ocupacion: pac.Ocupacion, Historia_Clinica: pac.Historia_Clinica,
-            Nombre_Clinica: cli.Nombre_Clinica, RUC: cli.RUC, Direccion_Clinica: cli.Direccion, Telefono_Clinica: cli.Telefono, Ciudad_Clinica: cli.Ciudad,
-            rutaLogo: cli.Logo_Ruta ? path.join(process.cwd(), 'uploads', 'logos', path.basename(cli.Logo_Ruta)) : null,
-            urlVerificacion: `${basePublica(req)}/api/certificados/verificar/${token}`,
-            firma: firma ? { titular: firma.info.titular, emisor: firma.info.emisor } : null
-        };
-
-        let pdf;
+        // ── PDF: firma ya, o queda pendiente de la firma del médico ──
+        let r;
         try {
-            pdf = await generarCertificadoPdf(datos);
-            if (firma) {
-                pdf = await firmaSrv.firmarPdf(pdf, firma, {
-                    motivo: `Certificado médico ${datos.numero}`,
-                    ubicacion: cli.Ciudad || 'Ecuador',
-                    contacto: cli.Telefono || ''
-                });
-            }
+            r = await docs.procesarFirma(pool, req, 'CERTIFICADO', idCert, {
+                firmaPref, idMedico, pin: b.pin, descripcion: `certificado de ${pac.Nombres} ${pac.Apellidos}`
+            });
         } catch (e) {
             // No dejar un certificado "fantasma" sin PDF
             await pool.request().input('id', sql.Int, idCert).query(`DELETE FROM Certificados_Medicos WHERE ID_Certificado = @id`);
             console.error('❌ Error generando/firmando certificado:', e);
-            return res.status(500).json({ status: 'Error', message: 'No se pudo generar o firmar el PDF: ' + e.message });
+            return res.status(400).json({ status: 'Error', message: 'No se pudo generar o firmar el PDF: ' + e.message });
         }
-
-        fs.mkdirSync(DIR_CERTIFICADOS(), { recursive: true });
-        const archivo = `${token}.pdf`;
-        fs.writeFileSync(path.join(DIR_CERTIFICADOS(), archivo), pdf);
-        await pool.request().input('id', sql.Int, idCert).input('arch', sql.NVarChar(200), archivo)
-            .query(`UPDATE Certificados_Medicos SET Archivo_PDF = @arch WHERE ID_Certificado = @id`);
 
         res.json({
             status: 'Success',
-            message: firma ? `Certificado ${datos.numero} emitido y firmado electrónicamente.` : `Certificado ${datos.numero} emitido.`,
-            id_certificado: idCert, numero: datos.numero, token, firmado: !!firma
+            message: r.pendiente
+                ? `Certificado ${r.numero} preparado. Quedó pendiente de la firma del Dr(a). ${nombreMedico}, que ya fue notificado.`
+                : (r.firmado ? `Certificado ${r.numero} emitido y firmado electrónicamente.` : `Certificado ${r.numero} emitido.`),
+            id_certificado: idCert, numero: r.numero, token, firmado: r.firmado, pendiente: r.pendiente
         });
     } catch (error) {
         console.error('❌ emitirCertificado:', error);
@@ -288,7 +271,8 @@ const listarPorPaciente = async (req, res) => {
         const pool = await getConnection();
         const r = await pool.request().input('id', sql.Int, parseInt(req.params.id, 10)).query(`
             SELECT ID_Certificado, Fecha_Emision, Tipo, Fecha_Atencion, Dias_Reposo, Reposo_Desde, Reposo_Hasta,
-                   Resultado_Aptitud, CIE10_Cod, Nombre_Medico_Snapshot, Firma_Tipo, Firma_Titular, Anulado, Motivo_Anulacion
+                   Resultado_Aptitud, CIE10_Cod, Nombre_Medico_Snapshot, Firma_Tipo, Firma_Titular, Anulado, Motivo_Anulacion,
+                   Estado, ID_Medico, Atencion_Texto
             FROM Certificados_Medicos
             WHERE ID_Paciente = @id
             ORDER BY Fecha_Emision DESC`);
@@ -306,8 +290,9 @@ const descargarPdf = async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().input('id', sql.Int, parseInt(req.params.id, 10))
-            .query(`SELECT ID_Certificado, Archivo_PDF FROM Certificados_Medicos WHERE ID_Certificado = @id`);
+            .query(`SELECT ID_Certificado, Archivo_PDF, Estado FROM Certificados_Medicos WHERE ID_Certificado = @id`);
         const c = r.recordset[0];
+        if (c && c.Estado === docs.PENDIENTE) return res.status(409).json({ status: 'Error', message: 'El certificado está pendiente de la firma del médico.' });
         const ruta = c && c.Archivo_PDF ? path.join(DIR_CERTIFICADOS(), path.basename(c.Archivo_PDF)) : null;
         if (!ruta || !fs.existsSync(ruta)) return res.status(404).json({ status: 'Error', message: 'PDF no encontrado.' });
         res.setHeader('Content-Type', 'application/pdf');
@@ -388,7 +373,7 @@ const verificarCertificado = async (req, res) => {
             <div class="head">
                 <h1>${escHtml(c.Nombre_Clinica || 'Certificado médico')}</h1>
                 <p>Verificación de certificado médico ${numeroCertificado(c.ID_Certificado)}</p>
-                ${c.Anulado ? '<span class="badge anulado">✖ CERTIFICADO ANULADO</span>' : '<span class="badge ok">✔ CERTIFICADO VÁLIDO</span>'}
+                ${c.Anulado ? '<span class="badge anulado">✖ CERTIFICADO ANULADO</span>' : (c.Estado === docs.PENDIENTE ? '<span class="badge anulado" style="background:#f59e0b">⏳ EN PROCESO DE FIRMA</span>' : '<span class="badge ok">✔ CERTIFICADO VÁLIDO</span>')}
             </div>
             <div class="body">
                 <div class="grid">

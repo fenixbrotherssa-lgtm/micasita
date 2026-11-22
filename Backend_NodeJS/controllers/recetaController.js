@@ -1,4 +1,6 @@
 const { getConnection, sql } = require('../config/db');
+const fs = require('fs');
+const docs = require('../services/documentosFirmaService');
 
 const guardarReceta = async (req, res) => {
     const { 
@@ -9,7 +11,8 @@ const guardarReceta = async (req, res) => {
         indicaciones, 
         proxima_cita,
         cie_cod, 
-        cie_texto 
+        cie_texto,
+        id_plan
     } = req.body;
     
     if (!id_paciente || !id_usuario || !id_clinica) {
@@ -21,7 +24,12 @@ const guardarReceta = async (req, res) => {
 
     try {
         const pool = await getConnection();
-        
+
+        // Trazabilidad: plan / procedimiento del que nace la receta (debe ser del paciente)
+        const idPlan = parseInt(id_plan, 10) || null;
+        const atencionTexto = idPlan ? await docs.textoAtencion(pool, idPlan, id_paciente) : null;
+        if (idPlan && !atencionTexto) return res.status(400).json({ status: "Error", message: "El tratamiento elegido no pertenece a este paciente." });
+
         const result = await pool.request()
             .input('paciente', sql.Int, id_paciente)
             .input('usuario', sql.Int, id_usuario) 
@@ -31,6 +39,9 @@ const guardarReceta = async (req, res) => {
             .input('cita', sql.Date, proxima_cita || null)
             .input('cie_cod', sql.NVarChar, cie_cod || null)
             .input('cie_txt', sql.NVarChar, cie_texto || null)
+            .input('plan', sql.Int, idPlan)
+            .input('atencion', sql.NVarChar(400), atencionTexto)
+            .input('prepara', sql.Int, req.usuarioAuth?.id_usuario || null)
             .query(`
                 INSERT INTO Recetas (
                     ID_Paciente, 
@@ -42,7 +53,10 @@ const guardarReceta = async (req, res) => {
                     Proxima_Cita,
                     Registro_Doc_Snapshot,
                     CIE10_Cod,
-                    CIE10_Texto
+                    CIE10_Texto,
+                    ID_Plan,
+                    Atencion_Texto,
+                    ID_Usuario_Prepara
                 )
                 SELECT 
                     @paciente, 
@@ -54,7 +68,10 @@ const guardarReceta = async (req, res) => {
                     @cita,
                     Registro_Sanitario,
                     @cie_cod,
-                    @cie_txt
+                    @cie_txt,
+                    @plan,
+                    @atencion,
+                    @prepara
                 FROM Usuarios 
                 WHERE ID_Usuario = @usuario;
 
@@ -144,6 +161,11 @@ const verificarReceta = async (req, res) => {
                     R.Proxima_Cita,
                     R.CIE10_Cod,
                     R.CIE10_Texto,
+                    R.Codigo_Verificacion,
+                    R.Firma_Titular,
+                    R.Firma_Emisor,
+                    R.Estado_Firma,
+                    R.Archivo_PDF,
                     P.Nombres + ' ' + P.Apellidos AS Nombre_Paciente,
                     P.DNI,
                     U.Nombres + ' ' + U.Apellidos AS Nombre_Medico,
@@ -241,6 +263,8 @@ const verificarReceta = async (req, res) => {
                         <h1>${r.Nombre_Clinica}</h1>
                         <p>${r.Direccion} &nbsp;|&nbsp; Telf: ${r.Telefono} &nbsp;|&nbsp; RUC: ${r.RUC}</p>
                         <div class="badge-valido">✔ DOCUMENTO VALIDADO EN SISTEMA — N° ${r.ID_Receta}</div>
+                        ${!esLegado && r.Firma_Titular && r.Estado_Firma === 'FIRMADA' ? `<div class="badge-valido" style="background:#16a34a; margin-left:6px;">✍ FIRMADA ELECTRÓNICAMENTE POR ${String(r.Firma_Titular).replace(/</g, '&lt;')}</div>` : ''}
+                        ${!esLegado && r.Archivo_PDF && r.Estado_Firma !== 'PENDIENTE_FIRMA' ? `<div style="margin-top:12px;"><a href="${codigo}/pdf" style="color:white; font-weight:700; font-size:12px;">⬇ Descargar el PDF original</a></div>` : ''}
                     </div>
 
                     <div class="body">
@@ -348,4 +372,58 @@ const verificarReceta = async (req, res) => {
 // ==========================================
 // EXPORTAR TODO JUNTO
 // ==========================================
-module.exports = { guardarReceta, getRecetasPorPaciente, verificarReceta };
+// ==========================================
+// FIRMA ELECTRÓNICA DE LA RECETA
+// POST /recetas/:id/firmar  { firma: 'MEDICO'|'CLINICA'|'NINGUNA', pin, url_publica }
+// MEDICO solo con el PIN del propio médico; si la prepara otra persona queda pendiente.
+// ==========================================
+const firmarReceta = async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const firmaPref = String(req.body?.firma || 'NINGUNA').toUpperCase();
+    if (!id || !['MEDICO', 'CLINICA', 'NINGUNA'].includes(firmaPref)) return res.status(400).json({ status: "Error", message: "Datos no válidos." });
+    try {
+        const pool = await getConnection();
+        const d = await docs.cargar(pool, 'RECETA', id);
+        if (!d) return res.status(404).json({ status: "Error", message: "Receta no encontrada." });
+        if (d.Estado_Firma === 'FIRMADA') return res.status(409).json({ status: "Error", message: "La receta ya está firmada electrónicamente." });
+        if (d.Estado_Firma === docs.PENDIENTE && Number(req.usuarioAuth.id_usuario) !== Number(d.ID_Medico)) {
+            return res.status(409).json({ status: "Error", message: "La receta ya está pendiente de la firma del médico." });
+        }
+        const r = await docs.procesarFirma(pool, req, 'RECETA', id, {
+            firmaPref, idMedico: d.ID_Medico, pin: req.body?.pin, descripcion: `receta de ${d.Nombres_Paciente} ${d.Apellidos_Paciente}`
+        });
+        res.json({
+            status: "Success",
+            pendiente: r.pendiente, firmado: r.firmado, numero: r.numero,
+            message: r.pendiente
+                ? `Receta preparada. Quedó pendiente de la firma del Dr(a). ${d.Nombre_Medico}, que ya fue notificado.`
+                : (r.firmado ? 'Receta firmada electrónicamente.' : 'PDF de la receta generado.')
+        });
+    } catch (error) {
+        res.status(400).json({ status: "Error", message: error.message });
+    }
+};
+
+// PÚBLICO: GET /recetas/verificar/:codigo/pdf — PDF original (para validar la firma)
+const verificarRecetaPdf = async (req, res) => {
+    const codigo = String(req.params.id || '').toLowerCase();
+    if (!/^[0-9a-f]{32}$/.test(codigo)) return res.status(404).send('No encontrado');
+    try {
+        const pool = await getConnection();
+        const r = await pool.request().input('c', sql.VarChar(32), codigo)
+            .query(`SELECT ID_Receta, Archivo_PDF, Estado_Firma FROM Recetas WHERE Codigo_Verificacion = @c`);
+        const d = r.recordset[0];
+        const ruta = d && d.Estado_Firma !== docs.PENDIENTE ? docs.rutaPdf('RECETA', d) : null;
+        if (!ruta || !fs.existsSync(ruta)) return res.status(404).send('No encontrado');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${docs.numero.RECETA(d.ID_Receta)}.pdf"`);
+        fs.createReadStream(ruta).pipe(res);
+    } catch (e) {
+        res.status(404).send('No encontrado');
+    }
+};
+
+module.exports = { guardarReceta, getRecetasPorPaciente, verificarReceta,
+    firmarReceta,
+    verificarRecetaPdf
+};
