@@ -27,10 +27,12 @@ const MODULOS_MANUAL = [
         steps: [
             'Ingresa tu <b>usuario</b> y <b>contraseña</b> (te los entrega el Administrador de la clínica).',
             'Presiona <b>Ingresar al Sistema</b>.',
-            'Si tu cuenta está desactivada, el sistema no te deja entrar aunque la contraseña sea correcta — pide al Administrador que revise tu estado en <b>Personal</b>.'
+            'Si tu cuenta está desactivada, el sistema no te deja entrar aunque la contraseña sea correcta — pide al Administrador que revise tu estado en <b>Personal</b>.',
+            'Si la app no conecta con el servidor (por ejemplo, en una PC nueva o si cambió la IP del servidor), usa la <b>tuerca <i class="fas fa-cog"></i></b> de la pantalla de inicio: escribe la IP o el nombre del servidor y presiona <b>Guardar y reiniciar</b>: el sistema prueba la conexión y la app se reinicia sola.'
         ],
         actions: [
-            { icon: 'arrow-right', label: 'Ingresar al Sistema', desc: 'Valida usuario/contraseña y carga el Dashboard correspondiente a tu rol.' }
+            { icon: 'arrow-right', label: 'Ingresar al Sistema', desc: 'Valida usuario/contraseña y carga el Dashboard correspondiente a tu rol.' },
+            { icon: 'cog', label: 'Servidor (tuerca)', desc: 'Cambia a qué servidor se conecta esta PC. Se agregan solos el puerto :8000 y /api.' }
         ],
         sections: [],
         warnings: [
@@ -133,19 +135,24 @@ const MODULOS_MANUAL = [
             'Para diagnosticar, ve al accesorio directo <b>Odontograma</b> — desde ahí, no desde aquí, se marcan los hallazgos por pieza.',
             'Sube fotos/radiografías con <b>Subir Imagen</b> en cada control — quedan fechadas automáticamente para poder compararlas después.',
             'Para comparar evolución, abre dos imágenes de fechas distintas en la <b>Galería Clínica</b> y usa el control deslizante — sirve para mostrarle al paciente el antes/después de un tratamiento, o para documentar el progreso de una condición.',
-            'Emite recetas con <b>Nueva Receta</b> cuando el paciente necesite medicación.'
+            'Emite recetas con <b>Nueva Receta</b> cuando el paciente necesite medicación. Certificados, recetas y órdenes de exámenes pueden salir con firma electrónica y QR: ver <b>Certificados, Recetas y Órdenes</b>.',
+            'Si el paciente viene por un seguro o convenio, asígnalo en la tarjeta <b>Convenio / Seguro</b> (ver <b>Convenios y Seguros</b>).'
         ],
         actions: [
             { icon: 'print', label: 'Imprimir Historia Completa', desc: 'Genera el expediente completo en formato imprimible.' },
             { icon: 'plus', label: 'Nueva Receta', desc: 'Registra medicamentos, indicaciones y próxima cita.' },
             { icon: 'plus', label: 'Subir Imagen', desc: 'Añade fotos o radiografías a la galería clínica del paciente.' },
-            { icon: 'file-signature', label: 'Consentimientos MSP-024', desc: 'Historial de consentimientos firmados por tratamiento.' }
+            { icon: 'file-signature', label: 'Consentimientos MSP-024', desc: 'Historial de consentimientos firmados por tratamiento.' },
+            { icon: 'file-medical', label: 'Nuevo Certificado', desc: 'Reposo, constancia de atención o certificado de salud, con firma electrónica y QR.' },
+            { icon: 'flask', label: 'Orden de Exámenes', desc: 'Orden de laboratorio o imagen; luego se adjunta el resultado.' },
+            { icon: 'shield-heart', label: 'Convenio / Seguro', desc: 'Asigna al paciente su aseguradora, empresa o IESS, con N.° de afiliado y vigencia.' }
         ],
         sections: [
             { t: 'Alertas Médicas y Anamnesis', d: 'Antecedentes relevantes del paciente' },
             { t: 'Signos Vitales MSP-033', d: 'Formato oficial de signos vitales' },
             { t: 'Examen Estomatognático MSP-033', d: '9 regiones: labios, mejillas, maxilares, lengua, paladar, piso, carrillos, glándulas' },
-            { t: 'Planes de Tratamiento y Cuenta', d: 'Estado financiero de los tratamientos del paciente' },
+            { t: 'Planes de Tratamiento y Cuenta', d: 'Estado financiero de los tratamientos del paciente; el escudo indica si lo paga un convenio o es particular' },
+            { t: 'Recetas, Certificados y Órdenes', d: 'Listas con su estado de firma (pendiente, firmado, anulado), Ver PDF y Enviar por WhatsApp' },
             { t: 'Galería Clínica y Comparador', d: 'Fotos/RX con control deslizante de comparación antes/después' }
         ],
         note: 'Los accesos rápidos del costado (Odontograma, Recetas, Presupuestos, Imágenes, Historial de Pagos) son la forma normal de moverse entre las herramientas de un mismo paciente sin perder el contexto.',
@@ -206,6 +213,7 @@ const MODULOS_MANUAL = [
             'Presiona <b>Planificar Tratamientos</b> (o llega aquí desde "Sugerencias por Pieza" del Odontograma, o desde "Aprobar" un Presupuesto).',
             'Por cada procedimiento: elige médico, servicio del catálogo, pieza/caras y descuento si aplica.',
             'Busca y selecciona el <b>diagnóstico CIE-10</b> correspondiente.',
+            'Si el paciente tiene un convenio vigente, revisa arriba <b>Paga estos tratamientos</b>: viene con el convenio elegido; escribe el N.° de autorización si lo pide, o elige <b>Particular</b>.',
             'Revisa la <b>Especialidad</b> (se detecta sola según el procedimiento, pero puedes cambiarla — de ella depende el % de comisión del médico) y escribe el <b>Motivo de la consulta</b>, que sale impreso en el MSP-024.',
             'Explica el procedimiento al paciente, y hazlo firmar el <b>consentimiento informado MSP-024</b> en el recuadro de firma — es obligatorio, el sistema no deja guardar sin firma.',
             'Si el paciente es menor de edad o no apto para firmar, marca la casilla de representante legal y completa sus datos.',
@@ -216,10 +224,11 @@ const MODULOS_MANUAL = [
             { icon: 'plus-circle', label: 'Planificar Tratamientos', desc: 'Abre el modal completo: elige médico, servicio, pieza/caras, descuento, diagnóstico CIE-10, firma del consentimiento MSP-024.' },
             { icon: 'plus', label: 'Nuevo Servicio', desc: 'Agrega una prestación nueva al catálogo (con su precio).' },
             { icon: 'pen', label: 'Editar Servicio (lápiz)', desc: 'Cambia el nombre o el precio de una prestación del catálogo. Los tratamientos ya asignados a pacientes conservan su precio original.' },
-            { icon: 'mobile-alt', label: 'Enviar a Firma (Celular)', desc: 'Manda el consentimiento a firmar desde el celular en vez del recuadro del computador — la firma vuelve sola al mismo lugar.' }
+            { icon: 'mobile-alt', label: 'Enviar a Firma (Celular)', desc: 'Manda el consentimiento a firmar desde el celular en vez del recuadro del computador — la firma vuelve sola al mismo lugar.' },
+            { icon: 'shield-heart', label: 'Escudo (quién paga)', desc: 'En cada tratamiento: convenio o particular, autorización, lo que cubre el convenio y el estado del cobro.' }
         ],
         sections: [
-            { t: 'Historial de Procedimientos', d: 'Fecha, procedimiento, pieza, costo, saldo, estado' },
+            { t: 'Historial de Procedimientos', d: 'Fecha, procedimiento, pieza, costo, saldo del paciente, estado y quién paga (convenio o particular)' },
             { t: 'Presupuestos Pendientes', d: 'Cotizaciones a la espera de aprobación' },
             { t: 'Catálogo de Servicios', d: 'Lista de precios de la clínica' }
         ],
@@ -230,6 +239,83 @@ const MODULOS_MANUAL = [
             'Si eliminas un plan de tratamiento que sí se pudo borrar (sin pagos), el odontograma vuelve a mostrar el hallazgo original como pendiente — es intencional, para que el sistema siempre refleje la realidad.',
             'Un ítem sin médico asignado no se puede guardar — usa el lápiz de edición en la tabla del lote para completarlo antes de firmar el consentimiento.',
             '<b>Enviar a Firma (Celular)</b> necesita que tanto el computador como el celular estén conectados a internet en ese momento (viaja por el mismo servidor en tiempo real) — no es una opción para trabajar sin señal. Si el celular no tiene la app instalada o no inició sesión en la misma clínica, la solicitud no le va a llegar.'
+        ]
+    },
+    {
+        id: 'documentos', file: 'historiaclinica.html', icon: 'file-signature', color: '#0891b2', role: 'all',
+        title: 'Certificados, Recetas y Órdenes',
+        purpose: 'Documentos médicos con validez legal: certificados médicos (reposo, constancia de atención, certificado de salud), recetas y órdenes de exámenes (laboratorio e imagen). Pueden salir con la <b>firma electrónica del médico</b> (.p12), con la de la clínica o para firma manuscrita, llevan un <b>código QR</b> para verificar su autenticidad y se envían al paciente por <b>WhatsApp</b>.',
+        steps: [
+            '<b>Cada médico sube una sola vez su firma electrónica:</b> en Nuevo Certificado → <b>Firma personal del médico</b>, elige su archivo .p12 / .pfx y escribe su contraseña para validarla. La contraseña <b>no se guarda</b>: a partir de ahí es su <b>PIN</b> y se la pide cada vez que firma.',
+            'Desde la Historia Clínica del paciente usa <b>Nuevo Certificado</b>, <b>Nueva Receta</b> u <b>Orden de Exámenes</b>.',
+            'Elige el <b>tratamiento del plan</b> al que corresponde (queda la trazabilidad: plan, pieza, diagnóstico CIE-10 y fecha salen en el documento).',
+            'En <b>Firma</b> elige: firma del médico, firma de la clínica o sin firma electrónica (firma y sello a mano).',
+            'Si eres el médico que firma, escribe tu <b>PIN</b> y el documento sale firmado al instante.',
+            'Si lo prepara recepción u otro usuario, el documento queda <b>Pendiente de firma</b> y al médico le llega un aviso (abajo a la derecha en el escritorio y una notificación en la app del celular).',
+            'El médico abre el aviso (<b>Documentos por firmar</b>), marca los que quiera y los firma todos juntos con <b>un solo PIN</b>. También puede firmarlos desde el celular, en la pantalla <b>Firmador</b>.',
+            'Con el documento ya emitido usa <b>Ver PDF</b> para la vista previa, <b>Descargar</b> o <b>Enviar por WhatsApp</b> al teléfono del paciente.',
+            'En las órdenes de exámenes, cuando llegan los resultados usa <b>Subir resultado</b> (PDF o foto) para que queden en la historia del paciente.'
+        ],
+        actions: [
+            { icon: 'file-medical', label: 'Nuevo Certificado', desc: 'Reposo médico (calcula los días), constancia de atención (hora de entrada/salida) o certificado de salud.' },
+            { icon: 'prescription', label: 'Nueva Receta', desc: 'Medicamentos con dosis, vía, frecuencia y duración. Al guardar: Imprimir, Firmar electrónicamente o Cerrar.' },
+            { icon: 'flask', label: 'Orden de Exámenes', desc: 'Laboratorio o imagen con catálogo de exámenes frecuentes; se puede anular y adjuntar el resultado.' },
+            { icon: 'key', label: 'Firma personal del médico', desc: 'Sube, reemplaza o quita el .p12 del médico. Solo el propio médico (o un administrador por él).' },
+            { icon: 'pen-nib', label: 'Documentos por firmar', desc: 'Bandeja del médico con todo lo que preparó recepción: firma varios a la vez con un PIN.' },
+            { icon: 'comment-dots', label: 'Enviar por WhatsApp', desc: 'Manda el PDF al paciente con el WhatsApp de la clínica, con un mensaje de que puede verificarlo con el QR.' },
+            { icon: 'qrcode', label: 'Código QR', desc: 'Cualquiera puede escanearlo para comprobar que el documento es auténtico y está vigente (o anulado).' }
+        ],
+        sections: [
+            { t: 'Pendiente de firma', d: 'Lo preparó otro usuario; espera el PIN del médico. No se puede descargar ni enviar hasta firmarlo' },
+            { t: 'Firmado / Emitido', d: 'Ya tiene su PDF definitivo, con firma electrónica si se eligió' },
+            { t: 'Anulado', d: 'Sigue en la historia, pero el QR muestra que ya no es válido' }
+        ],
+        note: 'Solo el propio médico puede firmar con su firma electrónica, ni siquiera el Administrador. Así se cumple la Ley de Comercio Electrónico: la firma es personal e intransferible.',
+        warnings: [
+            'Si el médico olvida su PIN (la contraseña de su .p12), el sistema no puede recuperarlo porque no lo guarda. Debe pedirla a la entidad que le emitió la firma o volver a subir el archivo.',
+            'Si la firma electrónica del médico está <b>vencida</b>, el sistema avisa y no deja firmar con ella: renuévala con la entidad emisora y súbela de nuevo.',
+            'El envío por WhatsApp necesita que el WhatsApp de la clínica esté vinculado (Sucursales → Bot de WhatsApp) y que el paciente tenga teléfono registrado; si no, el sistema avisa al instante.',
+            'La verificación pública del QR <b>nunca muestra los exámenes</b> de una orden ni datos clínicos de más: solo confirma que el documento existe, quién lo emitió y si está vigente.'
+        ]
+    },
+    {
+        id: 'convenios', file: 'dashboard.html', icon: 'shield-heart', color: '#0d9488', role: 'all',
+        title: 'Convenios y Seguros',
+        purpose: 'Pacientes que vienen por un seguro, empresa o convenio (aseguradoras privadas, IESS, ISSFA, ISSPOL, Red Pública, empresas). Cada <b>tratamiento</b> indica quién lo paga, cuánto cubre el convenio y cuánto es el copago del paciente, y el sistema lleva lo que te debe cada convenio hasta que paga.',
+        steps: [
+            '<b>Administrador:</b> en Dashboard → <b>Convenios y seguros</b> registra cada convenio con su tipo, RUC, <b>% que cubre</b> (ej. 80 %), % de descuento pactado y si <b>requiere autorización</b>.',
+            'En la Historia Clínica, tarjeta <b>Convenio / Seguro</b>, asigna el convenio al paciente con su N.° de afiliado o póliza, titular y vigencia.',
+            'Al planificar tratamientos aparece arriba <b>Paga estos tratamientos</b> con el convenio ya elegido. Escribe el <b>N.° de autorización</b> si el convenio lo pide. Si algo no lo cubre el seguro, elige <b>Particular</b>.',
+            'El paciente solo queda debiendo su <b>copago</b>. Lo que cubre el convenio pasa a una cuenta por cobrar al convenio.',
+            'En la tabla de tratamientos, el escudo <i class="fas fa-shield-heart"></i> muestra quién paga, cuánto cubre, cuánto debe el convenio y el estado del cobro. Haz clic en el escudo para cambiar un tratamiento a particular o ponerle el convenio (por ejemplo, tratamientos creados antes).',
+            'Para cobrarle al convenio: Convenios → <b>Planilla y cobro</b>, elige convenio y período, revisa y <b>Exportar a Excel</b>. Marca las atenciones y usa <b>Marcar como enviada al convenio</b>.',
+            'Cuando el convenio paga, márcalas y usa <b>Registrar pago del convenio</b> con el valor real que pagó por cada una, la forma de pago y la referencia de la transferencia.',
+            'Si el convenio no paga una atención (rechazo u objeción), el Administrador usa <b>Rechazo / glosa</b> con el motivo: ese valor pasa a deberlo el paciente.',
+            'Usa <b>Lo que deben</b> para ver cuánto te debe cada convenio, cuánto falta enviar y desde qué fecha.'
+        ],
+        actions: [
+            { icon: 'plus', label: 'Nuevo convenio', desc: 'Registra aseguradoras, empresas, IESS, ISSFA, ISSPOL o la Red Pública, con su cobertura.' },
+            { icon: 'shield-heart', label: 'Escudo del tratamiento', desc: 'Quién paga ese tratamiento, N.° de autorización y cuánto cubre el convenio. Muestra además el historial del cobro.' },
+            { icon: 'file-invoice-dollar', label: 'Planilla y cobro', desc: 'Atenciones marcadas con el convenio: valor, lo que cubre, copago, lo que debe y estado. Exporta a Excel.' },
+            { icon: 'paper-plane', label: 'Marcar como enviada', desc: 'Deja constancia de que la planilla se entregó al convenio (con N.° de oficio opcional).' },
+            { icon: 'hand-holding-dollar', label: 'Registrar pago del convenio', desc: 'Entra como un cobro más: aparece en Pagos y en tu caja abierta (como transferencia o efectivo).' },
+            { icon: 'ban', label: 'Rechazo / glosa', desc: 'Solo Administrador. Lo que no paga el convenio pasa al saldo del paciente.' },
+            { icon: 'scale-balanced', label: 'Lo que deben', desc: 'Cuentas por cobrar a cada convenio.' }
+        ],
+        sections: [
+            { t: 'Por enviar', d: 'Atención con convenio aún no incluida en una planilla entregada' },
+            { t: 'Enviado al convenio', d: 'Ya se entregó; desde aquí no se puede cambiar el convenio ni el monto' },
+            { t: 'Pago parcial', d: 'El convenio pagó una parte; el resto sigue pendiente' },
+            { t: 'Pagado por el convenio', d: 'El convenio pagó todo lo que le correspondía' },
+            { t: 'Rechazado', d: 'El convenio no pagó; el valor pasó al paciente' }
+        ],
+        note: 'Las cuentas siempre cuadran: valor del tratamiento = lo que pagó el paciente + lo que pagó el convenio + lo que aún debe el paciente + lo que aún debe el convenio. Un tratamiento figura como <b>PAGADO</b> solo cuando ninguno de los dos debe nada. Si el paciente ya no debe pero el convenio sí, se ve "Por cobrar al convenio".',
+        warnings: [
+            'El sistema no deja asignar un convenio a un tratamiento si el paciente no tiene ese convenio <b>vigente</b>, ni guardarlo sin N.° de autorización si el convenio lo exige.',
+            'No se puede cargar al convenio lo que el paciente ya pagó: el valor del convenio sale del saldo pendiente del paciente.',
+            'Una vez <b>enviada</b> la planilla, ese tratamiento ya no cambia de convenio ni de monto (solo se puede corregir el N.° de autorización). Revisa bien antes de marcar como enviada.',
+            'El pago del convenio entra a la <b>caja abierta de quien lo registra</b>: regístralo en el turno de quien concilia las transferencias, para que el cierre de caja cuadre.',
+            'Los tratamientos creados antes de la versión 4.7.1 quedaron como <b>Particular</b>. Si alguno era del seguro, márcalo con el escudo.'
         ]
     },
     {
@@ -252,7 +338,8 @@ const MODULOS_MANUAL = [
         ],
         warnings: [
             'No hagas doble clic en "Confirmar Pago" — el sistema detecta y rechaza un pago idéntico repetido en pocos segundos (posible doble clic), pero evita el hábito igual.',
-            'Cada pago se vincula al turno de Caja abierto de quien lo cobra — cada cajero tiene su propio turno, y su cierre solo actualiza (nunca duplica) ese mismo turno cuando se cierra o se reabre.'
+            'Cada pago se vincula al turno de Caja abierto de quien lo cobra — cada cajero tiene su propio turno, y su cierre solo actualiza (nunca duplica) ese mismo turno cuando se cierra o se reabre.',
+            'Si el tratamiento lo cubre un convenio, aquí el paciente solo paga su <b>copago</b>. Lo que paga el convenio se registra desde Convenios → Planilla y cobro, y también aparece en el historial como "Pago de [convenio]".'
         ]
     },
     {
@@ -276,7 +363,8 @@ const MODULOS_MANUAL = [
             'El sistema <b>no bloquea</b> el cierre si el conteo físico no cuadra con el sistema — se puede cerrar igual con faltante o sobrante; solo queda marcado en rojo/verde para que el Administrador lo revise después. Cuadrar bien es responsabilidad de quien cierra, no una validación automática.',
             'Cada cajero tiene su propio turno de caja — si dos personas cierran caja el mismo día, cada quien cierra el suyo sin mezclarse con el del otro.',
             'Si un cierre se hizo mal (te faltó terminar de contar, te equivocaste en un monto, etc.), la <b>reapertura de caja</b> requiere la contraseña de un Administrador activo de esa sede. Al reabrir, el turno vuelve al estado <b>ABIERTA</b> — puedes volver a contar y cerrar de nuevo cuantas veces haga falta, sin perder el vínculo de los pagos de ese turno.',
-            'Al reabrir, los montos que ya habías contado (efectivo real, transferencia real, tarjeta real) se limpian para que hagas el recuento de cero — no queda un borrador de lo anterior.'
+            'Al reabrir, los montos que ya habías contado (efectivo real, transferencia real, tarjeta real) se limpian para que hagas el recuento de cero — no queda un borrador de lo anterior.',
+            'Los pagos de convenios y seguros registrados en tu turno también suman aquí (normalmente como transferencia): ten a mano el comprobante de la transferencia del convenio al cuadrar.'
         ]
     },
     {
@@ -508,14 +596,14 @@ const MODULOS_MANUAL = [
             'Completa los datos tributarios SRI (RUC, régimen RIMPE, contribuyente especial) antes de que esa sede empiece a facturar.',
             'Marca las <b>Especialidades</b> que ofrece esa sede (Ortodoncia, Endodoncia, etc.); si falta una en la lista, escríbela en el campo de abajo y presiona <b>Agregar</b> — queda disponible para todas las sedes desde ese momento.',
             'Completa los <b>Horarios de Atención</b> día por día (hora de apertura/cierre, o marca "Cerrado" en los días que no atiende) — esto es lo que el bot de WhatsApp le contesta a los pacientes que preguntan por horarios.',
-            'Usa <b>Capturar Ubicación</b> para que el bot de WhatsApp pueda compartir la dirección exacta a los pacientes que la pidan.',
+            'En <b>Ubicación</b> pega el enlace de Google Maps de la sede (en Google Maps: buscar la sede → Compartir → Copiar enlace) o las coordenadas "lat, lng", y revisa con el botón de ver en el mapa. Así el bot de WhatsApp comparte la dirección exacta a los pacientes que la pidan.',
             'Si el bot se desconecta (punto gris/rojo), usa <b>Reiniciar Bot</b> — evita tener que pedir soporte remoto para algo tan rutinario.'
         ],
         actions: [
             { icon: 'plus', label: 'Nueva Sucursal', desc: 'Registra una sede nueva con sus datos tributarios.' },
             { icon: 'plus', label: 'Agregar (Especialidad)', desc: 'Suma una especialidad nueva al catálogo compartido entre todas las sedes y la marca en la que estás editando.' },
             { icon: 'rotate-right', label: 'Reiniciar Bot', desc: 'Reinicia el bot de WhatsApp de esa sede sin necesidad de soporte remoto.' },
-            { icon: 'crosshairs', label: 'Capturar Ubicación', desc: 'Guarda las coordenadas GPS que el bot comparte a los pacientes.' }
+            { icon: 'crosshairs', label: 'Ubicación', desc: 'Acepta enlace de Google Maps o coordenadas; la mira usa la ubicación del equipo, que en computadoras suele ser aproximada (el sistema avisa si es poco precisa).' }
         ],
         sections: [
             { t: 'Datos Tributarios SRI', d: 'RUC, régimen RIMPE, contribuyente especial, obligado a llevar contabilidad' },
@@ -536,7 +624,7 @@ const MODULOS_MANUAL = [
 
 const GRUPOS_MANUAL = [
     { label: 'Inicio', ids: ['login', 'dashboard'] },
-    { label: 'Operaciones Clínicas', ids: ['pacientes', 'citas', 'historia_clinica', 'odontograma', 'tratamientos', 'pagos'] },
+    { label: 'Operaciones Clínicas', ids: ['pacientes', 'citas', 'historia_clinica', 'odontograma', 'tratamientos', 'documentos', 'convenios', 'pagos'] },
     { label: 'Gestión Financiera', ids: ['caja', 'facturacion', 'inventario', 'gastos', 'kpi', 'comisiones', 'nomina', 'crm'] },
     { label: 'Configuración', ids: ['usuarios', 'sucursales'] }
 ];
