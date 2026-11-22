@@ -82,11 +82,43 @@ window.certificadosModule = (function () {
                 headers: { 'Authorization': `Bearer ${window.api.getToken()}` }
             });
             if (!resp.ok) throw new Error('No se encontró el PDF del certificado.');
-            const url = URL.createObjectURL(await resp.blob());
+            const bytes = await resp.arrayBuffer();
+            const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+            // Vista previa con pdf.js (igual que facturación): el visor PDF de Electron
+            // dentro de un iframe se queda en negro en algunos equipos.
+            const base = window.api.baseURL.replace(/\/api\/?$/, '');
+            const cargarPDFJS = () => new Promise((resolve, reject) => {
+                if (window.pdfjsLib) return resolve(window.pdfjsLib);
+                const s = document.createElement('script');
+                s.src = `${base}/assets/js/pdf.min.js`;
+                s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${base}/assets/js/pdf.worker.min.js`; resolve(window.pdfjsLib); };
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
             await Swal.fire({
                 title: `Certificado ${esc(numero || '')}`,
                 width: '900px',
-                html: `<iframe src="${url}" style="width:100%;height:72vh;border:1px solid #e2e8f0;border-radius:8px;"></iframe>`,
+                html: `<div id="cert-pdf-vista" style="height:72vh;overflow:auto;background:#525659;border-radius:8px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px;"><div style="color:#e2e8f0;margin-top:40px;">Cargando vista previa...</div></div>`,
+                didOpen: async () => {
+                    const cont = document.getElementById('cert-pdf-vista');
+                    try {
+                        const pdfjsLib = await cargarPDFJS();
+                        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(bytes.slice(0)) }).promise;
+                        cont.innerHTML = '';
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const v1 = page.getViewport({ scale: 1 });
+                            const vp = page.getViewport({ scale: Math.min((cont.clientWidth - 40) / v1.width, 2) });
+                            const canvas = document.createElement('canvas');
+                            canvas.width = vp.width; canvas.height = vp.height;
+                            canvas.style.cssText = 'box-shadow:0 4px 20px rgba(0,0,0,0.5);max-width:100%;background:#fff;';
+                            cont.appendChild(canvas);
+                            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                        }
+                    } catch (err) {
+                        cont.innerHTML = `<div style="color:#fca5a5;margin-top:40px;text-align:center;">No se pudo mostrar la vista previa.<br><small>Use "Descargar PDF".</small></div>`;
+                    }
+                },
                 showCancelButton: true,
                 confirmButtonText: '<i class="fas fa-download"></i> Descargar PDF',
                 cancelButtonText: 'Cerrar',

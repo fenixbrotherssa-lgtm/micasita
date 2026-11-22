@@ -28,7 +28,14 @@ window.dashboardModule = {
     avisoActualizacionServidor: async function() {
         try {
             const res = await window.api.get('/sistema/estado');
-            const e = res?.data;
+            let e = res?.data;
+            // Si todavía no hay nada descargado, el servidor busca la actualización ya
+            // (una vez por sesión) en vez de esperar su ciclo de 6 horas.
+            if (e && !e.preparada && !sessionStorage.getItem('ametra_busco_actualizacion')) {
+                sessionStorage.setItem('ametra_busco_actualizacion', '1');
+                const b = await window.api.post('/sistema/buscar-actualizacion', {}).catch(() => null);
+                if (b && b.data) e = b.data;
+            }
             const main = document.querySelector('.main-viewport');
             if (!e || !main || document.getElementById('aviso-actualizacion')) return;
             let html = '';
