@@ -94,7 +94,7 @@ const MODULOS_MANUAL = [
         ],
         note: 'Al hacer clic en un paciente de la lista, se abre directo su Historia Clínica — desde ahí se llega al Odontograma, Tratamientos, Presupuestos y Pagos.',
         warnings: [
-            'La <b>cédula (DNI) es única por clínica</b> — la base de datos bloquea de raíz un segundo registro con la misma cédula en la misma sede. Si intentas crear un duplicado, el sistema rechaza el guardado (aunque el mensaje que muestra es el error técnico de la base de datos, no un aviso amigable tipo "este paciente ya existe" — igual, no te va a dejar duplicarlo).',
+            'La <b>cédula (DNI) es única por clínica</b> — la base de datos bloquea de raíz un segundo registro con la misma cédula en la misma sede. Si intentas crear un duplicado, el sistema te avisa "Ya existe un paciente con esa cédula en esta sede": búscalo en la lista en vez de crearlo de nuevo.',
             'Esa regla es <b>por sede</b>: la misma persona (misma cédula) sí puede existir como paciente en dos clínicas distintas del sistema, cada una con su propio expediente independiente — es el comportamiento esperado en una red multi-sede, no un error.',
             'No podrás borrar un paciente que tenga saldo pendiente en algún tratamiento — primero hay que cobrar o ajustar la deuda.',
             'Borrar un paciente no destruye nada: solo lo marca inactivo y desaparece de las listas. Su historial completo (citas, tratamientos, pagos, imágenes) queda intacto en la base de datos.'
@@ -124,7 +124,7 @@ const MODULOS_MANUAL = [
         ],
         warnings: [
             'El sistema bloquea el doble-agendamiento del <b>mismo doctor</b> en un horario ya ocupado — pero <b>no</b> avisa si dos doctores distintos quedan agendados en el mismo sillón/consultorio. Coordina eso a ojo si comparten espacio físico.',
-            'El recordatorio de WhatsApp puede fallar en silencio (bot desconectado, número inválido, paciente sin teléfono registrado) — la cita se guarda igual, sin ningún aviso de que el mensaje no llegó. No asumas que el paciente fue notificado solo porque la cita se creó bien.',
+            'Si el paciente no tiene un teléfono válido o el WhatsApp de la clínica no está vinculado, al guardar o reagendar aparece el aviso <b>"sin aviso al paciente"</b>: la cita queda guardada, pero llámalo tú o vincula el WhatsApp en Sucursales.',
             'Mover una tarjeta en el Kanban no tiene restricciones de orden — se puede saltar de "Por Confirmar" directo a "Atendida" sin pasar por los estados intermedios. Muévela con cuidado.'
         ]
     },
@@ -294,7 +294,8 @@ const MODULOS_MANUAL = [
             'Para cobrarle al convenio: Convenios → <b>Planilla y cobro</b>, elige convenio y período, revisa y <b>Exportar a Excel</b>. Marca las atenciones y usa <b>Marcar como enviada al convenio</b>.',
             'Cuando el convenio paga, márcalas y usa <b>Registrar pago del convenio</b> con el valor real que pagó por cada una, la forma de pago y la referencia de la transferencia.',
             'Si el convenio no paga una atención (rechazo u objeción), el Administrador usa <b>Rechazo / glosa</b> con el motivo: ese valor pasa a deberlo el paciente.',
-            'Usa <b>Lo que deben</b> para ver cuánto te debe cada convenio, cuánto falta enviar y desde qué fecha.'
+            'Usa <b>Lo que deben</b> para ver cuánto te debe cada convenio, cuánto falta enviar y desde qué fecha. Ese total también aparece en <b>Reportes KPI</b>, debajo de la Cartera Pendiente.',
+            'Para facturarle al convenio, en Facturación elige el pago del convenio: la factura ya viene con el nombre, RUC y email del convenio.'
         ],
         actions: [
             { icon: 'plus', label: 'Nuevo convenio', desc: 'Registra aseguradoras, empresas, IESS, ISSFA, ISSPOL o la Red Pública, con su cobertura.' },
@@ -312,7 +313,7 @@ const MODULOS_MANUAL = [
             { t: 'Pagado por el convenio', d: 'El convenio pagó todo lo que le correspondía' },
             { t: 'Rechazado', d: 'El convenio no pagó; el valor pasó al paciente' }
         ],
-        note: 'Las cuentas siempre cuadran: valor del tratamiento = lo que pagó el paciente + lo que pagó el convenio + lo que aún debe el paciente + lo que aún debe el convenio. Un tratamiento figura como <b>PAGADO</b> solo cuando ninguno de los dos debe nada. Si el paciente ya no debe pero el convenio sí, se ve "Por cobrar al convenio".',
+        note: 'Si el convenio tiene <b>% de descuento pactado</b>, al asignarlo se rebaja del valor del tratamiento (se ve como "desc." en el escudo y en la planilla) y se devuelve si se quita el convenio. Las cuentas siempre cuadran: valor del tratamiento = lo que pagó el paciente + lo que pagó el convenio + lo que aún debe el paciente + lo que aún debe el convenio. Un tratamiento figura como <b>PAGADO</b> solo cuando ninguno de los dos debe nada. Si el paciente ya no debe pero el convenio sí, se ve "Por cobrar al convenio".',
         warnings: [
             'El sistema no deja asignar un convenio a un tratamiento si el paciente no tiene ese convenio <b>vigente</b>, ni guardarlo sin N.° de autorización si el convenio lo exige.',
             'No se puede cargar al convenio lo que el paciente ya pagó: el valor del convenio sale del saldo pendiente del paciente.',
@@ -394,7 +395,8 @@ const MODULOS_MANUAL = [
         warnings: [
             'Revisa los datos del paciente y los montos <b>antes</b> de autorizar ante el SRI — una vez autorizado, el comprobante no se puede editar ni eliminar desde el sistema.',
             'Subir un certificado .p12 nuevo desactiva automáticamente el anterior — no se pueden tener dos firmas activas a la vez.',
-            'El sistema no revisa si el certificado está vencido antes de usarlo — si expiró, el SRI lo va a rechazar recién en ese momento. Revisa la fecha de vencimiento de tu firma cada cierto tiempo.',
+            'Al subir la firma, el sistema comprueba la contraseña y lee la <b>fecha de vencimiento real</b> del certificado (no deja subir una firma vencida). En <b>Firma Activa</b> se ve el titular y la fecha: en ámbar cuando faltan 30 días o menos, en rojo si ya venció. Con la firma vencida no deja facturar y te dice que subas la renovada.',
+            'Los pagos que hace un <b>convenio o seguro</b> se proponen para facturar a nombre del convenio (su RUC y email); revisa los datos antes de emitir.',
             'Si los datos tributarios de la sede (RUC, régimen RIMPE, contribuyente especial) están incompletos en Sucursales, la factura se genera igual pero con esos campos en blanco — puede ser inválida ante el SRI. Complétalos antes de facturar desde una sede nueva.',
             'Cada factura electrónica lleva en <b>Información Adicional</b> el RUC y nombre del proveedor del sistema de facturación (CasRodSoft Development, RUC 1760666147001), como corresponde ante el SRI — no es un error ni hay que borrarlo.'
         ]

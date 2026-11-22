@@ -97,8 +97,8 @@ window.facturacionModule = {
                 await Swal.fire({
                     icon: 'success',
                     title: '¡Éxito!',
-                    text: 'Firma vinculada correctamente.',
-                    timer: 2500,
+                    text: res.mensaje || 'Firma vinculada correctamente.',
+                    timer: 4000,
                     timerProgressBar: true,
                     showConfirmButton: false,
                     allowOutsideClick: false
@@ -665,12 +665,19 @@ window.facturacionModule = {
             const res = await window.api.get(`/facturacion/certificados/${idClinica}`);
             if (res.data?.length > 0) {
                 const f = res.data[0];
+                // v4.7.3: vencimiento REAL leído del certificado (verde / ámbar < 30 días / rojo vencida)
+                const vence = f.Fecha_Vencimiento ? new Date(f.Fecha_Vencimiento).toLocaleDateString('es-EC') : '';
+                const dias = f.Dias_Restantes;
+                const tono = f.Vencida ? ['#fef2f2', '#ef4444', '#991b1b', 'FIRMA VENCIDA — no se puede facturar'] :
+                    (dias !== null && dias <= 30) ? ['#fffbeb', '#f59e0b', '#92400e', `VENCE EN ${dias} DÍA(S) — renuévela`] :
+                    ['#ecfdf5', '#10b981', '#065f46', 'CERTIFICADO ACTIVO'];
                 container.innerHTML = `
-                    <div style="background:#ecfdf5; border:1px solid #10b981; padding:10px; border-radius:8px; display:flex; align-items:center; gap:10px">
-                        <i class="fas fa-certificate" style="color:#10b981; font-size:1.5rem"></i>
+                    <div style="background:${tono[0]}; border:1px solid ${tono[1]}; padding:10px; border-radius:8px; display:flex; align-items:center; gap:10px">
+                        <i class="fas fa-certificate" style="color:${tono[1]}; font-size:1.5rem"></i>
                         <div>
-                            <div style="font-weight:bold; color:#065f46; font-size:0.8rem">CERTIFICADO ACTIVO</div>
-                            <div style="font-size:0.7rem">${f.Nombre_Certificado}</div>
+                            <div style="font-weight:bold; color:${tono[2]}; font-size:0.8rem">${tono[3]}</div>
+                            <div style="font-size:0.7rem">${f.Titular || f.Nombre_Certificado}</div>
+                            ${vence ? `<div style="font-size:0.7rem; color:${tono[2]};">Vence: ${vence}</div>` : ''}
                         </div>
                     </div>`;
             } else {

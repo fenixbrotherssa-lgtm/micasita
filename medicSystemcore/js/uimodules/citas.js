@@ -512,7 +512,12 @@ window.citasModule = {
         try {
             const res = await window.api.post(url, payload);
             if (res.status === "Success") {
-                await Swal.fire({ icon: 'success', title: reagendando ? '¡Reagendada!' : '¡Agendada!', timer: 1500, showConfirmButton: false });
+                if (res.aviso_whatsapp) {
+                    // La cita quedó guardada, pero el paciente NO recibió la confirmación
+                    await Swal.fire({ icon: 'warning', title: reagendando ? 'Reagendada, sin aviso al paciente' : 'Agendada, sin aviso al paciente', text: res.aviso_whatsapp, confirmButtonText: 'Entendido' });
+                } else {
+                    await Swal.fire({ icon: 'success', title: reagendando ? '¡Reagendada!' : '¡Agendada!', timer: 1500, showConfirmButton: false });
+                }
                 this.cerrarModal();
                 this.cargarDatos();
             } else if (res.status === "Choque") {

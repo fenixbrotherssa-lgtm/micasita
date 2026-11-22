@@ -98,7 +98,7 @@ window.conveniosModule = (function () {
         const debe = Number(t.Saldo_Convenio || 0);
         return `<div style="font-size:11px;margin-top:3px;color:${COLOR_COBRO[est] || '#0f766e'};font-weight:700;">
             <i class="fas fa-shield-heart"></i> ${esc(t.Convenio_Nombre || 'Convenio')}${t.Numero_Autorizacion ? ' · Aut. ' + esc(t.Numero_Autorizacion) : ''}
-            <span style="font-weight:600;color:#475569;">· cubre ${dinero(t.Monto_Convenio)}${debe > 0.009 ? ' · debe ' + dinero(debe) : ''} · ${esc(ESTADO_COBRO[est] || est)}</span>${btn}</div>`;
+            <span style="font-weight:600;color:#475569;">· cubre ${dinero(t.Monto_Convenio)}${Number(t.Descuento_Convenio || 0) > 0.009 ? ' · desc. ' + dinero(t.Descuento_Convenio) : ''}${debe > 0.009 ? ' · debe ' + dinero(debe) : ''} · ${esc(ESTADO_COBRO[est] || est)}</span>${btn}</div>`;
     }
 
     // ¿El tratamiento está totalmente cobrado? (paciente y seguro)
@@ -174,7 +174,7 @@ window.conveniosModule = (function () {
                 <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;">
                     <div><label style="${lbl}">Paga</label><select id="cb-conv" style="${inp}" ${bloqueado ? 'disabled' : ''}>
                         <option value="">Particular (paga el paciente)</option>
-                        ${opciones.map(c => `<option value="${c.ID_Convenio}" data-pct="${c.Cobertura_Porcentaje == null ? '' : Number(c.Cobertura_Porcentaje)}" ${Number(c.ID_Convenio) === Number(t.ID_Convenio) ? 'selected' : ''}>${esc(c.Nombre)}${c.Cobertura_Porcentaje != null ? ' — cubre ' + Number(c.Cobertura_Porcentaje) + '%' : ''}</option>`).join('')}
+                        ${opciones.map(c => `<option value="${c.ID_Convenio}" data-pct="${c.Cobertura_Porcentaje == null ? '' : Number(c.Cobertura_Porcentaje)}" data-desc="${Number(c.Descuento_Porcentaje || 0)}" ${Number(c.ID_Convenio) === Number(t.ID_Convenio) ? 'selected' : ''}>${esc(c.Nombre)}${c.Cobertura_Porcentaje != null ? ' — cubre ' + Number(c.Cobertura_Porcentaje) + '%' : ''}</option>`).join('')}
                     </select></div>
                     <div><label style="${lbl}">N.° autorización</label><input id="cb-aut" style="${inp}" value="${esc(t.Numero_Autorizacion || '')}"></div>
                     <div><label style="${lbl}">Cubre el convenio $</label><input id="cb-monto" type="number" min="0" step="0.01" style="${inp}" ${bloqueado ? 'disabled' : ''} value="${t.ID_Convenio ? Number(t.Monto_Convenio || 0).toFixed(2) : ''}"></div>
@@ -186,12 +186,16 @@ window.conveniosModule = (function () {
             showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: '#0d9488',
             didOpen: () => {
                 const sel = document.getElementById('cb-conv'), monto = document.getElementById('cb-monto'), ayuda = document.getElementById('cb-ayuda');
+                // Valor "de lista" del tratamiento (sin el descuento del convenio que ya tenga aplicado)
+                const costoLista = Number(t.Costo_Total) + Number(t.Descuento_Convenio || 0);
                 const actualizar = (cambio) => {
                     const op = sel.options[sel.selectedIndex];
                     if (!sel.value) { monto.value = ''; ayuda.textContent = 'Todo el valor lo paga el paciente.'; return; }
-                    if (cambio && op.dataset.pct !== '') monto.value = Math.min(Number(t.Costo_Total) * Number(op.dataset.pct) / 100, Number(t.Saldo_Pendiente) + (Number(sel.value) === Number(t.ID_Convenio) ? Number(t.Saldo_Convenio || 0) : 0)).toFixed(2);
-                    const copago = Math.max(0, Number(t.Costo_Total) - Number(monto.value || 0));
-                    ayuda.textContent = `Copago del paciente: ${dinero(copago)} (valor ${dinero(t.Costo_Total)} − convenio ${dinero(monto.value)}).`;
+                    const desc = Math.round(costoLista * Number(op.dataset.desc || 0)) / 100;
+                    const neto = costoLista - desc;
+                    if (cambio && op.dataset.pct !== '') monto.value = (neto * Number(op.dataset.pct) / 100).toFixed(2);
+                    const copago = Math.max(0, neto - Number(monto.value || 0));
+                    ayuda.textContent = `Copago del paciente: ${dinero(copago)} (valor ${dinero(costoLista)}${desc > 0 ? ' − descuento pactado ' + dinero(desc) : ''} − convenio ${dinero(monto.value)}).`;
                 };
                 sel.addEventListener('change', () => actualizar(true));
                 monto.addEventListener('input', () => actualizar(false));
@@ -364,9 +368,9 @@ window.conveniosModule = (function () {
                 const conv = lista.find(c => String(c.ID_Convenio) === document.getElementById('pl-conv').value) || {};
                 const col = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
                 const n2 = v => Number(v || 0).toFixed(2);
-                const filas = [['Fecha', 'Paciente', 'Cédula', 'N.° afiliado', 'Titular', 'Parentesco', 'N.° autorización', 'Prestación', 'Pieza', 'CIE-10', 'Diagnóstico', 'Médico', 'Registro', 'Precio lista', 'Descuento', 'Valor', 'Cubre convenio', 'Copago paciente', 'Debe el convenio', 'Estado del cobro']]
+                const filas = [['Fecha', 'Paciente', 'Cédula', 'N.° afiliado', 'Titular', 'Parentesco', 'N.° autorización', 'Prestación', 'Pieza', 'CIE-10', 'Diagnóstico', 'Médico', 'Registro', 'Precio lista', 'Descuento', 'Descuento convenio', 'Valor', 'Cubre convenio', 'Copago paciente', 'Debe el convenio', 'Estado del cobro']]
                     .concat(datos.filas.map(f => [fecha(f.Fecha_Inicio), f.Paciente, f.DNI, f.Numero_Afiliado, f.Titular, f.Parentesco, f.Numero_Autorizacion, f.Prestacion, f.Numero_Diente, f.CIE_Cod, f.CIE_Texto, f.Medico, f.Registro_Sanitario,
-                        n2(f.Precio_Lista), n2(f.Descuento), n2(f.Costo_Total), n2(f.Monto_Convenio), n2(f.Copago), n2(f.Saldo_Convenio), ESTADO_COBRO[f.Estado_Cobro_Convenio] || f.Estado_Cobro_Convenio]));
+                        n2(f.Precio_Lista), n2(f.Descuento), n2(f.Descuento_Convenio), n2(f.Costo_Total), n2(f.Monto_Convenio), n2(f.Copago), n2(f.Saldo_Convenio), ESTADO_COBRO[f.Estado_Cobro_Convenio] || f.Estado_Cobro_Convenio]));
                 const csv = '﻿' + filas.map(f => f.map(col).join(';')).join('\r\n');
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

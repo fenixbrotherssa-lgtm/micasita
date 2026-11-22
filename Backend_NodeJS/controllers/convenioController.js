@@ -136,7 +136,7 @@ const planilla = async (req, res) => {
                    PC.Numero_Afiliado, PC.Titular, PC.Parentesco, t.Numero_Autorizacion,
                    ISNULL(t.Nombre_Tratamiento, pr.Nombre_Prestacion) AS Prestacion, t.Numero_Diente, t.CIE_Cod, t.CIE_Texto,
                    ISNULL(t.Precio_Lista, t.Costo_Total) AS Precio_Lista, ISNULL(t.Descuento, 0) AS Descuento, t.Costo_Total,
-                   t.Monto_Convenio, t.Saldo_Convenio, t.Costo_Total - t.Monto_Convenio AS Copago, t.Saldo_Pendiente,
+                   t.Monto_Convenio, t.Saldo_Convenio, t.Costo_Total - t.Monto_Convenio AS Copago, t.Saldo_Pendiente, ISNULL(t.Descuento_Convenio, 0) AS Descuento_Convenio,
                    t.Estado_Cobro_Convenio, t.Fecha_Envio_Convenio, t.Estado_Tratamiento,
                    LTRIM(RTRIM(ISNULL(U.Nombres,'') + ' ' + ISNULL(U.Apellidos,''))) AS Medico, U.Registro_Sanitario
             FROM Tratamientos_Plan t
@@ -173,7 +173,9 @@ const coberturaTratamiento = async (req, res) => {
             idConvenio: b.id_convenio || null, autorizacion: b.numero_autorizacion, monto: b.monto_convenio, idUsuario: req.usuarioAuth?.id_usuario
         });
         await tx.commit();
-        res.json({ status: 'Success', message: b.id_convenio ? `Cubre el convenio: $${r.monto.toFixed(2)}. El resto queda como copago del paciente.` : 'El tratamiento queda como particular.' });
+        res.json({ status: 'Success', message: b.id_convenio
+            ? `Cubre el convenio: $${r.monto.toFixed(2)}.${r.descuento > 0 ? ` Descuento pactado: $${r.descuento.toFixed(2)}.` : ''} El resto queda como copago del paciente.`
+            : 'El tratamiento queda como particular.' });
     } catch (e) {
         try { await tx.rollback(); } catch (_) { }
         res.status(400).json({ status: 'Error', message: e.message });

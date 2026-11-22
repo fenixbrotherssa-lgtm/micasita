@@ -10,6 +10,8 @@
 //  - Lo del seguro es una cuenta por cobrar aparte (Saldo_Convenio) con su
 //    historial en Convenio_Movimientos.
 //  - Estado_Tratamiento = 'PAGADO' solo cuando ambos saldos están en cero.
+//  - v4.7.3: el % de descuento pactado con el convenio rebaja el valor del tratamiento
+//    (Descuento_Convenio) al asignarlo y se devuelve si se quita el convenio.
 // =====================================================================
 const { sql } = require('../config/db');
 
@@ -41,7 +43,7 @@ async function movimiento(tx, d) {
  */
 async function aplicarCobertura(tx, idPlan, { idConvenio, autorizacion, monto, idUsuario } = {}) {
     const t = (await tx.request().input('id', sql.Int, idPlan).query(`
-        SELECT ID_Plan, ID_Paciente, Costo_Total, Saldo_Pendiente, ID_Convenio, Monto_Convenio, Saldo_Convenio,
+        SELECT ID_Plan, ID_Paciente, Costo_Total, Saldo_Pendiente, ID_Convenio, Monto_Convenio, Saldo_Convenio, ISNULL(Descuento_Convenio, 0) AS Descuento_Convenio,
                Estado_Cobro_Convenio, Numero_Autorizacion, Fecha_Inicio
         FROM Tratamientos_Plan WHERE ID_Plan = @id`)).recordset[0];
     if (!t) throw new Error('El tratamiento no existe.');
@@ -67,24 +69,30 @@ async function aplicarCobertura(tx, idPlan, { idConvenio, autorizacion, monto, i
     // 1) Quitar la cobertura anterior: lo que faltaba cobrar al seguro vuelve al paciente
     if (t.ID_Convenio && r2(t.Saldo_Convenio) > 0) {
         await tx.request().input('id', sql.Int, idPlan).query(`
-            UPDATE Tratamientos_Plan SET Saldo_Pendiente = Saldo_Pendiente + Saldo_Convenio, Saldo_Convenio = 0, Monto_Convenio = 0,
+            UPDATE Tratamientos_Plan SET Saldo_Pendiente = Saldo_Pendiente + Saldo_Convenio + ISNULL(Descuento_Convenio, 0),
+                   Costo_Total = Costo_Total + ISNULL(Descuento_Convenio, 0), Descuento_Convenio = 0, Saldo_Convenio = 0, Monto_Convenio = 0,
                    ID_Convenio = NULL, Numero_Autorizacion = NULL, Estado_Cobro_Convenio = NULL, Fecha_Envio_Convenio = NULL
             WHERE ID_Plan = @id;
             UPDATE Tratamientos_Plan SET ${SQL_ESTADO} WHERE ID_Plan = @id;`);
         await movimiento(tx, { idPlan, idConvenio: t.ID_Convenio, tipo: 'QUITADO', monto: t.Saldo_Convenio, idUsuario,
             observacion: 'El valor del seguro pasa al saldo del paciente.' });
-        t.Saldo_Pendiente = r2(t.Saldo_Pendiente) + r2(t.Saldo_Convenio);
+        t.Saldo_Pendiente = r2(t.Saldo_Pendiente) + r2(t.Saldo_Convenio) + r2(t.Descuento_Convenio);
+        t.Costo_Total = r2(t.Costo_Total) + r2(t.Descuento_Convenio);
     } else if (t.ID_Convenio) {
         // Convenio rechazado anteriormente (saldo del seguro ya en 0): solo se limpia la marca
         await tx.request().input('id', sql.Int, idPlan).query(`
             UPDATE Tratamientos_Plan SET ID_Convenio = NULL, Numero_Autorizacion = NULL, Monto_Convenio = 0, Saldo_Convenio = 0,
-                   Estado_Cobro_Convenio = NULL, Fecha_Envio_Convenio = NULL WHERE ID_Plan = @id`);
+                   Saldo_Pendiente = Saldo_Pendiente + ISNULL(Descuento_Convenio, 0), Costo_Total = Costo_Total + ISNULL(Descuento_Convenio, 0), Descuento_Convenio = 0,
+                   Estado_Cobro_Convenio = NULL, Fecha_Envio_Convenio = NULL WHERE ID_Plan = @id;
+            UPDATE Tratamientos_Plan SET ${SQL_ESTADO} WHERE ID_Plan = @id;`);
+        t.Saldo_Pendiente = r2(t.Saldo_Pendiente) + r2(t.Descuento_Convenio);
+        t.Costo_Total = r2(t.Costo_Total) + r2(t.Descuento_Convenio);
     }
     if (!idConvenio) return { monto: 0, convenio: null };
 
     // 2) Asignar el nuevo convenio
     const c = (await tx.request().input('c', sql.Int, idConvenio).input('pac', sql.Int, t.ID_Paciente).query(`
-        SELECT C.Nombre, C.Activo, C.Requiere_Autorizacion, ISNULL(C.Cobertura_Porcentaje, 100) AS Cobertura,
+        SELECT C.Nombre, C.Activo, C.Requiere_Autorizacion, ISNULL(C.Cobertura_Porcentaje, 100) AS Cobertura, ISNULL(C.Descuento_Porcentaje, 0) AS Descuento,
                (SELECT COUNT(*) FROM Paciente_Convenios PC WHERE PC.ID_Paciente = @pac AND PC.ID_Convenio = @c AND PC.Activo = 1
                    AND (PC.Vigente_Hasta IS NULL OR PC.Vigente_Hasta >= CAST(GETDATE() AS DATE))) AS Vigente
         FROM Convenios C WHERE C.ID_Convenio = @c`)).recordset[0];
@@ -92,22 +100,26 @@ async function aplicarCobertura(tx, idPlan, { idConvenio, autorizacion, monto, i
     if (!c.Vigente) throw new Error(`El paciente no tiene el convenio ${c.Nombre} vigente. Asígneselo primero en su historia clínica.`);
     if (c.Requiere_Autorizacion && !autorizacionTxt) throw new Error(`${c.Nombre} requiere el número de autorización.`);
 
-    const disponible = r2(t.Saldo_Pendiente);           // no se puede cargar al seguro lo que el paciente ya pagó
+    // Descuento pactado con el convenio: rebaja el valor (sin tocar lo que el paciente ya pagó)
+    const descuento = Math.min(r2(Number(t.Costo_Total) * Number(c.Descuento) / 100), r2(t.Saldo_Pendiente));
+    const costoNeto = r2(Number(t.Costo_Total) - descuento);
+    const disponible = r2(Number(t.Saldo_Pendiente) - descuento);   // no se puede cargar al seguro lo que el paciente ya pagó
     let valor = (monto === undefined || monto === null || monto === '')
-        ? r2(Number(t.Costo_Total) * Number(c.Cobertura) / 100)
+        ? r2(costoNeto * Number(c.Cobertura) / 100)
         : r2(monto);
     if (!(valor >= 0)) throw new Error('Monto del convenio no válido.');
     valor = Math.min(valor, disponible);
     if (valor <= 0) throw new Error('El tratamiento no tiene saldo para cargar al convenio (el paciente ya lo pagó).');
 
     await tx.request().input('id', sql.Int, idPlan).input('c', sql.Int, idConvenio).input('aut', sql.NVarChar(60), autorizacionTxt)
-        .input('v', sql.Decimal(18, 2), valor).query(`
+        .input('v', sql.Decimal(18, 2), valor).input('d', sql.Decimal(18, 2), descuento).query(`
         UPDATE Tratamientos_Plan SET ID_Convenio = @c, Numero_Autorizacion = @aut, Monto_Convenio = @v, Saldo_Convenio = @v,
-               Saldo_Pendiente = Saldo_Pendiente - @v, Estado_Cobro_Convenio = 'PENDIENTE', Fecha_Envio_Convenio = NULL
+               Descuento_Convenio = @d, Costo_Total = Costo_Total - @d, Saldo_Pendiente = Saldo_Pendiente - @v - @d, Estado_Cobro_Convenio = 'PENDIENTE', Fecha_Envio_Convenio = NULL
         WHERE ID_Plan = @id;
         UPDATE Tratamientos_Plan SET ${SQL_ESTADO} WHERE ID_Plan = @id;`);
-    await movimiento(tx, { idPlan, idConvenio, tipo: 'ASIGNADO', monto: valor, referencia: autorizacionTxt, idUsuario });
-    return { monto: valor, convenio: c.Nombre };
+    await movimiento(tx, { idPlan, idConvenio, tipo: 'ASIGNADO', monto: valor, referencia: autorizacionTxt, idUsuario,
+        observacion: descuento > 0 ? `Descuento pactado con el convenio: $${descuento.toFixed(2)}` : null });
+    return { monto: valor, descuento, convenio: c.Nombre };
 }
 
 module.exports = { aplicarCobertura, movimiento, SQL_ESTADO, r2 };

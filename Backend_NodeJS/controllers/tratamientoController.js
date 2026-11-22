@@ -515,7 +515,7 @@ const getTratamientosPorPaciente = async (req, res) => {
                     t.Saldo_Pendiente,
                     t.Estado_Tratamiento,
                     t.ID_Convenio, cv.Nombre AS Convenio_Nombre, t.Numero_Autorizacion,
-                    ISNULL(t.Monto_Convenio, 0) AS Monto_Convenio, ISNULL(t.Saldo_Convenio, 0) AS Saldo_Convenio, t.Estado_Cobro_Convenio,
+                    ISNULL(t.Monto_Convenio, 0) AS Monto_Convenio, ISNULL(t.Saldo_Convenio, 0) AS Saldo_Convenio, t.Estado_Cobro_Convenio, ISNULL(t.Descuento_Convenio, 0) AS Descuento_Convenio,
                     t.CIE_Cod,
                     t.CIE_Texto,
                     ISNULL(U.Nombres + ' ' + U.Apellidos, 'No asignado') AS Nombre_Medico,

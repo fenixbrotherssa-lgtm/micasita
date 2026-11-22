@@ -1,5 +1,17 @@
 const { getConnection, sql } = require('../config/db');
-const { cifrarClaveFirma, leerClaveFirma } = require('../services/firmaElectronicaService');
+const { cifrarClaveFirma, leerClaveFirma, leerInfoP12 } = require('../services/firmaElectronicaService');
+const fechaEC = d => new Date(d).toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+// v4.7.3 — lee el vencimiento REAL del certificado guardado (antes se suponía "1 año desde la carga")
+function infoFirmaClinica(cert) {
+    try {
+        const info = leerInfoP12(fs.readFileSync(path.resolve(cert.Ruta_Archivo_P12)), leerClaveFirma(cert.Password_P12_Encrypted));
+        const dias = Math.floor((new Date(info.vence) - new Date()) / 864e5);
+        return { titular: info.titular, emisor: info.emisor, vence: info.vence, vencida: info.vencida, dias };
+    } catch (e) {
+        return { error: e.message };
+    }
+}
 const PDFDocument = require('pdfkit');
 const { createCanvas } = require('canvas');
 const JsBarcode = require('jsbarcode');
@@ -66,11 +78,21 @@ const facturacionController = {
                 return res.status(400).json({ status: "Error", mensaje: "Archivo .p12 requerido" });
             }
 
+            // Se valida la firma ANTES de guardarla: contraseña correcta y certificado vigente
+            let infoP12;
+            try {
+                infoP12 = leerInfoP12(fs.readFileSync(p12File.path), password_p12 || '');
+            } catch (e) {
+                return res.status(400).json({ status: "Error", mensaje: e.message });
+            }
+            if (infoP12.vencida) {
+                return res.status(400).json({ status: "Error", mensaje: `La firma electrónica de ${infoP12.titular} venció el ${fechaEC(infoP12.vence)}. Renuévela con su entidad emisora.` });
+            }
+
             const pool = await getConnection();
             const passwordHash = cifrarClaveFirma(password_p12);
 
-            const fechaVencimiento = new Date();
-            fechaVencimiento.setFullYear(fechaVencimiento.getFullYear() + 1);
+            const fechaVencimiento = new Date(infoP12.vence);
 
             // Desactiva los certificados anteriores de esta clínica antes de insertar el
             // nuevo: solo puede haber uno Activo=1 por clínica a la vez (ver getConnection
@@ -94,7 +116,7 @@ const facturacionController = {
                     (@id_clinica, @id_usuario, @nombre, @ruta, @pass, @vencimiento, GETDATE(), 1)
                 `);
 
-            res.json({ status: "Success", mensaje: "Certificado vinculado correctamente" });
+            res.json({ status: "Success", mensaje: `Certificado vinculado correctamente. Titular: ${infoP12.titular}. Vence el ${fechaEC(infoP12.vence)}.` });
         } catch (err) {
             res.status(500).json({ status: "Error", error: err.message });
         }
@@ -106,12 +128,21 @@ const facturacionController = {
             const result = await pool.request()
                 .input('id_clinica', sql.Int, req.params.id_clinica)
                 .query(`
-                    SELECT TOP 1 ID_Certificado, Nombre_Certificado, Fecha_Vencimiento, Activo, Fecha_Carga
+                    SELECT TOP 1 ID_Certificado, Nombre_Certificado, Fecha_Vencimiento, Activo, Fecha_Carga, Ruta_Archivo_P12, Password_P12_Encrypted
                     FROM Facturacion_Certificados 
                     WHERE ID_Clinica = @id_clinica AND Activo = 1
                     ORDER BY Fecha_Carga DESC
                 `);
-            res.json({ status: "Success", data: result.recordset });
+            // Nunca se devuelve la ruta ni la clave: solo el vencimiento real del certificado
+            const data = result.recordset.map(c => {
+                const info = infoFirmaClinica(c);
+                return {
+                    ID_Certificado: c.ID_Certificado, Nombre_Certificado: c.Nombre_Certificado, Activo: c.Activo, Fecha_Carga: c.Fecha_Carga,
+                    Fecha_Vencimiento: info.vence || c.Fecha_Vencimiento, Titular: info.titular || null,
+                    Vencida: info.vencida === true, Dias_Restantes: typeof info.dias === 'number' ? info.dias : null, Error_Lectura: info.error || null
+                };
+            });
+            res.json({ status: "Success", data });
         } catch (err) {
             res.status(500).json({ status: "Error", error: err.message });
         }
@@ -340,7 +371,11 @@ const facturacionController = {
                 query = `
                     SELECT 
                         p.ID_Pago AS ID_Facturacion, p.ID_Pago, p.Fecha_Pago AS Fecha_Emision, 
-                        (pa.Nombres + ' ' + pa.Apellidos) AS Receptor_Nombre_RS, pa.DNI AS Cedula,
+                        -- v4.7.3: si lo pagó un convenio/seguro, la factura se propone a nombre del convenio (su RUC)
+                        CASE WHEN cv.ID_Convenio IS NOT NULL THEN cv.Nombre ELSE (pa.Nombres + ' ' + pa.Apellidos) END AS Receptor_Nombre_RS,
+                        CASE WHEN cv.ID_Convenio IS NOT NULL AND ISNULL(cv.RUC, '') <> '' THEN cv.RUC ELSE pa.DNI END AS Cedula,
+                        CASE WHEN cv.ID_Convenio IS NOT NULL THEN cv.Email ELSE NULL END AS Receptor_Email,
+                        CASE WHEN cv.ID_Convenio IS NOT NULL THEN 1 ELSE 0 END AS Es_Convenio,
                         p.Monto AS Importe_Total, p.Metodo_Pago, p.Concepto,
                         c.Nombre_Clinica, c.RUC, c.Logo_Ruta, 'PAGO_INTERNO' AS Estado_SRI,
                         'REC' AS Establecimiento, '001' AS Punto_Emision,
@@ -350,6 +385,9 @@ const facturacionController = {
                     INNER JOIN Pacientes pa ON p.ID_Paciente = pa.ID_Paciente
                     INNER JOIN Clinicas c ON p.ID_Clinica = c.ID_Clinica
                     LEFT JOIN Facturacion_Documentos fd ON p.ID_Pago = fd.ID_Pago_Origen
+                    OUTER APPLY (SELECT TOP 1 C.ID_Convenio, C.Nombre, C.RUC, C.Email FROM Convenio_Movimientos M
+                                 INNER JOIN Convenios C ON C.ID_Convenio = M.ID_Convenio
+                                 WHERE M.ID_Pago = p.ID_Pago AND M.Tipo = 'PAGO') cv
                     WHERE p.ID_Clinica = @id_clinica
                     ORDER BY p.Fecha_Pago DESC
                 `;
@@ -590,6 +628,12 @@ const facturacionController = {
             
             const p12Path = path.resolve(cert.Ruta_Archivo_P12);
             const p12Pass = leerClaveFirma(cert.Password_P12_Encrypted);
+
+            // Firma vencida: el SRI la rechazaría; se avisa claro antes de intentarlo
+            const infoCert = infoFirmaClinica(cert);
+            if (infoCert.vencida) {
+                return res.status(400).json({ status: "Error", mensaje: `La firma electrónica de la clínica venció el ${fechaEC(infoCert.vence)}. Suba la firma renovada en Facturación → Gestionar Firmas .p12.` });
+            }
 
             if (!javaBin) {
                 throw new Error("Motor Java no encontrado. En Mac ejecute: brew install openjdk@11");

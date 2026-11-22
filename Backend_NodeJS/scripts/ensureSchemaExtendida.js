@@ -552,6 +552,13 @@ async function ensureSchemaExtendida(pool) {
         console.log('✅ [Schema]: Tabla Convenio_Movimientos creada.');
     });
 
+    // v4.7.3 — descuento pactado con el convenio aplicado al tratamiento (se devuelve si se quita el convenio)
+    await paso('v4.7.3 tratamientos: descuento del convenio', async () => {
+        await agregarColumnas('Tratamientos_Plan', [
+            ['Descuento_Convenio', 'DECIMAL(18,2) NOT NULL CONSTRAINT DF_Tratamientos_Plan_Descuento_Convenio DEFAULT 0']
+        ]);
+    });
+
     // Identificador único de ESTA instalación (para el registro de instalaciones en
     // casrodsoft.com). Vive en la base de datos: si alguien copia el sistema completo a
     // otra máquina, el mismo ID aparece con otra huella de equipo y el panel lo alerta.

@@ -61,7 +61,8 @@ const kpiController = {
 
                 // 3. CARTERA PENDIENTE
                 pool.request().input('id_cli', sql.Int, id_clinica).query(`
-                    SELECT ISNULL(SUM(Saldo_Pendiente), 0) as Total_Cartera 
+                    SELECT ISNULL(SUM(Saldo_Pendiente), 0) as Total_Cartera,
+                           ISNULL(SUM(ISNULL(TP.Saldo_Convenio, 0)), 0) as Total_Cartera_Convenios
                     FROM Tratamientos_Plan TP
                     JOIN Pacientes P ON TP.ID_Paciente = P.ID_Paciente
                     WHERE P.ID_Clinica = @id_cli AND TP.Estado_Tratamiento != 'PAGADO'
@@ -221,6 +222,7 @@ const kpiController = {
                     gastos: fin.Total_Gastos,
                     balance: fin.Total_Ingresos - fin.Total_Gastos,
                     cartera_pendiente: carteraPendiente.recordset[0].Total_Cartera,
+                    cartera_convenios: carteraPendiente.recordset[0].Total_Cartera_Convenios,
                     ticket_promedio: tk.Ticket_Promedio,
                     total_transacciones: tk.Total_Transacciones
                 },

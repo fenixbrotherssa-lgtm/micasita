@@ -2,6 +2,22 @@
 const { enviarMensaje } = require('../services/whatsappService');
 const { enviarPushAUsuario } = require('../services/pushService');
 
+// v4.7.3 — Antes el recordatorio fallaba en silencio. Ahora recepción ve al guardar si el
+// paciente no tiene teléfono o si el WhatsApp de la clínica no está vinculado.
+async function avisoWhatsApp(pool, { idPaciente, idCita }) {
+    try {
+        const r = idCita
+            ? await pool.request().input('id', sql.Int, idCita).query('SELECT p.Telefono FROM Citas c INNER JOIN Pacientes p ON p.ID_Paciente = c.ID_Paciente WHERE c.ID_Cita = @id')
+            : await pool.request().input('id', sql.Int, idPaciente).query('SELECT Telefono FROM Pacientes WHERE ID_Paciente = @id');
+        const tel = String((r.recordset[0] && r.recordset[0].Telefono) || '').replace(/\D/g, '');
+        if (tel.length < 7) return 'El paciente no tiene un teléfono válido registrado: no se le envió la confirmación por WhatsApp.';
+        const wa = require('../services/whatsappService');
+        const estado = typeof wa.obtenerEstadoBot === 'function' ? wa.obtenerEstadoBot() : null;
+        if (estado && estado !== 'conectado') return 'El WhatsApp de la clínica no está vinculado: la cita se guardó, pero el paciente no recibió la confirmación. Vincúlelo en Sucursales → Bot de WhatsApp.';
+    } catch (_) { /* el aviso nunca debe impedir guardar la cita */ }
+    return null;
+}
+
 // Función auxiliar para formatear fechas a español (Ecuador)
 // Acepta un Date ya construido o un string 'YYYY-MM-DD'. Si es string, se
 // parsea por componentes (año, mes, día) en vez de new Date(string), que
@@ -188,7 +204,7 @@ const citasController = {
                 } catch (pushErr) { console.error("⚠️ Error Push Nueva Cita:", pushErr); }
             });
 
-            res.json({ status: "Success", id_cita: newId });
+            res.json({ status: "Success", id_cita: newId, aviso_whatsapp: await avisoWhatsApp(pool, { idPaciente: id_paciente }) });
         } catch (err) {
             res.status(500).json({ status: "Error", message: err.message });
         }
@@ -286,7 +302,7 @@ const citasController = {
                 } catch (pushErr) { console.error("⚠️ Error Push Reagendar:", pushErr); }
             });
 
-            res.json({ status: "Success" });
+            res.json({ status: "Success", aviso_whatsapp: await avisoWhatsApp(pool, { idCita: id_cita }) });
         } catch (err) {
             console.error("❌ Error en reagendarCita:", err);
             res.status(500).json({ status: "Error", message: err.message });

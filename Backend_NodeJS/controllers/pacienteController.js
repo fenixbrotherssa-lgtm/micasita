@@ -139,6 +139,10 @@ const crearPaciente = async (req, res) => {
             res.json({ status: "Success", message: "Paciente registrado", id: nuevoID });
         }
     } catch (error) {
+        // 2627/2601 = clave única violada (cédula repetida en la misma sede)
+        if (error && (error.number === 2627 || error.number === 2601)) {
+            return res.status(409).json({ status: "Error", message: "Ya existe un paciente con esa cédula en esta sede. Búsquelo en la lista de pacientes en lugar de crearlo de nuevo." });
+        }
         res.status(500).json({ status: "Error", message: error.message });
     }
 };

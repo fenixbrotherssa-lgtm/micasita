@@ -194,6 +194,13 @@ window.kpiModule = {
         this.animarNumeros('kpi-balance', parseFloat(fin.balance) || 0, true);
         this.animarNumeros('kpi-ticket', parseFloat(fin.ticket_promedio) || 0, true);
         this.animarNumeros('kpi-cartera', parseFloat(fin.cartera_pendiente) || 0, true);
+        // Lo que deben los convenios/seguros va aparte del saldo de los pacientes
+        const elConv = document.getElementById('kpi-cartera-convenios');
+        if (elConv) {
+            const conv = parseFloat(fin.cartera_convenios) || 0;
+            elConv.style.display = conv > 0 ? 'block' : 'none';
+            elConv.innerHTML = `<i class="fas fa-shield-heart"></i> + $${conv.toFixed(2)} por cobrar a convenios`;
+        }
         
         this.animarNumeros('kpi-citas', parseFloat(ope.efectividad_citas) || 0, false, '%');
         this.animarNumeros('kpi-cancelacion', parseFloat(ope.tasa_cancelacion) || 0, false, '%');
@@ -466,6 +473,7 @@ window.kpiModule = {
                     <div class="card card-dark"><span>Balance</span><strong>${f(fin.balance)}</strong></div>
                     <div class="card"><span>Ticket Promedio</span><strong>${f(fin.ticket_promedio)}</strong></div>
                     <div class="card"><span>Cartera Pendiente</span><strong>${f(fin.cartera_pendiente)}</strong></div>
+                    ${parseFloat(fin.cartera_convenios) > 0 ? `<div class="card"><span>Por cobrar a convenios</span><strong>${f(fin.cartera_convenios)}</strong></div>` : ''}
                 </div>
 
                 <div class="resumen-grid">

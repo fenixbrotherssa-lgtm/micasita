@@ -1,6 +1,6 @@
 {
   "name": "backend_nodejs",
-  "version": "4.7.1",
+  "version": "4.7.3",
   "description": "Servidor de Producción - Ametra OS (MedicinaEcuador Pro) v4.6",
   "main": "server.js",
   "type": "commonjs",
