@@ -448,6 +448,20 @@ const asignarTratamientosLote = async (req, res) => {
                 .query("UPDATE Presupuestos SET Estado = 'APROBADO' WHERE ID_Presupuesto = @idp AND Estado = 'PENDIENTE'");
         }
 
+        // v4.7.1 — Convenio / seguro que cubre estos tratamientos (elegido en el modal del plan).
+        // Se aplica en la MISMA transacción: si falta la autorización o el convenio no está
+        // vigente, no se guarda nada y recepción ve el motivo.
+        const cobertura = req.body.cobertura;
+        if (cobertura && cobertura.id_convenio) {
+            const { aplicarCobertura } = require('../services/coberturaConvenio');
+            for (const idPlan of idsInsertados) {
+                await aplicarCobertura(transaction, idPlan, {
+                    idConvenio: cobertura.id_convenio, autorizacion: cobertura.numero_autorizacion,
+                    idUsuario: req.usuarioAuth && req.usuarioAuth.id_usuario
+                });
+            }
+        }
+
         await transaction.commit();
 
         res.json({ 
@@ -500,6 +514,8 @@ const getTratamientosPorPaciente = async (req, res) => {
                     t.Costo_Total,
                     t.Saldo_Pendiente,
                     t.Estado_Tratamiento,
+                    t.ID_Convenio, cv.Nombre AS Convenio_Nombre, t.Numero_Autorizacion,
+                    ISNULL(t.Monto_Convenio, 0) AS Monto_Convenio, ISNULL(t.Saldo_Convenio, 0) AS Saldo_Convenio, t.Estado_Cobro_Convenio,
                     t.CIE_Cod,
                     t.CIE_Texto,
                     ISNULL(U.Nombres + ' ' + U.Apellidos, 'No asignado') AS Nombre_Medico,
@@ -507,6 +523,7 @@ const getTratamientosPorPaciente = async (req, res) => {
                 FROM Tratamientos_Plan t
                 INNER JOIN Prestaciones p ON t.ID_Prestacion = p.ID_Prestacion 
                 LEFT JOIN Usuarios U ON t.ID_Medico = U.ID_Usuario
+                LEFT JOIN Convenios cv ON cv.ID_Convenio = t.ID_Convenio
                 WHERE t.ID_Paciente = @id 
                 ORDER BY t.Fecha_Inicio DESC
             `);

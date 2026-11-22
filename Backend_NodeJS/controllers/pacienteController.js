@@ -167,7 +167,7 @@ const getHistoriaClinicaCompleta = async (req, res) => {
 
         const [anamnesis, tratamientos, signos, examen] = await Promise.all([
             pool.request().input('idP', sql.Int, idP).query(`SELECT * FROM Antecedentes_Medicos WHERE ID_Paciente = @idP`),
-            pool.request().input('idP', sql.Int, idP).query(`SELECT tp.*, ISNULL((SELECT SUM(Monto) FROM Pagos WHERE ID_Plan = tp.ID_Plan), 0) as Total_Pagado FROM Tratamientos_Plan tp WHERE tp.ID_Paciente = @idP`),
+            pool.request().input('idP', sql.Int, idP).query(`SELECT tp.*, cv.Nombre AS Convenio_Nombre, ISNULL((SELECT SUM(Monto) FROM Pagos WHERE ID_Plan = tp.ID_Plan), 0) as Total_Pagado FROM Tratamientos_Plan tp LEFT JOIN Convenios cv ON cv.ID_Convenio = tp.ID_Convenio WHERE tp.ID_Paciente = @idP`),
             pool.request().input('idP', sql.Int, idP).query(`SELECT TOP 1 * FROM MSP_033_Signos_Vitales WHERE ID_Paciente = @idP ORDER BY Fecha_Registro DESC`),
             pool.request().input('idP', sql.Int, idP).query(`SELECT * FROM MSP_033_Examen_Estomatognatico WHERE ID_Paciente = @idP ORDER BY Fecha_Examen DESC`)
         ]);

@@ -202,10 +202,12 @@ if(document.getElementById('paciente_em_parentesco'))
             const saldo = parseFloat(t.Saldo_Pendiente || 0);
             const pagado = parseFloat(t.Total_Pagado || 0);
             const tieneSaldo = saldo > 0.01;
+            // Saldo 0 del paciente pero el convenio aún debe: no es "Pagado"
+            const debeConvenio = parseFloat(t.Saldo_Convenio || 0) > 0.01;
 
             return `
             <tr>
-                <td style="font-weight:600;">${t.Nombre_Tratamiento || 'Prestación'}</td>
+                <td style="font-weight:600;">${t.Nombre_Tratamiento || 'Prestación'}${window.conveniosModule ? window.conveniosModule.badgeCobertura(t) : ''}</td>
                 <td style="text-align:right">$${parseFloat(t.Costo_Total).toFixed(2)}</td>
                 <td style="text-align:right; color:#16a34a;">$${pagado.toFixed(2)}</td>
                 <td style="text-align:right; color:${tieneSaldo ? '#dc2626' : '#16a34a'}; font-weight:700">
@@ -214,7 +216,9 @@ if(document.getElementById('paciente_em_parentesco'))
                 <td style="text-align:center;">
                     ${tieneSaldo 
                         ? `<button onclick="window.cobrarTratamiento(${t.ID_Plan})" style="background:#16a34a; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px;">Cobrar</button>`
-                        : `<span style="background:#dcfce7; color:#166534; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:bold;">Pagado</span>`
+                        : debeConvenio
+                            ? `<span style="background:#e0f2fe; color:#075985; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:bold;" title="El paciente no debe; falta que pague el convenio">Por cobrar al convenio</span>`
+                            : `<span style="background:#dcfce7; color:#166534; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:bold;">Pagado</span>`
                     }
                 </td>
             </tr>`;

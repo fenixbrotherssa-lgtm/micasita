@@ -74,6 +74,7 @@ window.tratamientosModule = {
                         <td style="padding:12px;">
                             <strong style="color:#1e293b;">${t.Nombre_Tratamiento || 'Sin nombre'}</strong><br>
                             <small style="color:#64748b;">Dr. ${t.Nombre_Medico || 'No asignado'}</small>
+                            ${window.conveniosModule ? window.conveniosModule.badgeCobertura(t) : ''}
                         </td>
                         <td style="padding:12px; text-align:center;">
                             <span style="background:#f1f5f9; padding:4px 8px; border-radius:4px; font-weight:600; font-size:0.8rem; color:#475569;">
@@ -504,6 +505,14 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
 
             </div>
 
+            <!-- v4.7.1: QUIÉN PAGA (solo aparece si el paciente tiene convenio vigente) -->
+            <div id="lote-cobertura-box" style="display:none; grid-template-columns: 2fr 1fr; gap:8px; align-items:end; margin-bottom:8px; background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; padding:8px 10px; text-align:left;">
+                <div><label style="display:block; font-size:0.65rem; font-weight:800; color:#0f766e; text-transform:uppercase; margin-bottom:3px;"><i class="fas fa-shield-heart"></i> Paga estos tratamientos</label>
+                    <select id="lote-cobertura" style="width:100%; padding:7px; border:1px solid #99f6e4; border-radius:6px; font-size:0.8rem;"></select></div>
+                <div><label style="display:block; font-size:0.65rem; font-weight:800; color:#0f766e; text-transform:uppercase; margin-bottom:3px;">N.° autorización</label>
+                    <input id="lote-autorizacion" style="width:100%; padding:7px; border:1px solid #99f6e4; border-radius:6px; font-size:0.8rem; box-sizing:border-box;"></div>
+            </div>
+
             <!-- TABLA DE RESULTADOS -->
             <div style="max-height: 180px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: white;">
                 <table style="width:100%; border-collapse: collapse; font-size: 0.8rem;">
@@ -574,8 +583,16 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
             const observaciones = document.getElementById('msp-observaciones')?.value?.trim() || '';
             const motivoConsulta = document.getElementById('msp-motivo')?.value?.trim() || '';
 
+            // Convenio / seguro que paga (null = particular)
+            const cobertura = window.conveniosModule ? window.conveniosModule.leerSelectorCobertura() : null;
+            if (cobertura && cobertura.error) {
+                Swal.showValidationMessage(cobertura.error);
+                return false;
+            }
+
             // Retornamos todo estructurado
             return {
+                cobertura: cobertura,
                 tratamientos: listaLote,
                 firma: base64Firma,
                 especialidad: especialidad,
@@ -590,6 +607,7 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
             };
         },
         didOpen: async () => {
+            if (window.conveniosModule) window.conveniosModule.llenarSelectorCobertura(idPaciente);
             const tooltip = document.getElementById('v-tooltip');
             const pInput = document.getElementById('sw-pieza');
 
@@ -1033,7 +1051,8 @@ window.modalNuevoTratamiento = async function(itemsPreCargados = [], idPresupues
             requiere_representante:    resultadoLote.requiere_representante,
             consentimiento_aceptado:   resultadoLote.consentimiento.aceptado,
             consentimiento_revocatoria: resultadoLote.consentimiento.revocatoria,
-            id_presupuesto_origen:     idPresupuestoOrigen || null
+            id_presupuesto_origen:     idPresupuestoOrigen || null,
+            cobertura:                 resultadoLote.cobertura || null
         };
         
         const resPost = await window.api.post('/tratamientos/asignar-lote', payload);

@@ -509,6 +509,49 @@ async function ensureSchemaExtendida(pool) {
         console.log('✅ [Schema]: Tabla Ordenes_Examenes creada.');
     });
 
+    // =====================================================================
+    // v4.7.1 — convenio / seguro POR TRATAMIENTO y cuentas por cobrar al convenio.
+    // Regla de saldos: Costo_Total = pagos del paciente + pagos del convenio
+    //                  + Saldo_Pendiente (lo que debe el paciente) + Saldo_Convenio (lo que debe el seguro).
+    // Todo ADITIVO: los tratamientos existentes quedan como particulares (convenio NULL, montos 0).
+    // =====================================================================
+    await paso('v4.7.1 tratamientos: convenio y cobro al seguro', async () => {
+        await agregarColumnas('Tratamientos_Plan', [
+            ['ID_Convenio', 'INT NULL'],
+            ['Numero_Autorizacion', 'NVARCHAR(60) NULL'],
+            ['Monto_Convenio', 'DECIMAL(18,2) NOT NULL CONSTRAINT DF_Tratamientos_Plan_Monto_Convenio DEFAULT 0'],
+            ['Saldo_Convenio', 'DECIMAL(18,2) NOT NULL CONSTRAINT DF_Tratamientos_Plan_Saldo_Convenio DEFAULT 0'],
+            ['Estado_Cobro_Convenio', 'VARCHAR(20) NULL'],      // PENDIENTE | ENVIADO | PARCIAL | PAGADO | RECHAZADO
+            ['Fecha_Envio_Convenio', 'DATETIME NULL']
+        ]);
+    });
+
+    await paso('v4.7.1 convenios: porcentaje de cobertura', async () => {
+        await agregarColumnas('Convenios', [
+            ['Cobertura_Porcentaje', 'DECIMAL(5,2) NOT NULL CONSTRAINT DF_Convenios_Cobertura DEFAULT 100']
+        ]);
+    });
+
+    // Historial (auditoría) de todo lo que pasa con la parte del seguro de cada tratamiento
+    await paso('v4.7.1 crear Convenio_Movimientos', async () => {
+        if (await existeTabla(pool, 'Convenio_Movimientos')) return;
+        await pool.request().query(`
+            CREATE TABLE Convenio_Movimientos (
+                ID_Movimiento INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Plan INT NOT NULL,
+                ID_Convenio INT NOT NULL,
+                Tipo VARCHAR(20) NOT NULL,                   -- ASIGNADO | QUITADO | ENVIADO | PAGO | RECHAZO
+                Monto DECIMAL(18,2) NOT NULL DEFAULT 0,
+                ID_Pago INT NULL,
+                Referencia NVARCHAR(100) NULL,
+                Observacion NVARCHAR(500) NULL,
+                ID_Usuario INT NULL,
+                Fecha DATETIME NOT NULL DEFAULT GETDATE()
+            )`);
+        await pool.request().query(`CREATE INDEX IX_Convenio_Movimientos_Plan ON Convenio_Movimientos (ID_Plan)`);
+        console.log('✅ [Schema]: Tabla Convenio_Movimientos creada.');
+    });
+
     // Identificador único de ESTA instalación (para el registro de instalaciones en
     // casrodsoft.com). Vive en la base de datos: si alguien copia el sistema completo a
     // otra máquina, el mismo ID aparece con otra huella de equipo y el panel lo alerta.

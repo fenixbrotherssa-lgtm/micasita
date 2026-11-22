@@ -110,7 +110,7 @@ const registrarPago = async (req, res) => {
                     UPDATE Tratamientos_Plan 
                     SET Saldo_Pendiente = Saldo_Pendiente - @m,
                         Estado_Tratamiento = CASE 
-                            WHEN (Saldo_Pendiente - @m) <= 0.05 THEN 'PAGADO' 
+                            WHEN (Saldo_Pendiente - @m) <= 0.05 AND ISNULL(Saldo_Convenio, 0) <= 0.05 THEN 'PAGADO'
                             ELSE Estado_Tratamiento 
                         END
                     WHERE ID_Plan = @id_p
