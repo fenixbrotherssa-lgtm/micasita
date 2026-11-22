@@ -196,6 +196,7 @@ app.use('/api/certificados', verificarToken, require('./routes/certificadoRoutes
 app.use('/api/documentos', verificarToken, require('./routes/documentoRoutes'));
 app.use('/api/ordenes', verificarToken, require('./routes/ordenRoutes'));
 app.use('/api/convenios', verificarToken, require('./routes/convenioRoutes'));
+app.use('/api/cuotas', verificarToken, require('./routes/cuotasRoutes'));
 app.use('/api/pagos', verificarToken, require('./routes/pagoRoutes'));
 app.use('/api/caja', verificarToken, require('./routes/cajaRoutes'));
 app.use('/api/gastos', verificarToken, require('./routes/gastosRoutes'));
@@ -215,6 +216,25 @@ app.use('/api/push', verificarToken, require('./routes/pushRoutes'));
 app.use('/api/ocr', verificarToken, require('./routes/ocrRoutes'));
 
 // =======================================================================
+
+// --- 💳 v4.8.0 COBROS EN LÍNEA: estado de los links de Payphone (cada minuto) y recordatorio de cuotas (09:00) ---
+const cobrosLinea = require('./services/cobrosLinea');
+setInterval(async () => {
+    try {
+        const pool = await getConnection();
+        if (await cobrosLinea.revisarLinksPendientes(pool) > 0) io.emit('db-update', { modulo: 'tratamientos', id_referencia: null });
+    } catch (_) { /* sin base todavía: se reintenta en el siguiente minuto */ }
+}, 60 * 1000);
+cron.schedule('0 9 * * *', async () => {
+    try {
+        const pool = await getConnection();
+        const wa = require('./services/whatsappService');
+        await cobrosLinea.recordatoriosCuotas(pool, async (num, txt) => {
+            if (typeof wa.obtenerEstadoBot === 'function' && wa.obtenerEstadoBot() !== 'conectado') return { success: false };
+            return wa.enviarMensaje(num, txt);
+        });
+    } catch (e) { console.error('❌ [Cuotas]: recordatorios:', e.message); }
+});
 
 // --- 🕒 CRON DE CIERRE AUTOMÁTICO (23:00 HRS) ---
 cron.schedule('0 23 * * *', async () => {

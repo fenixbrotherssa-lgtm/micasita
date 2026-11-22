@@ -218,24 +218,96 @@ const porCobrar = async (req, res) => {
 const idsValidos = v => (Array.isArray(v) ? v : []).map(x => parseInt(x, 10)).filter(Boolean).slice(0, 500);
 
 // POST /api/convenios/envio { ids_plan, referencia } — se entregó la planilla al convenio
+// v4.7.4 envío: la planilla se manda por correo al convenio (CSV para Excel adjunto + detalle en el
+// cuerpo). Solo se marca como enviada si el correo salió. Con por_correo = false solo se marca
+// (convenios que se entregan en físico o por portal: IESS, ISSFA, ISSPOL...).
+const CAB_PLANILLA = ['Fecha', 'Paciente', 'Cédula', 'N.° afiliado', 'Titular', 'Parentesco', 'N.° autorización', 'Prestación', 'Pieza', 'CIE-10', 'Diagnóstico', 'Médico', 'Registro', 'Valor', 'Cubre convenio', 'Copago paciente', 'Debe el convenio'];
+const escHtml = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fechaCorta = v => { if (!v) return ''; const d = new Date(v); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
+async function enviarPlanillaPorCorreo(pool, ids, { email, referencia, idClinica }) {
+    const r = await pool.request().query(`
+        SELECT t.ID_Plan, t.ID_Convenio, t.Fecha_Inicio, P.Apellidos + ' ' + P.Nombres AS Paciente, P.DNI,
+               PC.Numero_Afiliado, PC.Titular, PC.Parentesco, t.Numero_Autorizacion,
+               ISNULL(t.Nombre_Tratamiento, pr.Nombre_Prestacion) AS Prestacion, t.Numero_Diente, t.CIE_Cod, t.CIE_Texto,
+               t.Costo_Total, t.Monto_Convenio, t.Costo_Total - t.Monto_Convenio AS Copago, t.Saldo_Convenio,
+               LTRIM(RTRIM(ISNULL(U.Nombres,'') + ' ' + ISNULL(U.Apellidos,''))) AS Medico, U.Registro_Sanitario
+        FROM Tratamientos_Plan t
+        INNER JOIN Pacientes P ON P.ID_Paciente = t.ID_Paciente
+        OUTER APPLY (SELECT TOP 1 X.Numero_Afiliado, X.Titular, X.Parentesco FROM Paciente_Convenios X
+                     WHERE X.ID_Paciente = t.ID_Paciente AND X.ID_Convenio = t.ID_Convenio ORDER BY X.Activo DESC, X.Fecha_Registro DESC) PC
+        LEFT JOIN Prestaciones pr ON pr.ID_Prestacion = t.ID_Prestacion
+        LEFT JOIN Usuarios U ON U.ID_Usuario = t.ID_Medico
+        WHERE t.ID_Plan IN (${ids.join(',')}) AND t.Saldo_Convenio > 0 AND t.Estado_Cobro_Convenio IN ('PENDIENTE','ENVIADO','PARCIAL')
+        ORDER BY t.Fecha_Inicio, P.Apellidos`);
+    const filas = r.recordset;
+    if (!filas.length) throw Object.assign(new Error('Las atenciones elegidas ya no tienen saldo por cobrar al convenio.'), { http: 400 });
+    if (new Set(filas.map(f => f.ID_Convenio)).size > 1) throw Object.assign(new Error('Elija atenciones de un solo convenio.'), { http: 400 });
+    const cv = (await pool.request().input('c', sql.Int, filas[0].ID_Convenio).query('SELECT Nombre, Email FROM Convenios WHERE ID_Convenio = @c')).recordset[0] || {};
+    const para = String(email || cv.Email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(para)) throw Object.assign(new Error(`El convenio ${cv.Nombre || ''} no tiene un correo válido registrado. Escriba el correo o regístrelo en Convenios y seguros.`), { http: 400 });
+    if (!process.env.MAIL_USER || !process.env.MAIL_PASS) throw Object.assign(new Error('El correo de envío del sistema no está configurado en el servidor (MAIL_USER / MAIL_PASS).'), { http: 400 });
+    const cli = (await pool.request().input('c', sql.Int, idClinica || 1).query('SELECT Nombre_Clinica, RUC, Telefono, Direccion FROM Clinicas WHERE ID_Clinica = @c')).recordset[0] || {};
+    const n2 = v => Number(v || 0).toFixed(2);
+    const valores = f => [fechaCorta(f.Fecha_Inicio), f.Paciente, f.DNI, f.Numero_Afiliado, f.Titular, f.Parentesco, f.Numero_Autorizacion, f.Prestacion, f.Numero_Diente, f.CIE_Cod, f.CIE_Texto, f.Medico, f.Registro_Sanitario,
+        n2(f.Costo_Total), n2(f.Monto_Convenio), n2(f.Copago), n2(f.Saldo_Convenio)];
+    const col = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const csv = '\uFEFF' + [CAB_PLANILLA].concat(filas.map(valores)).map(x => x.map(col).join(';')).join('\r\n');
+    const total = r2(filas.reduce((s, f) => s + Number(f.Saldo_Convenio || 0), 0));
+    const clinica = cli.Nombre_Clinica || 'Clínica';
+    const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1e293b;">
+        <p>Estimados <b>${escHtml(cv.Nombre)}</b>:</p>
+        <p>Adjuntamos la planilla de atenciones para cobro${referencia ? ` (ref. <b>${escHtml(referencia)}</b>)` : ''}: <b>${filas.length}</b> atención(es) por un total de <b>$${total.toFixed(2)}</b>.</p>
+        <table style="border-collapse:collapse;font-size:12px;"><tr style="background:#f1f5f9;">${['Fecha', 'Paciente', 'Cédula', 'Autorización', 'Prestación', 'Médico', 'Debe el convenio'].map(h => `<th style="padding:5px 8px;border:1px solid #e2e8f0;">${h}</th>`).join('')}</tr>
+        ${filas.map(f => `<tr>${[fechaCorta(f.Fecha_Inicio), f.Paciente, f.DNI, f.Numero_Autorizacion, f.Prestacion, f.Medico].map(v => `<td style="padding:5px 8px;border:1px solid #e2e8f0;">${escHtml(v)}</td>`).join('')}<td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:right;">$${n2(f.Saldo_Convenio)}</td></tr>`).join('')}
+        <tr><td colspan="6" style="padding:5px 8px;border:1px solid #e2e8f0;text-align:right;"><b>Total</b></td><td style="padding:5px 8px;border:1px solid #e2e8f0;text-align:right;"><b>$${total.toFixed(2)}</b></td></tr></table>
+        <p>El detalle completo (afiliado, diagnóstico CIE-10, registro del médico) va en el archivo adjunto, que se abre con Excel.</p>
+        <p>Atentamente,<br><b>${escHtml(clinica)}</b>${cli.RUC ? '<br>RUC ' + escHtml(cli.RUC) : ''}${cli.Telefono ? '<br>Tel. ' + escHtml(cli.Telefono) : ''}${cli.Direccion ? '<br>' + escHtml(cli.Direccion) : ''}</p></div>`;
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS } });
+    const hoy = new Date().toISOString().slice(0, 10);
+    try {
+        await transporter.sendMail({
+            from: `"${clinica.replace(/"/g, '')}" <${process.env.MAIL_USER}>`, to: para,
+            subject: `Planilla de atenciones para cobro - ${clinica}${referencia ? ' - ' + referencia : ''}`,
+            html, attachments: [{ filename: `Planilla_${String(cv.Nombre || 'convenio').replace(/[^\w]+/g, '_')}_${hoy}.csv`, content: Buffer.from(csv, 'utf8'), contentType: 'text/csv; charset=utf-8' }]
+        });
+    } catch (e) {
+        console.error('❌ correo planilla convenio:', e.message);
+        throw Object.assign(new Error('No se pudo enviar el correo al convenio: ' + e.message + '. No se marcó como enviada.'), { http: 502 });
+    }
+    return { para, ids: filas.map(f => f.ID_Plan), total };
+}
+
 const marcarEnviado = async (req, res) => {
-    const ids = idsValidos(req.body?.ids_plan);
+    let ids = idsValidos(req.body?.ids_plan);
     if (!ids.length) return res.status(400).json({ status: 'Error', message: 'No hay atenciones para marcar.' });
     const pool = await getConnection();
+    let correo = null;
+    if (req.body.por_correo) {
+        try {
+            correo = await enviarPlanillaPorCorreo(pool, ids, { email: txt(req.body.email, 150), referencia: txt(req.body.referencia, 100), idClinica: req.usuarioAuth?.id_clinica });
+            ids = correo.ids;
+        } catch (e) {
+            return res.status(e.http || 500).json({ status: 'Error', message: e.http ? e.message : 'No se pudo enviar la planilla.' });
+        }
+    }
     const tx = new sql.Transaction(pool);
     try {
         await tx.begin();
         const r = await tx.request().query(`
             DECLARE @r TABLE (ID_Plan INT, ID_Convenio INT, Saldo_Convenio DECIMAL(18,2));
-            UPDATE Tratamientos_Plan SET Estado_Cobro_Convenio = 'ENVIADO', Fecha_Envio_Convenio = GETDATE()
+            UPDATE Tratamientos_Plan SET Estado_Cobro_Convenio = CASE WHEN Estado_Cobro_Convenio = 'PARCIAL' THEN 'PARCIAL' ELSE 'ENVIADO' END, Fecha_Envio_Convenio = GETDATE()
             OUTPUT INSERTED.ID_Plan, INSERTED.ID_Convenio, INSERTED.Saldo_Convenio INTO @r
-            WHERE ID_Plan IN (${ids.join(',')}) AND Estado_Cobro_Convenio = 'PENDIENTE' AND Saldo_Convenio > 0;
+            WHERE ID_Plan IN (${ids.join(',')}) AND Estado_Cobro_Convenio IN ('PENDIENTE'${correo ? ",'ENVIADO','PARCIAL'" : ''}) AND Saldo_Convenio > 0;
             SELECT * FROM @r;`);
         for (const x of r.recordset) {
-            await movimiento(tx, { idPlan: x.ID_Plan, idConvenio: x.ID_Convenio, tipo: 'ENVIADO', monto: x.Saldo_Convenio, referencia: req.body.referencia, idUsuario: req.usuarioAuth?.id_usuario });
+            await movimiento(tx, { idPlan: x.ID_Plan, idConvenio: x.ID_Convenio, tipo: 'ENVIADO', monto: x.Saldo_Convenio, referencia: req.body.referencia,
+                observacion: correo ? 'Planilla enviada por correo a ' + correo.para : 'Entregada por otro medio (físico / portal)', idUsuario: req.usuarioAuth?.id_usuario });
         }
         await tx.commit();
-        res.json({ status: 'Success', message: `${r.recordset.length} atención(es) marcadas como enviadas al convenio.` });
+        res.json({ status: 'Success', message: correo
+            ? `Planilla enviada por correo a ${correo.para}: ${correo.ids.length} atención(es) por $${correo.total.toFixed(2)}.`
+            : `${r.recordset.length} atención(es) marcadas como entregadas al convenio.` });
     } catch (e) {
         try { await tx.rollback(); } catch (_) { }
         console.error('❌ envío convenio:', e.message);

@@ -291,7 +291,7 @@ const MODULOS_MANUAL = [
             'Al planificar tratamientos aparece arriba <b>Paga estos tratamientos</b> con el convenio ya elegido. Escribe el <b>N.° de autorización</b> si el convenio lo pide. Si algo no lo cubre el seguro, elige <b>Particular</b>.',
             'El paciente solo queda debiendo su <b>copago</b>. Lo que cubre el convenio pasa a una cuenta por cobrar al convenio.',
             'En la tabla de tratamientos, el escudo <i class="fas fa-shield-heart"></i> muestra quién paga, cuánto cubre, cuánto debe el convenio y el estado del cobro. Haz clic en el escudo para cambiar un tratamiento a particular o ponerle el convenio (por ejemplo, tratamientos creados antes).',
-            'Para cobrarle al convenio: Convenios → <b>Planilla y cobro</b>, elige convenio y período, revisa y <b>Exportar a Excel</b>. Marca las atenciones y usa <b>Marcar como enviada al convenio</b>.',
+            'Para cobrarle al convenio: Convenios → <b>Planilla y cobro</b>, elige convenio y período, revisa y <b>Exportar a Excel</b>. Marca las atenciones y usa <b>Enviar al convenio</b>: el sistema le manda la planilla <b>por correo</b> al convenio (detalle en el correo + archivo para Excel) y la marca como enviada solo si el correo salió. Si el convenio la recibe en físico o por su portal (IESS, ISSFA...), elige <b>Ya la entregué</b>, que solo la marca.',
             'Cuando el convenio paga, márcalas y usa <b>Registrar pago del convenio</b> con el valor real que pagó por cada una, la forma de pago y la referencia de la transferencia.',
             'Si el convenio no paga una atención (rechazo u objeción), el Administrador usa <b>Rechazo / glosa</b> con el motivo: ese valor pasa a deberlo el paciente.',
             'Usa <b>Lo que deben</b> para ver cuánto te debe cada convenio, cuánto falta enviar y desde qué fecha. Ese total también aparece en <b>Reportes KPI</b>, debajo de la Cartera Pendiente.',
@@ -301,7 +301,7 @@ const MODULOS_MANUAL = [
             { icon: 'plus', label: 'Nuevo convenio', desc: 'Registra aseguradoras, empresas, IESS, ISSFA, ISSPOL o la Red Pública, con su cobertura.' },
             { icon: 'shield-heart', label: 'Escudo del tratamiento', desc: 'Quién paga ese tratamiento, N.° de autorización y cuánto cubre el convenio. Muestra además el historial del cobro.' },
             { icon: 'file-invoice-dollar', label: 'Planilla y cobro', desc: 'Atenciones marcadas con el convenio: valor, lo que cubre, copago, lo que debe y estado. Exporta a Excel.' },
-            { icon: 'paper-plane', label: 'Marcar como enviada', desc: 'Deja constancia de que la planilla se entregó al convenio (con N.° de oficio opcional).' },
+            { icon: 'paper-plane', label: 'Enviar al convenio', desc: 'Envía la planilla por correo al convenio (correo registrado o el que escribas). "Ya la entregué" solo deja constancia si la llevaste en físico o la subiste a su portal.' },
             { icon: 'hand-holding-dollar', label: 'Registrar pago del convenio', desc: 'Entra como un cobro más: aparece en Pagos y en tu caja abierta (como transferencia o efectivo).' },
             { icon: 'ban', label: 'Rechazo / glosa', desc: 'Solo Administrador. Lo que no paga el convenio pasa al saldo del paciente.' },
             { icon: 'scale-balanced', label: 'Lo que deben', desc: 'Cuentas por cobrar a cada convenio.' }
@@ -318,8 +318,44 @@ const MODULOS_MANUAL = [
             'El sistema no deja asignar un convenio a un tratamiento si el paciente no tiene ese convenio <b>vigente</b>, ni guardarlo sin N.° de autorización si el convenio lo exige.',
             'No se puede cargar al convenio lo que el paciente ya pagó: el valor del convenio sale del saldo pendiente del paciente.',
             'Una vez <b>enviada</b> la planilla, ese tratamiento ya no cambia de convenio ni de monto (solo se puede corregir el N.° de autorización). Revisa bien antes de marcar como enviada.',
+            'Para enviar por correo, registra el <b>email</b> del convenio en Convenios y seguros (o escríbelo al enviar). Si el correo falla, no se marca como enviada y el sistema te dice por qué.',
             'El pago del convenio entra a la <b>caja abierta de quien lo registra</b>: regístralo en el turno de quien concilia las transferencias, para que el cierre de caja cuadre.',
             'Los tratamientos creados antes de la versión 4.7.1 quedaron como <b>Particular</b>. Si alguno era del seguro, márcalo con el escudo.'
+        ]
+    },
+    {
+        id: 'cuotas', file: 'historiaclinica.html', icon: 'calendar-check', color: '#7c3aed', role: 'all',
+        title: 'Cuotas y Link de Pago',
+        purpose: 'Divide el saldo de un tratamiento en <b>cuotas</b> con fecha (ortodoncia, rehabilitación, implantes) y cobra a distancia con un <b>link de pago con tarjeta</b> (Payphone) que llega al paciente por WhatsApp. Cuando el paciente paga, el sistema registra el pago solo en Pagos y en caja.',
+        steps: [
+            'En la tabla de tratamientos (Historia Clínica o Plan de Tratamiento), debajo del nombre, haz clic en <b>Cuotas / link de pago</b>.',
+            '<b>Dividir en cuotas:</b> elige cuántas cuotas, cada cuánto (mes, 15 días o semana) y la fecha de la primera. El sistema reparte lo que debe hoy el paciente (la última cuota ajusta los centavos).',
+            'Cada abono del paciente, en caja, por link o desde la app, se descuenta <b>solo</b> de las cuotas en orden: no tienes que marcar nada.',
+            'En la tabla verás <b>"3 cuotas · al día"</b> o en rojo <b>"vencido $..."</b> si tiene cuotas atrasadas.',
+            '<b>Link de pago:</b> en la cuota (botón <b>Link</b>) o por todo el saldo. Elige el valor y cuánto tiempo vale el link (24 horas, 3 o 7 días) y deja marcado <b>Enviar por WhatsApp</b>. Si el WhatsApp no está vinculado, copia el mensaje y envíalo tú.',
+            'El paciente paga con su tarjeta en la página segura de Payphone. El sistema revisa cada minuto: cuando el pago se aprueba, lo registra solo como <b>Tarjeta (Payphone)</b> en la caja de quien generó el link, y la cuota pasa a <b>Pagada</b>.',
+            'En la lista de <b>Links de pago enviados</b> puedes copiar el link otra vez o tocar <i class="fas fa-rotate"></i> para ver al instante si ya pagó.',
+            '<b>Copiar calendario</b> copia las cuotas con fechas y montos para pegarlas en WhatsApp.',
+            'Dashboard → <b>Cobros en línea y cuotas</b> muestra a todos los pacientes con cuotas vencidas, cuánto y desde cuándo, con acceso directo para cobrarles.'
+        ],
+        actions: [
+            { icon: 'calendar-plus', label: 'Dividir en cuotas / Rehacer cuotas', desc: 'Crea el calendario sobre lo que debe hoy el paciente. Rehacer reemplaza el calendario anterior.' },
+            { icon: 'link', label: 'Link de pago', desc: 'Link de Payphone por una cuota o por el saldo, enviado por WhatsApp. Se paga una sola vez.' },
+            { icon: 'trash', label: 'Quitar cuotas', desc: 'Borra solo el calendario: el saldo y los pagos no cambian.' },
+            { icon: 'credit-card', label: 'Cobros en línea y cuotas', desc: 'Dashboard → Configuración: cuotas vencidas de la sede y configuración de Payphone y recordatorios (Administrador).' }
+        ],
+        sections: [
+            { t: 'Por pagar', d: 'Cuota que aún no vence' },
+            { t: 'Abonada', d: 'Tiene un pago parcial' },
+            { t: 'Pagada', d: 'Cubierta por los abonos del paciente' },
+            { t: 'Vencida', d: 'Pasó la fecha y falta pagar' }
+        ],
+        note: '<b>Configurar Payphone (Administrador):</b> en Payphone Developer crea una aplicación de tipo <b>API</b>, copia el <b>token</b> y el <b>Store ID</b>, y pégalos en Dashboard → Cobros en línea y cuotas → Configurar. El token se guarda cifrado y nunca se vuelve a mostrar. Ahí mismo puedes activar el <b>recordatorio automático por WhatsApp</b>: a las 9:00 avisa al paciente el día antes de que venza su cuota (y una vez por semana si está atrasada), con el link de pago incluido.',
+        warnings: [
+            'El servidor necesita <b>internet</b> para generar links y comprobar los pagos. Si se corta, los pagos aprobados se registran solos cuando vuelve la conexión.',
+            'El link no deja cobrar más de lo que debe el paciente. Si el paciente ya pagó en caja, no uses el link viejo: genera uno nuevo con el valor correcto.',
+            'Si cambias el convenio de un tratamiento o el convenio rechaza un pago después de crear las cuotas, usa <b>Rehacer cuotas</b> para que el calendario coincida con lo que debe.',
+            'Los recordatorios automáticos necesitan el WhatsApp de la clínica vinculado y el teléfono del paciente registrado.'
         ]
     },
     {
@@ -343,6 +379,7 @@ const MODULOS_MANUAL = [
         warnings: [
             'No hagas doble clic en "Confirmar Pago" — el sistema detecta y rechaza un pago idéntico repetido en pocos segundos (posible doble clic), pero evita el hábito igual.',
             'Cada pago se vincula al turno de Caja abierto de quien lo cobra — cada cajero tiene su propio turno, y su cierre solo actualiza (nunca duplica) ese mismo turno cuando se cierra o se reabre.',
+            'Los pagos con <b>link de pago</b> (Payphone) no se registran aquí: entran solos cuando el paciente paga, como "Tarjeta (Payphone)". Ver <b>Cuotas y link de pago</b>.',
             'Si el tratamiento lo cubre un convenio, aquí el paciente solo paga su <b>copago</b>. Lo que paga el convenio se registra desde Convenios → Planilla y cobro, y también aparece en el historial como "Pago de [convenio]".'
         ]
     },
@@ -629,7 +666,7 @@ const MODULOS_MANUAL = [
 
 const GRUPOS_MANUAL = [
     { label: 'Inicio', ids: ['login', 'dashboard'] },
-    { label: 'Operaciones Clínicas', ids: ['pacientes', 'citas', 'historia_clinica', 'odontograma', 'tratamientos', 'documentos', 'convenios', 'pagos'] },
+    { label: 'Operaciones Clínicas', ids: ['pacientes', 'citas', 'historia_clinica', 'odontograma', 'tratamientos', 'documentos', 'convenios', 'cuotas', 'pagos'] },
     { label: 'Gestión Financiera', ids: ['caja', 'facturacion', 'inventario', 'gastos', 'kpi', 'comisiones', 'nomina', 'crm'] },
     { label: 'Configuración', ids: ['usuarios', 'sucursales'] }
 ];

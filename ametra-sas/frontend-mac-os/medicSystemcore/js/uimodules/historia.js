@@ -207,7 +207,7 @@ if(document.getElementById('paciente_em_parentesco'))
 
             return `
             <tr>
-                <td style="font-weight:600;">${t.Nombre_Tratamiento || 'Prestación'}${window.conveniosModule ? window.conveniosModule.badgeCobertura(t) : ''}</td>
+                <td style="font-weight:600;">${t.Nombre_Tratamiento || 'Prestación'}${window.conveniosModule ? window.conveniosModule.badgeCobertura(t) : ''}${window.cuotasModule ? window.cuotasModule.badge(t) : ''}</td>
                 <td style="text-align:right">$${parseFloat(t.Costo_Total).toFixed(2)}</td>
                 <td style="text-align:right; color:#16a34a;">$${pagado.toFixed(2)}</td>
                 <td style="text-align:right; color:${tieneSaldo ? '#dc2626' : '#16a34a'}; font-weight:700">

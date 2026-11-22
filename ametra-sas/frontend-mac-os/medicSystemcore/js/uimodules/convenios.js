@@ -320,7 +320,7 @@ window.conveniosModule = (function () {
                 <div id="pl-resumen" style="margin:12px 0;font-size:13px;color:#334155;"></div>
                 <div id="pl-tabla" style="max-height:46vh;overflow:auto;border:1px solid #e2e8f0;border-radius:10px;font-size:12px;"></div>
                 <div style="display:flex;gap:8px;justify-content:flex-start;margin-top:10px;flex-wrap:wrap;">
-                    ${btn('pl-enviar', '#1d4ed8', 'fa-paper-plane', 'Marcar como enviada al convenio')}
+                    ${btn('pl-enviar', '#1d4ed8', 'fa-paper-plane', 'Enviar al convenio')}
                     ${btn('pl-pagar', '#15803d', 'fa-hand-holding-dollar', 'Registrar pago del convenio')}
                     ${esAdmin() ? btn('pl-rechazar', '#dc2626', 'fa-ban', 'Rechazo / glosa') : ''}
                     <span style="font-size:11px;color:#64748b;align-self:center;">Marque las atenciones con la casilla.</span>
@@ -383,9 +383,25 @@ window.conveniosModule = (function () {
         const ids = accion.filas.map(f => f.ID_Plan);
         let res = null;
         if (accion.tipo === 'enviar') {
-            const r = await Swal.fire({ title: 'Marcar como enviada', html: `${ids.length} atención(es) por ${dinero(accion.filas.reduce((s, f) => s + Number(f.Saldo_Convenio), 0))}.<br><input id="en-ref" style="${inp};margin-top:10px;" placeholder="N.° de planilla / oficio (opcional)">`,
-                showCancelButton: true, confirmButtonText: 'Marcar enviada', cancelButtonText: 'Cancelar', confirmButtonColor: '#1d4ed8', preConfirm: () => document.getElementById('en-ref').value.trim() });
-            if (r.isConfirmed) res = await window.api.post('/convenios/envio', { ids_plan: ids, referencia: r.value }).catch(e => ({ message: e.message }));
+            // v4.7.4 envío: por correo de verdad, o solo marcar si se entregó en físico / portal
+            const conv = lista.find(c => String(c.ID_Convenio) === accion.filtros.conv) || {};
+            const r = await Swal.fire({ title: '<i class="fas fa-paper-plane" style="color:#1d4ed8;"></i> Enviar al convenio',
+                html: `<div style="text-align:left;font-size:13px;">${ids.length} atención(es) por <b>${dinero(accion.filas.reduce((s, f) => s + Number(f.Saldo_Convenio), 0))}</b> a <b>${esc(conv.Nombre || 'el convenio')}</b>.
+                    <label style="${lbl};margin-top:12px;">Correo del convenio</label><input id="en-mail" type="email" value="${esc(conv.Email || '')}" style="${inp}" placeholder="cobros@convenio.com">
+                    <label style="${lbl};margin-top:10px;">N.° de planilla / oficio (opcional)</label><input id="en-ref" style="${inp}">
+                    <div style="font-size:11.5px;color:#64748b;margin-top:8px;">Se envía la planilla por correo (detalle + archivo para Excel). Si el convenio la recibe en físico o por su portal (IESS, ISSFA...), use <b>Ya la entregué</b>.</div></div>`,
+                showCancelButton: true, showDenyButton: true, confirmButtonText: '<i class="fas fa-envelope"></i> Enviar por correo', denyButtonText: 'Ya la entregué (solo marcar)', cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#1d4ed8', denyButtonColor: '#64748b',
+                preConfirm: () => {
+                    const m = document.getElementById('en-mail').value.trim();
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)) { Swal.showValidationMessage('Escriba un correo válido del convenio.'); return false; }
+                    return { email: m, referencia: document.getElementById('en-ref').value.trim() };
+                },
+                preDeny: () => ({ referencia: document.getElementById('en-ref').value.trim() }) });
+            if (r.isConfirmed) {
+                Swal.fire({ title: 'Enviando planilla...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                res = await window.api.post('/convenios/envio', { ids_plan: ids, por_correo: true, email: r.value.email, referencia: r.value.referencia }).catch(e => ({ message: e.message }));
+            } else if (r.isDenied) res = await window.api.post('/convenios/envio', { ids_plan: ids, referencia: r.value.referencia }).catch(e => ({ message: e.message }));
         } else if (accion.tipo === 'pagar') {
             const r = await Swal.fire({
                 title: '<i class="fas fa-hand-holding-dollar" style="color:#15803d;"></i> Pago del convenio', width: '720px',

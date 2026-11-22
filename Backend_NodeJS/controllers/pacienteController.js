@@ -171,7 +171,7 @@ const getHistoriaClinicaCompleta = async (req, res) => {
 
         const [anamnesis, tratamientos, signos, examen] = await Promise.all([
             pool.request().input('idP', sql.Int, idP).query(`SELECT * FROM Antecedentes_Medicos WHERE ID_Paciente = @idP`),
-            pool.request().input('idP', sql.Int, idP).query(`SELECT tp.*, cv.Nombre AS Convenio_Nombre, ISNULL((SELECT SUM(Monto) FROM Pagos WHERE ID_Plan = tp.ID_Plan), 0) as Total_Pagado FROM Tratamientos_Plan tp LEFT JOIN Convenios cv ON cv.ID_Convenio = tp.ID_Convenio WHERE tp.ID_Paciente = @idP`),
+            pool.request().input('idP', sql.Int, idP).query(`SELECT tp.*, cv.Nombre AS Convenio_Nombre, cq.Cuotas_Activas, cq.Cuotas_Base, cq.Cuotas_Vencido_Base, ISNULL((SELECT SUM(Monto) FROM Pagos WHERE ID_Plan = tp.ID_Plan), 0) as Total_Pagado FROM Tratamientos_Plan tp LEFT JOIN Convenios cv ON cv.ID_Convenio = tp.ID_Convenio OUTER APPLY (SELECT COUNT(*) AS Cuotas_Activas, ISNULL(SUM(q.Monto), 0) AS Cuotas_Base, ISNULL(SUM(CASE WHEN q.Fecha_Vencimiento < CAST(GETDATE() AS DATE) THEN q.Monto ELSE 0 END), 0) AS Cuotas_Vencido_Base FROM Tratamiento_Cuotas q WHERE q.ID_Plan = tp.ID_Plan AND q.Activo = 1) cq WHERE tp.ID_Paciente = @idP`),
             pool.request().input('idP', sql.Int, idP).query(`SELECT TOP 1 * FROM MSP_033_Signos_Vitales WHERE ID_Paciente = @idP ORDER BY Fecha_Registro DESC`),
             pool.request().input('idP', sql.Int, idP).query(`SELECT * FROM MSP_033_Examen_Estomatognatico WHERE ID_Paciente = @idP ORDER BY Fecha_Examen DESC`)
         ]);

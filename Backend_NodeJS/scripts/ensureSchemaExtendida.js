@@ -559,6 +559,63 @@ async function ensureSchemaExtendida(pool) {
         ]);
     });
 
+    // v4.8.0 — plan de cuotas por tratamiento. Lo pagado se calcula: (suma de cuotas − saldo del
+    // paciente), así cualquier abono (caja, link de pago, app) se descuenta de las cuotas en orden.
+    await paso('v4.8.0 crear Tratamiento_Cuotas', async () => {
+        if (await existeTabla(pool, 'Tratamiento_Cuotas')) return;
+        await pool.request().query(`
+            CREATE TABLE Tratamiento_Cuotas (
+                ID_Cuota INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Plan INT NOT NULL,
+                Numero INT NOT NULL,
+                Monto DECIMAL(18,2) NOT NULL,
+                Fecha_Vencimiento DATE NOT NULL,
+                Activo BIT NOT NULL CONSTRAINT DF_Tratamiento_Cuotas_Activo DEFAULT 1,
+                Fecha_Creacion DATETIME NOT NULL CONSTRAINT DF_Tratamiento_Cuotas_Fecha DEFAULT GETDATE(),
+                ID_Usuario INT NULL,
+                Ultimo_Recordatorio DATE NULL
+            )`);
+        await pool.request().query(`CREATE INDEX IX_Tratamiento_Cuotas_Plan ON Tratamiento_Cuotas (ID_Plan, Activo)`);
+        console.log('✅ [Schema]: Tabla Tratamiento_Cuotas creada.');
+    });
+
+    // v4.8.0 — links de pago (Payphone). El servidor consulta su estado y registra el pago solo.
+    await paso('v4.8.0 crear Links_Pago', async () => {
+        if (await existeTabla(pool, 'Links_Pago')) return;
+        await pool.request().query(`
+            CREATE TABLE Links_Pago (
+                ID_Link INT IDENTITY(1,1) PRIMARY KEY,
+                ID_Clinica INT NOT NULL,
+                ID_Paciente INT NOT NULL,
+                ID_Plan INT NOT NULL,
+                ID_Cuota INT NULL,
+                Monto DECIMAL(18,2) NOT NULL,
+                Client_Tx_Id VARCHAR(15) NOT NULL CONSTRAINT UQ_Links_Pago_Tx UNIQUE,
+                Url NVARCHAR(400) NULL,
+                Estado VARCHAR(15) NOT NULL CONSTRAINT DF_Links_Pago_Estado DEFAULT 'PENDIENTE',   -- PENDIENTE | PAGADO | EXPIRADO
+                Fecha_Creacion DATETIME NOT NULL CONSTRAINT DF_Links_Pago_Fecha DEFAULT GETDATE(),
+                Fecha_Expira DATETIME NOT NULL,
+                Fecha_Pago DATETIME NULL,
+                Transaction_Id BIGINT NULL,
+                Autorizacion NVARCHAR(50) NULL,
+                ID_Pago INT NULL,
+                ID_Usuario INT NULL,
+                Ultima_Revision DATETIME NULL,
+                Detalle NVARCHAR(300) NULL
+            )`);
+        await pool.request().query(`CREATE INDEX IX_Links_Pago_Estado ON Links_Pago (Estado, Fecha_Expira)`);
+        console.log('✅ [Schema]: Tabla Links_Pago creada.');
+    });
+
+    // v4.8.0 — credenciales de Payphone por sede (token cifrado enc1:) y recordatorio de cuotas
+    await paso('v4.8.0 clínicas: cobros en línea', async () => {
+        await agregarColumnas('Clinicas', [
+            ['Payphone_Token', 'NVARCHAR(MAX) NULL'],
+            ['Payphone_StoreId', 'NVARCHAR(100) NULL'],
+            ['Recordatorio_Cuotas', 'BIT NOT NULL CONSTRAINT DF_Clinicas_Recordatorio_Cuotas DEFAULT 0']
+        ]);
+    });
+
     // Identificador único de ESTA instalación (para el registro de instalaciones en
     // casrodsoft.com). Vive en la base de datos: si alguien copia el sistema completo a
     // otra máquina, el mismo ID aparece con otra huella de equipo y el panel lo alerta.

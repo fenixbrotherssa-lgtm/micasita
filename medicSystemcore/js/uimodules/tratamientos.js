@@ -75,6 +75,7 @@ window.tratamientosModule = {
                             <strong style="color:#1e293b;">${t.Nombre_Tratamiento || 'Sin nombre'}</strong><br>
                             <small style="color:#64748b;">Dr. ${t.Nombre_Medico || 'No asignado'}</small>
                             ${window.conveniosModule ? window.conveniosModule.badgeCobertura(t) : ''}
+                            ${window.cuotasModule ? window.cuotasModule.badge(t) : ''}
                         </td>
                         <td style="padding:12px; text-align:center;">
                             <span style="background:#f1f5f9; padding:4px 8px; border-radius:4px; font-weight:600; font-size:0.8rem; color:#475569;">

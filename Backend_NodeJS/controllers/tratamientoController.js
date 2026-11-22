@@ -516,6 +516,7 @@ const getTratamientosPorPaciente = async (req, res) => {
                     t.Estado_Tratamiento,
                     t.ID_Convenio, cv.Nombre AS Convenio_Nombre, t.Numero_Autorizacion,
                     ISNULL(t.Monto_Convenio, 0) AS Monto_Convenio, ISNULL(t.Saldo_Convenio, 0) AS Saldo_Convenio, t.Estado_Cobro_Convenio, ISNULL(t.Descuento_Convenio, 0) AS Descuento_Convenio,
+                    cq.Cuotas_Activas, cq.Cuotas_Base, cq.Cuotas_Vencido_Base,
                     t.CIE_Cod,
                     t.CIE_Texto,
                     ISNULL(U.Nombres + ' ' + U.Apellidos, 'No asignado') AS Nombre_Medico,
@@ -524,6 +525,9 @@ const getTratamientosPorPaciente = async (req, res) => {
                 INNER JOIN Prestaciones p ON t.ID_Prestacion = p.ID_Prestacion 
                 LEFT JOIN Usuarios U ON t.ID_Medico = U.ID_Usuario
                 LEFT JOIN Convenios cv ON cv.ID_Convenio = t.ID_Convenio
+                OUTER APPLY (SELECT COUNT(*) AS Cuotas_Activas, ISNULL(SUM(q.Monto), 0) AS Cuotas_Base,
+                    ISNULL(SUM(CASE WHEN q.Fecha_Vencimiento < CAST(GETDATE() AS DATE) THEN q.Monto ELSE 0 END), 0) AS Cuotas_Vencido_Base
+                    FROM Tratamiento_Cuotas q WHERE q.ID_Plan = t.ID_Plan AND q.Activo = 1) cq
                 WHERE t.ID_Paciente = @id 
                 ORDER BY t.Fecha_Inicio DESC
             `);
